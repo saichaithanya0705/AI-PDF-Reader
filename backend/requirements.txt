@@ -1,6 +1,8 @@
 # ============================================================
-# Adobe Hackathon Backend - Production Requirements
-# For deployment to Render/Railway/Heroku
+# Adobe Hackathon Backend - Optimized for Render Free Tier
+# ============================================================
+# Removed: torch, sentence-transformers, scikit-learn (heavy packages)
+# Using: API-based embeddings from OpenAI/Google instead
 # ============================================================
 
 # Core FastAPI and server dependencies
@@ -8,41 +10,43 @@ fastapi==0.104.1
 uvicorn[standard]==0.24.0
 websockets==12.0
 python-multipart==0.0.6
+python-dotenv==1.0.0
 
 # PDF processing dependencies
 PyPDF2==3.0.1
 pymupdf==1.23.8
 
-# RAG System - Vector Database & Embeddings
+# Lightweight vector database
 faiss-cpu==1.7.4
-sentence-transformers==2.2.2
-
-# Core ML dependencies
 numpy==1.24.3
-scikit-learn==1.3.0
-torch==2.1.0
 
-# LLM API dependencies
+# LLM API dependencies (essential only)
 openai==1.3.7
-google-generativeai==0.8.5
-google-cloud-aiplatform==1.38.1
+google-generativeai==0.3.2
+anthropic==0.7.8
 
-# LangChain for advanced RAG
-langchain==0.3.27
-langchain-openai==0.3.29
-langchain-google-genai==2.0.10
-langchain-community==0.3.27
+# LangChain for RAG (use older stable versions)
+langchain==0.1.0
+langchain-openai==0.0.2
+langchain-google-genai==0.0.5
+langchain-community==0.0.10
 
 # HTTP and utility dependencies
 requests==2.31.0
 pydantic==2.5.0
+pydantic-settings==2.1.0
 
-# Azure services (optional)
+# Azure services for TTS
 azure-cognitiveservices-speech==1.31.0
 
-# Audio processing for TTS
+# Audio processing
 pydub==0.25.1
 
-# Development and testing
-pytest==7.4.3
-httpx==0.25.2
+# Database
+sqlalchemy==2.0.23
+
+# Security
+python-jose[cryptography]==3.3.0
+
+# CORS support
+python-multipart==0.0.6
