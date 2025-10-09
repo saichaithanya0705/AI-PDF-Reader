@@ -1,0 +1,48 @@
+# ============================================================
+# Adobe Hackathon Backend - Production Requirements
+# For deployment to Render/Railway/Heroku
+# ============================================================
+
+# Core FastAPI and server dependencies
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+websockets==12.0
+python-multipart==0.0.6
+
+# PDF processing dependencies
+PyPDF2==3.0.1
+pymupdf==1.23.8
+
+# RAG System - Vector Database & Embeddings
+faiss-cpu==1.7.4
+sentence-transformers==2.2.2
+
+# Core ML dependencies
+numpy==1.24.3
+scikit-learn==1.3.0
+torch==2.1.0
+
+# LLM API dependencies
+openai==1.3.7
+google-generativeai==0.8.5
+google-cloud-aiplatform==1.38.1
+
+# LangChain for advanced RAG
+langchain==0.3.27
+langchain-openai==0.3.29
+langchain-google-genai==2.0.10
+langchain-community==0.3.27
+
+# HTTP and utility dependencies
+requests==2.31.0
+pydantic==2.5.0
+
+# Azure services (optional)
+azure-cognitiveservices-speech==1.31.0
+
+# Audio processing for TTS
+pydub==0.25.1
+
+# Development and testing
+pytest==7.4.3
+httpx==0.25.2

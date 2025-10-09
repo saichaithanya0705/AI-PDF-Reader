@@ -1,0 +1,69 @@
+# ============================================================
+# Netlify Configuration for Frontend
+# ============================================================
+
+[build]
+  base = "frontend"
+  command = "npm install && npm run build"
+  publish = "frontend/dist"
+
+[build.environment]
+  NODE_VERSION = "18"
+  NPM_VERSION = "9"
+
+# Single Page Application (SPA) routing
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Headers for security
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-XSS-Protection = "1; mode=block"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+# Cache static assets
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# Cache JavaScript and CSS
+[[headers]]
+  for = "*.js"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "*.css"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# CORS headers (if needed for API calls)
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+    Access-Control-Allow-Methods = "GET, POST, PUT, DELETE, OPTIONS"
+    Access-Control-Allow-Headers = "Content-Type, Authorization"
+
+# Environment variables (set in Netlify UI)
+# VITE_API_URL = your-render-backend-url
+# VITE_ENV = production
+
+# Notes for Netlify Deployment:
+# 1. Go to https://app.netlify.com/
+# 2. Click "Add new site" → "Import an existing project"
+# 3. Connect to GitHub and select your repository
+# 4. Netlify will auto-detect this config file
+# 5. Set environment variables in Site settings → Environment variables
+# 6. Deploy!
+
+# Important:
+# - Update frontend API URLs to point to Render backend
+# - Currently hardcoded to http://localhost:8080
+# - Search for "localhost:8080" in frontend code and replace with Render URL

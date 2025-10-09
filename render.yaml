@@ -1,0 +1,57 @@
+# ============================================================
+# Render Deployment Configuration for Backend
+# ============================================================
+
+services:
+  # FastAPI Backend Service
+  - type: web
+    name: adobe-hackathon-backend
+    env: python
+    region: oregon
+    plan: free
+    branch: main
+    buildCommand: |
+      cd backend
+      pip install --upgrade pip
+      pip install -r requirements.txt
+    startCommand: |
+      cd backend
+      python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: AZURE_OPENAI_KEY
+        sync: false
+      - key: AZURE_OPENAI_ENDPOINT
+        sync: false
+      - key: AZURE_SPEECH_KEY
+        sync: false
+      - key: AZURE_SPEECH_REGION
+        value: eastasia
+    healthCheckPath: /health
+    autoDeploy: true
+
+# Notes for Render Deployment:
+# 1. Go to https://dashboard.render.com/
+# 2. Click "New" → "Web Service"
+# 3. Connect your GitHub repository
+# 4. Select the repository
+# 5. Use these settings:
+#    - Name: adobe-hackathon-backend
+#    - Environment: Python
+#    - Build Command: cd backend && pip install -r requirements.txt
+#    - Start Command: cd backend && python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
+# 6. Add environment variables in Render dashboard (not here!)
+# 7. Deploy!
+
+# Important:
+# - Database files (.db) won't persist on free tier
+# - Consider using Render's PostgreSQL for production
+# - Uploaded PDFs won't persist - use cloud storage (S3, GCS)
+# - Vector embeddings will be regenerated on each deploy
