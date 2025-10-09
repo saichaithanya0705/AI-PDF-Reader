@@ -37,6 +37,17 @@ try:
 except ImportError:
     print("⚠️ python-dotenv not installed, using system environment variables only")
 
+# Setup Google Cloud credentials for Render deployment
+try:
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from setup_credentials import setup_google_credentials
+    setup_google_credentials()
+except ImportError:
+    print("⚠️ setup_credentials module not found, skipping credentials setup")
+except Exception as e:
+    print(f"⚠️ Error setting up credentials: {e}")
+
 from .websocket_manager import manager
 from .models import WebSocketMessage, SectionHighlight, RelevantSection
 from .database import db

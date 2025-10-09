@@ -20,6 +20,8 @@ config.json
 # Google Cloud credentials
 *-credentials.json
 service-account*.json
+credentials_minified*.txt
+credentials_minified*.json
 
 # API Keys
 api_keys.txt
