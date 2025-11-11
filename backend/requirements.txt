@@ -59,6 +59,13 @@ spacy==3.8.8
 spacy-legacy==3.0.12
 spacy-loggers==1.0.5
 
+# Vector search and embeddings
+faiss-cpu==1.12.0
+sentence-transformers==5.1.2
+torch==2.9.0
+transformers==4.57.1
+huggingface-hub==0.36.0
+
 # Azure services (for TTS)
 azure-cognitiveservices-speech==1.46.0
 azure-core==1.36.0
