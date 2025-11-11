@@ -48,3 +48,17 @@ pydantic-settings==2.12.0
 numpy==1.26.4
 typing-extensions==4.15.0
 python-dateutil==2.9.0.post0
+
+# ML and NLP dependencies (all have pre-built wheels)
+scikit-learn==1.7.2
+scipy==1.16.3
+joblib==1.5.2
+threadpoolctl==3.6.0
+networkx==3.5
+spacy==3.8.8
+spacy-legacy==3.0.12
+spacy-loggers==1.0.5
+
+# Azure services (for TTS)
+azure-cognitiveservices-speech==1.46.0
+azure-core==1.36.0
