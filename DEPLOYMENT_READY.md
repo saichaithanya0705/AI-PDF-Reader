@@ -4,10 +4,14 @@
 
 All dependencies have been tested and verified in a clean virtual environment with **zero conflicts**.
 
-### Latest Fix (Nov 11, 2025)
-- ✅ Made Azure Speech SDK import optional in `tts_service.py`
-- ✅ TTS service will gracefully degrade if Azure SDK is not installed
-- ✅ Backend will start successfully without Azure dependencies
+### Latest Fix (Nov 11, 2025 - 11:50 PM)
+- ✅ Added all missing ML/NLP dependencies to `requirements.txt`
+- ✅ scikit-learn 1.7.2 (with pre-built wheels)
+- ✅ networkx 3.5
+- ✅ spacy 3.8.8 (with pre-built wheels)
+- ✅ Azure Speech SDK 1.46.0 (for TTS features)
+- ✅ All dependencies tested in clean virtual environment
+- ✅ Zero compilation required - all packages use pre-built wheels
 
 ## What Was Done
 
