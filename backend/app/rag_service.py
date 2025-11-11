@@ -9,7 +9,15 @@ import time
 from .chunking_service import chunking_service, DocumentChunk
 from .embedding_service import get_embedding_service
 from .vector_store import get_vector_store, SearchResult
-from .database import db
+import os
+
+# Import appropriate database based on configuration
+USE_SUPABASE = os.getenv("USE_SUPABASE", "false").lower() == "true"
+if USE_SUPABASE:
+    from .supabase_database import get_supabase_db
+    db = get_supabase_db()
+else:
+    from .database import db
 
 
 class RAGService:
@@ -26,6 +34,7 @@ class RAGService:
         self,
         document_id: str,
         pdf_path: str,
+        user_id: Optional[str] = None,
         batch_size: int = 32
     ) -> Dict[str, Any]:
         """
@@ -34,6 +43,7 @@ class RAGService:
         Args:
             document_id: Document ID
             pdf_path: Path to PDF file
+            user_id: User ID (required for Supabase)
             batch_size: Batch size for embedding generation
             
         Returns:
@@ -71,15 +81,27 @@ class RAGService:
             print("  3️⃣ Storing chunks in database...")
             chunk_ids = []
             for chunk, embedding in zip(chunks, embeddings):
-                chunk_id = db.store_chunk(
-                    document_id=chunk.document_id,
-                    chunk_text=chunk.text,
-                    chunk_index=chunk.chunk_index,
-                    page_number=chunk.page_number,
-                    embedding=embedding,
-                    char_count=chunk.metadata.get('char_count'),
-                    word_count=chunk.metadata.get('word_count')
-                )
+                if USE_SUPABASE and user_id:
+                    chunk_id = db.store_chunk(
+                        user_id=user_id,
+                        document_id=chunk.document_id,
+                        chunk_text=chunk.text,
+                        chunk_index=chunk.chunk_index,
+                        page_number=chunk.page_number,
+                        embedding=embedding,
+                        char_count=chunk.metadata.get('char_count'),
+                        word_count=chunk.metadata.get('word_count')
+                    )
+                else:
+                    chunk_id = db.store_chunk(
+                        document_id=chunk.document_id,
+                        chunk_text=chunk.text,
+                        chunk_index=chunk.chunk_index,
+                        page_number=chunk.page_number,
+                        embedding=embedding,
+                        char_count=chunk.metadata.get('char_count'),
+                        word_count=chunk.metadata.get('word_count')
+                    )
                 chunk_ids.append(chunk_id)
             print(f"  ✅ Stored {len(chunk_ids)} chunks in database")
             

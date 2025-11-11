@@ -53,7 +53,7 @@ const LoginPage = () => {
           <div className="flex flex-1 flex-col justify-between gap-6 rounded-2xl border border-white/5 bg-white/5 p-6">
             <button
               type="button"
-              onClick={() => navigate(-1)}
+              onClick={() => navigate('/')}
               className="flex items-center gap-2 text-sm text-slate-300 transition hover:text-white"
             >
               <ArrowLeft className="h-4 w-4" />

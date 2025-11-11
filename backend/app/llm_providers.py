@@ -9,12 +9,14 @@ import asyncio
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Any
 import openai
-import google.generativeai as genai
-import vertexai
-from vertexai.generative_models import GenerativeModel
 import requests
 from pydantic import BaseModel
 from .chat_with_llm import get_llm_response
+
+# Lazy imports for google.generativeai to avoid version conflicts
+genai = None
+vertexai = None
+GenerativeModel = None
 
 
 class LLMResponse(BaseModel):
@@ -47,22 +49,42 @@ class LLMProvider(ABC):
 
 class GeminiProvider(LLMProvider):
     def __init__(self):
+        # Import genai here to avoid module-level import errors
+        global genai, vertexai, GenerativeModel
+        try:
+            import google.generativeai as genai
+        except ImportError:
+            print("⚠️ google-generativeai not available")
+            genai = None
+        
+        try:
+            import vertexai as vertex_module
+            from vertexai.generative_models import GenerativeModel as GenModel
+            vertexai = vertex_module
+            GenerativeModel = GenModel
+        except (ImportError, Exception) as e:
+            print(f"⚠️ vertexai not available: {e}")
+            vertexai = None
+            GenerativeModel = None
+        
         # Configure Gemini using Vertex AI
         credentials_path = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
         project_id = os.getenv('GOOGLE_CLOUD_PROJECT', 'your-project-id')
         location = os.getenv('GOOGLE_CLOUD_LOCATION', 'us-central1')
         
         try:
-            if credentials_path:
+            if credentials_path and vertexai:
                 # Set credentials environment variable
                 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = credentials_path
                 
-            # Initialize Vertex AI
-            vertexai.init(project=project_id, location=location)
-            
-            self.model_name = os.getenv('GEMINI_MODEL', 'gemini-1.5-flash')
-            self.model = GenerativeModel(self.model_name)
-            print(f"✅ Vertex AI Gemini initialized: {self.model_name}")
+                # Initialize Vertex AI
+                vertexai.init(project=project_id, location=location)
+                
+                self.model_name = os.getenv('GEMINI_MODEL', 'gemini-2.0-flash')
+                self.model = GenerativeModel(self.model_name)
+                print(f"✅ Vertex AI Gemini initialized: {self.model_name}")
+            else:
+                raise Exception("Vertex AI not available, using fallback")
             
         except Exception as e:
             print(f"⚠️ Vertex AI initialization failed, falling back to genai: {e}")
@@ -91,11 +113,10 @@ class GeminiProvider(LLMProvider):
                     model=self.model_name
                 )
             else:
-                # Use genai fallback
+                # Use genai fallback with simple config
                 response = await asyncio.to_thread(
                     self.model.generate_content,
-                    prompt,
-                    generation_config=genai.types.GenerationConfig(max_output_tokens=max_tokens)
+                    prompt
                 )
                 return LLMResponse(
                     content=response.text,

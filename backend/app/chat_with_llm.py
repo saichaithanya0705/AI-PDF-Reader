@@ -11,9 +11,9 @@ except ImportError:
 try:
     from langchain_google_genai import ChatGoogleGenerativeAI
     LANGCHAIN_GOOGLE_AVAILABLE = True
-except ImportError:
+except (ImportError, Exception) as e:
     LANGCHAIN_GOOGLE_AVAILABLE = False
-    print("⚠️ langchain-google-genai not available")
+    print(f"⚠️ langchain-google-genai not available: {e}")
 
 # Don't import langchain_community for now to avoid installation issues
 # from langchain_community.chat_models import ChatOllama
@@ -77,58 +77,46 @@ def get_llm_response(messages):
     # Use messages in current format directly
 
     if provider == "gemini":
-        if not LANGCHAIN_GOOGLE_AVAILABLE:
-            raise RuntimeError("langchain-google-genai not available. Please install it to use Gemini.")
-
-        model_name = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
-
-        # Look for credentials.json in the project root directory
-        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        credentials_path = os.path.join(project_root, "credentials.json")
-
-        # Also check if GOOGLE_APPLICATION_CREDENTIALS is set
-        env_credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
-        api_key = os.getenv("GOOGLE_API_KEY")
-
-        # Priority: 1. API Key, 2. Environment credentials path, 3. Project root credentials.json
-        if api_key:
-            print("🔑 Using GOOGLE_API_KEY for Gemini authentication")
-            llm = ChatGoogleGenerativeAI(
-                model=model_name,
-                google_api_key=api_key,
-                temperature=0.7
-            )
-        elif env_credentials_path and os.path.exists(env_credentials_path):
-            print(f"🔐 Using credentials from GOOGLE_APPLICATION_CREDENTIALS: {env_credentials_path}")
-            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = env_credentials_path
-            llm = ChatGoogleGenerativeAI(
-                model=model_name,
-                temperature=0.7
-            )
-        elif os.path.exists(credentials_path):
-            print(f"🔐 Using credentials.json from project root: {credentials_path}")
-            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = credentials_path
-            llm = ChatGoogleGenerativeAI(
-                model=model_name,
-                temperature=0.7
-            )
-        else:
-            raise ValueError(
-                f"No valid Gemini credentials found. Please provide one of:\n"
-                f"1. Set GOOGLE_API_KEY environment variable\n"
-                f"2. Set GOOGLE_APPLICATION_CREDENTIALS environment variable\n"
-                f"3. Place credentials.json in project root: {credentials_path}"
-            )
-
+        # Use direct google-generativeai library instead of langchain
         try:
-            response = llm.invoke(messages)
-            return response.content
+            import google.generativeai as genai
+        except ImportError:
+            raise RuntimeError("google-generativeai not available. Please install it: pip install google-generativeai")
+
+        api_key = os.getenv("GOOGLE_API_KEY")
+        if not api_key:
+            raise ValueError("GOOGLE_API_KEY environment variable must be set for Gemini")
+
+        print("🔑 Using GOOGLE_API_KEY for Gemini authentication")
+        
+        # Configure the API
+        genai.configure(api_key=api_key)
+        
+        # Use gemini-2.0-flash model (fast and widely available)
+        model = genai.GenerativeModel('gemini-2.0-flash')
+        
+        # Convert messages to Gemini format
+        # Gemini expects a simple prompt string or conversation history
+        if isinstance(messages, list):
+            # Extract the last user message as the prompt
+            user_messages = [msg for msg in messages if msg.get("role") == "user"]
+            if user_messages:
+                prompt = user_messages[-1].get("content", "")
+            else:
+                prompt = str(messages)
+        else:
+            prompt = str(messages)
+        
+        try:
+            response = model.generate_content(prompt)
+            return response.text
         except Exception as e:
             # Check for quota exceeded errors
             error_str = str(e).lower()
             if "quota" in error_str or "429" in error_str or "resourceexhausted" in error_str:
                 print("⚠️ Gemini API quota exceeded - using fallback response")
                 return "I apologize, but the AI service is currently at capacity. Please try again later or contact support for assistance."
+            print(f"❌ Gemini API error: {e}")
             raise RuntimeError(f"Gemini call failed: {e}")
 
     elif provider == "azure":

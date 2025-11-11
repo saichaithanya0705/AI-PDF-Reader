@@ -50,8 +50,27 @@ except Exception as e:
 
 from .websocket_manager import manager
 from .models import WebSocketMessage, SectionHighlight, RelevantSection
-from .database import db
-from .api_routes import router as api_router
+
+# Database selection: Use Supabase if configured, otherwise SQLite
+USE_SUPABASE = os.getenv("USE_SUPABASE", "false").lower() == "true"
+print(f"🗄️ Database mode: {'Supabase' if USE_SUPABASE else 'SQLite'}")
+
+if USE_SUPABASE:
+    try:
+        from .supabase_database import get_supabase_db
+        db = get_supabase_db()
+        from .api_routes_supabase import router as api_router
+        print("✅ Using Supabase database with authentication")
+    except Exception as e:
+        print(f"⚠️ Failed to initialize Supabase, falling back to SQLite: {e}")
+        from .database import db
+        from .api_routes import router as api_router
+        USE_SUPABASE = False
+else:
+    from .database import db
+    from .api_routes import router as api_router
+    print("✅ Using SQLite database (legacy mode)")
+
 from .pdf_comparator import pdf_comparator
 from .llm_providers import get_llm_provider
 from .enhanced_llm_service import EnhancedLLMService
@@ -83,10 +102,7 @@ print(f"📁 Docs directory: {DOCS_DIR}")
 
 app = FastAPI(title="Adobe Hackathon Grand Finale Backend")
 
-# Include API routes
-app.include_router(api_router)
-
-# Add CORS middleware
+# Add CORS middleware FIRST
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # In production, specify exact origins
@@ -94,6 +110,38 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Mount static files BEFORE API routes to prevent route conflicts
+# Try multiple possible paths for frontend
+possible_frontend_paths = [
+    Path("frontend/dist"),  # From project root
+    Path("../frontend/dist"),  # From backend directory
+    BACKEND_DIR.parent / "frontend" / "dist"  # Absolute path
+]
+
+frontend_dist_path = None
+for path in possible_frontend_paths:
+    if path.exists():
+        frontend_dist_path = path
+        break
+
+if frontend_dist_path:
+    # Mount assets directory for JS/CSS files with proper MIME types
+    assets_path = frontend_dist_path / "assets"
+    if assets_path.exists():
+        app.mount("/assets", StaticFiles(directory=str(assets_path), html=False), name="assets")
+        print(f"✅ Assets mounted from {assets_path.absolute()}")
+        asset_files = list(assets_path.glob("*"))
+        print(f"📁 Available assets: {[f.name for f in asset_files]}")
+    
+    # Mount other static files (PDF.js workers, etc.)
+    app.mount("/static", StaticFiles(directory=str(frontend_dist_path), html=False), name="static")
+    print(f"✅ Frontend static files mounted from {frontend_dist_path.absolute()}")
+else:
+    print(f"⚠️ Frontend dist not found in any of: {[str(p.absolute()) for p in possible_frontend_paths]}")
+
+# Include API routes AFTER static files
+app.include_router(api_router)
 
 # Initialize services
 llm_provider = None
@@ -177,23 +225,6 @@ try:
         print("✅ No duplicate PDFs found")
 except Exception as e:
     print(f"⚠️ Duplicate cleanup failed: {e}")
-
-# Mount static files for frontend
-frontend_dist_path = Path("../frontend/dist")
-if frontend_dist_path.exists():
-    # Mount assets directory for JS/CSS files with proper MIME types
-    app.mount("/assets", StaticFiles(directory=str(frontend_dist_path / "assets"), html=False), name="assets")
-    # Mount other static files
-    app.mount("/static", StaticFiles(directory=str(frontend_dist_path), html=False), name="static")
-    print(f"✅ Frontend static files mounted from {frontend_dist_path.absolute()}")
-
-    # List available assets for debugging
-    assets_dir = frontend_dist_path / "assets"
-    if assets_dir.exists():
-        asset_files = list(assets_dir.glob("*"))
-        print(f"📁 Available assets: {[f.name for f in asset_files]}")
-else:
-    print(f"⚠️ Frontend dist not found at {frontend_dist_path.absolute()}")
 
 # Enhanced PDF processing function with better integration
 async def process_pdf(job_id: str, client_id: str, file_path: str, pdf_type: str, persona: str = None, job: str = None):
@@ -493,16 +524,18 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
 @app.get("/")
 async def get_frontend():
     """Serve the built React frontend"""
-    html_file = Path("../frontend/dist/index.html")
-    if html_file.exists():
-        return HTMLResponse(content=html_file.read_text(), media_type="text/html")
-
-    # Fallback for development
-    dev_html_file = Path("../frontend/index.html")
-    if dev_html_file.exists():
-        return HTMLResponse(content=dev_html_file.read_text(), media_type="text/html")
-
-    return HTMLResponse(content=f"<h1>Frontend not found at {html_file.absolute()}. Please build the React app first.</h1>", media_type="text/html")
+    # Try multiple possible paths
+    possible_paths = [
+        Path("frontend/dist/index.html"),  # From project root
+        Path("../frontend/dist/index.html"),  # From backend directory
+        BACKEND_DIR.parent / "frontend" / "dist" / "index.html"  # Absolute path
+    ]
+    
+    for html_file in possible_paths:
+        if html_file.exists():
+            return HTMLResponse(content=html_file.read_text(), media_type="text/html")
+    
+    return HTMLResponse(content=f"<h1>Frontend not found. Tried: {[str(p.absolute()) for p in possible_paths]}. Please build the React app first.</h1>", media_type="text/html")
 
 
 @app.get("/config")
