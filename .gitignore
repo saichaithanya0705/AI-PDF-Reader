@@ -352,3 +352,6 @@ backend/data/split/
 # Keep sample/template files
 !backend/data/docs/.gitkeep
 !credentials.json.template
+
+# Local environment variables
+.env
