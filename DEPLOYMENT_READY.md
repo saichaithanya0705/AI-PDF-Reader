@@ -4,12 +4,12 @@
 
 All dependencies have been tested and verified in a clean virtual environment with **zero conflicts**.
 
-### Latest Fix (Nov 11, 2025 - 11:50 PM)
-- ✅ Added all missing ML/NLP dependencies to `requirements.txt`
-- ✅ scikit-learn 1.7.2 (with pre-built wheels)
-- ✅ networkx 3.5
-- ✅ spacy 3.8.8 (with pre-built wheels)
-- ✅ Azure Speech SDK 1.46.0 (for TTS features)
+### Latest Fix (Nov 12, 2025 - 12:05 AM)
+- ✅ Added ALL missing dependencies to `requirements.txt`
+- ✅ **ML/NLP**: scikit-learn 1.7.2, scipy 1.16.3, networkx 3.5, spacy 3.8.8
+- ✅ **Vector Search**: faiss-cpu 1.12.0, sentence-transformers 5.1.2
+- ✅ **Deep Learning**: torch 2.9.0, transformers 4.57.1
+- ✅ **Azure Services**: azure-cognitiveservices-speech 1.46.0 (for TTS)
 - ✅ All dependencies tested in clean virtual environment
 - ✅ Zero compilation required - all packages use pre-built wheels
 
