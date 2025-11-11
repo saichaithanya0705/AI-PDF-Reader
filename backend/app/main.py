@@ -152,15 +152,6 @@ else:
 # Include API routes AFTER static files
 app.include_router(api_router)
 
-# Include chat history routes if using Supabase
-if USE_SUPABASE:
-    try:
-        from .chat_history import router as chat_router
-        app.include_router(chat_router)
-        print("✅ Chat history routes enabled")
-    except Exception as e:
-        print(f"⚠️ Failed to load chat history routes: {e}")
-
 # Initialize services
 llm_provider = None
 enhanced_llm_service = None
