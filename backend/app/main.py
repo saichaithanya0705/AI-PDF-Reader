@@ -97,7 +97,16 @@ import numpy as np
 # Global FAISS index and metadata (for simplicity; use persistent in production)
 index = faiss.IndexFlatL2(384)  # Dimension for all-MiniLM-L6-v2
 metadata = []  # List of dicts: {'id': sec_id, 'doc_id': doc_id, 'page': page, 'heading': heading, 'text': text}
-model = SentenceTransformer('all-MiniLM-L6-v2')  # Load once
+model = None  # Lazy load to avoid blocking startup
+
+def get_sentence_transformer():
+    """Lazy load sentence transformer model"""
+    global model
+    if model is None:
+        print("📥 Loading SentenceTransformer model...")
+        model = SentenceTransformer('all-MiniLM-L6-v2')
+        print("✅ SentenceTransformer model loaded")
+    return model
 
 # Create necessary directories - use consistent paths
 BACKEND_DIR = Path(__file__).parent.parent  # Go up from app/ to backend/
@@ -267,7 +276,7 @@ async def process_pdf(job_id: str, client_id: str, file_path: str, pdf_type: str
                 section_text = f"{sec.get('heading', '')} {sec.get('text', '')}"
 
                 if section_text.strip():  # Only process non-empty sections
-                    embedding = model.encode(section_text)
+                    embedding = get_sentence_transformer().encode(section_text)
                     index.add(np.array([embedding]).astype('float32'))
 
                     metadata.append({
@@ -588,7 +597,7 @@ async def get_recommendations(
             current_content += f" Context: {persona} working on {job}"
 
         # Encode query
-        query_embedding = model.encode(current_content)
+        query_embedding = get_sentence_transformer().encode(current_content)
 
         # Search FAISS index for semantic similarity
         k = min(10, len(metadata))  # Get top 10 candidates
@@ -1151,8 +1160,7 @@ async def analyze_text_selection(request: TextSelectionAnalysisRequest):
                     from sentence_transformers import SentenceTransformer
 
                     # Get embedding for selected text
-                    model = SentenceTransformer('all-MiniLM-L6-v2')
-                    query_embedding = model.encode([selected_text])
+                    query_embedding = get_sentence_transformer().encode([selected_text])
 
                     # Search FAISS index
                     k = min(20, len(metadata))  # Get more candidates for LLM filtering
@@ -1323,8 +1331,7 @@ async def generate_podcast(
                 import numpy as np
                 from sentence_transformers import SentenceTransformer
 
-                model = SentenceTransformer('all-MiniLM-L6-v2')
-                query_embedding = model.encode([content[:500]])  # Use first 500 chars
+                query_embedding = get_sentence_transformer().encode([content[:500]])  # Use first 500 chars
 
                 k = min(5, len(metadata))
                 distances, indices = index.search(query_embedding.astype('float32'), k)
