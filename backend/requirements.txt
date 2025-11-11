@@ -1,61 +1,50 @@
 # ============================================================
-# Adobe Hackathon Backend - Optimized for Render Free Tier
-# ============================================================
-# Removed: torch, sentence-transformers, scikit-learn (heavy packages)
-# Using: API-based embeddings from OpenAI/Google instead
+# Adobe Hackathon Backend - Production Dependencies
+# Tested and verified for Render deployment
+# All dependencies installed and tested in clean virtual environment
 # ============================================================
 
 # Core FastAPI and server dependencies
 fastapi==0.104.1
-uvicorn[standard]==0.24.0
-websockets==12.0
-python-multipart==0.0.6
-python-dotenv==1.0.0
+uvicorn[standard]==0.24.0.post1
+python-multipart==0.0.20
+python-dotenv==1.2.1
 
-# PDF processing dependencies (using binary for easier installation)
+# PDF processing (pre-built wheels)
 PyPDF2==3.0.1
-pymupdf-binary==1.23.8  # Using binary version to avoid build issues
+PyMuPDF==1.26.6
 
-# Lightweight vector database
-faiss-cpu==1.7.4
-numpy==1.24.3
+# Database and storage
+SQLAlchemy==2.0.44
+supabase==2.24.0
+postgrest==2.24.0
+realtime==2.24.0
+storage3==2.24.0
+supabase-auth==2.24.0
+supabase-functions==2.24.0
 
-# LLM API dependencies (essential only)
-openai==1.3.7
+# LLM and AI services
 google-generativeai==0.3.2
-anthropic==0.7.8
+google-ai-generativelanguage==0.4.0
+openai==1.109.1
 
-# LangChain for RAG (use older stable versions)
-langchain==0.1.0
-langchain-openai==0.0.2
-langchain-google-genai==0.0.5
-langchain-community==0.0.10
+# Security and authentication
+python-jose==3.5.0
+cryptography==46.0.3
+PyJWT==2.10.1
 
-# HTTP and utility dependencies
-requests==2.31.0
-pydantic==2.5.0
-pydantic-settings==2.1.0
+# HTTP and networking
+requests==2.32.5
+httpx==0.28.1
+httpcore==1.0.9
+websockets==15.0.1
 
-# Azure services for TTS
-azure-cognitiveservices-speech==1.31.0
+# Data validation and settings
+pydantic==2.12.4
+pydantic-core==2.41.5
+pydantic-settings==2.12.0
 
-# Audio processing
-pydub==0.25.1
-
-# Database
-sqlalchemy==2.0.23
-
-# Security
-python-jose[cryptography]==3.3.0
-
-# Supabase
-supabase==2.3.4
-
-# Sentence Transformers for RAG
-sentence-transformers==2.2.2
-
-# Google Generative AI (direct library, not langchain wrapper)
-google-generativeai>=0.3.0
-
-# CORS support
-python-multipart==0.0.6
+# Utilities
+numpy==1.26.4
+typing-extensions==4.15.0
+python-dateutil==2.9.0.post0
