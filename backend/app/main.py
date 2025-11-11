@@ -1,20 +1,34 @@
 # app/main.py
-import asyncio
-import uuid
-from pathlib import Path
-from typing import List, Dict, Any, Optional
-from fastapi import FastAPI, UploadFile, File, BackgroundTasks, WebSocket, WebSocketDisconnect, HTTPException, Query, Request, Depends
-from pydantic import BaseModel
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.middleware.cors import CORSMiddleware
-import os
-import shutil
-import json
-import warnings
-import fitz  # PyMuPDF for PDF merging
-import hashlib
-from datetime import datetime
+import sys
+import traceback
+
+print("🚀 Starting application import...")
+sys.stdout.flush()
+
+try:
+    import asyncio
+    import uuid
+    from pathlib import Path
+    from typing import List, Dict, Any, Optional
+    from fastapi import FastAPI, UploadFile, File, BackgroundTasks, WebSocket, WebSocketDisconnect, HTTPException, Query, Request, Depends
+    from pydantic import BaseModel
+    from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
+    from fastapi.staticfiles import StaticFiles
+    from fastapi.middleware.cors import CORSMiddleware
+    import os
+    import shutil
+    import json
+    import warnings
+    import fitz  # PyMuPDF for PDF merging
+    import hashlib
+    from datetime import datetime
+    print("✅ Basic imports successful")
+    sys.stdout.flush()
+except Exception as e:
+    print(f"❌ FATAL: Failed to import basic modules: {e}")
+    traceback.print_exc()
+    sys.stdout.flush()
+    raise
 
 # Suppress NetworkX backend warnings
 warnings.filterwarnings("ignore", message="networkx backend defined more than once")
@@ -48,12 +62,17 @@ except ImportError:
 except Exception as e:
     print(f"⚠️ Error setting up credentials: {e}")
 
+print("📦 Loading websocket and models...")
+sys.stdout.flush()
 from .websocket_manager import manager
 from .models import WebSocketMessage, SectionHighlight, RelevantSection
+print("✅ Websocket and models loaded")
+sys.stdout.flush()
 
 # Database selection: Use Supabase if configured, otherwise SQLite
 USE_SUPABASE = os.getenv("USE_SUPABASE", "false").lower() == "true"
 print(f"🗄️ Database mode: {'Supabase' if USE_SUPABASE else 'SQLite'}")
+sys.stdout.flush()
 
 if USE_SUPABASE:
     try:
@@ -80,6 +99,8 @@ else:
     def get_optional_user(): return None
     print("✅ Using SQLite database (legacy mode)")
 
+print("📦 Loading services...")
+sys.stdout.flush()
 from .pdf_comparator import pdf_comparator
 from .llm_providers import get_llm_provider
 from .enhanced_llm_service import EnhancedLLMService
@@ -87,12 +108,23 @@ from .tts_service import TTSService
 from .section_highlighter import SectionHighlighter
 from .duplicate_cleaner import run_duplicate_cleanup
 from .smart_upload_handler import SmartUploadHandler
+print("✅ Services loaded")
+sys.stdout.flush()
 
+print("📦 Loading PDF processors...")
+sys.stdout.flush()
 from app.utils.process_pdfs import HighPerformancePDFProcessor  # 1A outline extraction
 from app.utils.intelligent_pdf_brain import IntelligentPDFBrain  # 1B relevance/insights
+print("✅ PDF processors loaded")
+sys.stdout.flush()
+
+print("📦 Loading ML libraries (faiss, sentence-transformers)...")
+sys.stdout.flush()
 import faiss
 from sentence_transformers import SentenceTransformer
 import numpy as np
+print("✅ ML libraries loaded")
+sys.stdout.flush()
 
 # Global FAISS index and metadata (for simplicity; use persistent in production)
 index = faiss.IndexFlatL2(384)  # Dimension for all-MiniLM-L6-v2
@@ -109,6 +141,8 @@ def get_sentence_transformer():
     return model
 
 # Create necessary directories - use consistent paths
+print("📁 Setting up directories...")
+sys.stdout.flush()
 BACKEND_DIR = Path(__file__).parent.parent  # Go up from app/ to backend/
 DATA_DIR = BACKEND_DIR / "data"
 DOCS_DIR = DATA_DIR / "docs"
@@ -117,8 +151,13 @@ DOCS_DIR.mkdir(parents=True, exist_ok=True)
 print(f"📁 Backend directory: {BACKEND_DIR}")
 print(f"📁 Data directory: {DATA_DIR}")
 print(f"📁 Docs directory: {DOCS_DIR}")
+sys.stdout.flush()
 
+print("🚀 Creating FastAPI app...")
+sys.stdout.flush()
 app = FastAPI(title="Adobe Hackathon Grand Finale Backend")
+print("✅ FastAPI app created")
+sys.stdout.flush()
 
 # Add CORS middleware FIRST
 app.add_middleware(
@@ -1902,3 +1941,7 @@ async def serve_frontend(path: str):
     # For all other routes, serve the React app (SPA routing)
     return await get_frontend()
 
+
+print("✅✅✅ APPLICATION MODULE LOADED SUCCESSFULLY ✅✅✅")
+print("🎉 Ready to accept connections!")
+sys.stdout.flush()
