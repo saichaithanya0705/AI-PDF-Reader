@@ -165,6 +165,7 @@ try:
     tts_service = TTSService()
     print(f"✅ TTS Service initialized")
 except Exception as e:
+    tts_service = None
     print(f"⚠️ TTS Service initialization failed: {e}")
 
 print(f"✅ Section Highlighter initialized")

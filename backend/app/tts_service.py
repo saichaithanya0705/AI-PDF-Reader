@@ -8,9 +8,17 @@ import asyncio
 import tempfile
 from abc import ABC, abstractmethod
 from typing import Optional, Dict, Any
-import azure.cognitiveservices.speech as speechsdk
 import requests
 from pathlib import Path
+
+# Optional Azure import
+try:
+    import azure.cognitiveservices.speech as speechsdk
+    AZURE_AVAILABLE = True
+except ImportError:
+    speechsdk = None
+    AZURE_AVAILABLE = False
+    print("⚠️ Azure Speech SDK not available. TTS features will be limited.")
 
 
 class TTSProvider(ABC):
@@ -23,6 +31,9 @@ class TTSProvider(ABC):
 
 class AzureTTSProvider(TTSProvider):
     def __init__(self):
+        if not AZURE_AVAILABLE:
+            raise ImportError("Azure Speech SDK is not installed. Install with: pip install azure-cognitiveservices-speech")
+        
         self.api_key = os.getenv('AZURE_TTS_KEY')
         self.region = os.getenv('AZURE_TTS_REGION', 'eastasia')  # Use direct region from env
 
