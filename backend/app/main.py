@@ -3,7 +3,7 @@ import asyncio
 import uuid
 from pathlib import Path
 from typing import List, Dict, Any, Optional
-from fastapi import FastAPI, UploadFile, File, BackgroundTasks, WebSocket, WebSocketDisconnect, HTTPException, Query, Request
+from fastapi import FastAPI, UploadFile, File, BackgroundTasks, WebSocket, WebSocketDisconnect, HTTPException, Query, Request, Depends
 from pydantic import BaseModel
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -60,15 +60,24 @@ if USE_SUPABASE:
         from .supabase_database import get_supabase_db
         db = get_supabase_db()
         from .api_routes_supabase import router as api_router
+        from .auth_middleware import get_current_user, get_optional_user
         print("✅ Using Supabase database with authentication")
     except Exception as e:
         print(f"⚠️ Failed to initialize Supabase, falling back to SQLite: {e}")
         from .database import db
         from .api_routes import router as api_router
+        # Mock auth for SQLite mode
+        from fastapi import Depends
+        def get_current_user(): return {"sub": "local-user", "email": "local@example.com"}
+        def get_optional_user(): return None
         USE_SUPABASE = False
 else:
     from .database import db
     from .api_routes import router as api_router
+    # Mock auth for SQLite mode
+    from fastapi import Depends
+    def get_current_user(): return {"sub": "local-user", "email": "local@example.com"}
+    def get_optional_user(): return None
     print("✅ Using SQLite database (legacy mode)")
 
 from .pdf_comparator import pdf_comparator
@@ -142,6 +151,15 @@ else:
 
 # Include API routes AFTER static files
 app.include_router(api_router)
+
+# Include chat history routes if using Supabase
+if USE_SUPABASE:
+    try:
+        from .chat_history import router as chat_router
+        app.include_router(chat_router)
+        print("✅ Chat history routes enabled")
+    except Exception as e:
+        print(f"⚠️ Failed to load chat history routes: {e}")
 
 # Initialize services
 llm_provider = None
@@ -353,15 +371,16 @@ async def process_pdf(job_id: str, client_id: str, file_path: str, pdf_type: str
 @app.post("/upload/context_files")
 async def upload_context_files(
     background_tasks: BackgroundTasks,
-    client_id: str,
     persona: str = None,  # Optional
     job: str = None,      # Optional
     consider_previous: bool = False,  # Consider previously opened PDFs for recommendations
-    files: List[UploadFile] = File(...)
+    files: List[UploadFile] = File(...),
+    current_user: dict = Depends(get_current_user)
 ):
     """
     Accepts multiple "past" PDFs to build the knowledge base.
     """
+    user_id = current_user["sub"]
     job_ids = []
     file_urls = []
 
@@ -378,7 +397,7 @@ async def upload_context_files(
             print(f"📚 Processing bulk upload with smart handler: {file.filename}")
 
             upload_result = smart_upload_handler.handle_upload(
-                temp_file_path, file.filename, client_id, persona, job
+                temp_file_path, file.filename, user_id, persona, job
             )
 
             if upload_result['is_duplicate']:
@@ -395,7 +414,7 @@ async def upload_context_files(
 
                 # Start background processing for new files
                 actual_file_path = DOCS_DIR / filename_with_id
-                background_tasks.add_task(process_pdf, job_id, client_id, str(actual_file_path), 'context', persona, job)
+                background_tasks.add_task(process_pdf, job_id, user_id, str(actual_file_path), 'context', persona, job)
 
             # Clean up temporary file
             if temp_file_path.exists():
@@ -421,14 +440,15 @@ async def upload_context_files(
 @app.post("/upload/active_file")
 async def upload_active_file(
     background_tasks: BackgroundTasks,
-    client_id: str,
     persona: str = None,
     job: str = None,
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
 ):
     """
     Accepts a single "current" PDF for immediate viewing and analysis.
     """
+    user_id = current_user["sub"]
     job_id = str(uuid.uuid4())
     filename_with_id = f"{job_id}_{file.filename}"
     file_path = DOCS_DIR / filename_with_id
@@ -443,7 +463,7 @@ async def upload_active_file(
         print(f"📚 Processing upload with smart handler: {file.filename}")
 
         upload_result = smart_upload_handler.handle_upload(
-            file_path, file.filename, client_id, persona, job
+            file_path, file.filename, user_id, persona, job
         )
 
         if upload_result['is_duplicate']:
@@ -484,7 +504,7 @@ async def upload_active_file(
 
         # Start the background processing task for this file
         actual_file_path = DOCS_DIR / filename_with_id
-        background_tasks.add_task(process_pdf, job_id, client_id, str(actual_file_path), 'current', persona, job)
+        background_tasks.add_task(process_pdf, job_id, user_id, str(actual_file_path), 'current', persona, job)
 
         return JSONResponse(
             status_code=202,
