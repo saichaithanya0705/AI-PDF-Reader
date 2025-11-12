@@ -87,32 +87,100 @@ az webapp create \
 1. Go to your Web App → **Configuration** → **Application settings**
 2. Click **"+ New application setting"** for each:
 
+**Required Variables:**
 ```
 PYTHON_VERSION = 3.11
-GEMINI_API_KEY = your_gemini_api_key_here
-GOOGLE_APPLICATION_CREDENTIALS_JSON = {"type":"service_account",...minified json...}
-AZURE_SPEECH_KEY = your_azure_tts_key (optional)
-AZURE_SPEECH_REGION = eastus (optional)
-FRONTEND_URL = https://your-app.netlify.app (add after frontend deployment)
+LLM_PROVIDER = gemini
+TTS_PROVIDER = azure
+USE_SUPABASE = true
+
+# Gemini Configuration (Required for LLM features)
+# Get from: https://makersuite.google.com/app/apikey
+GEMINI_API_KEY = your_gemini_api_key_from_your_env_file
+
+# Supabase Database (Required for user data & PDFs)
+# Get from: https://supabase.com/dashboard/project/YOUR_PROJECT/settings/api
+SUPABASE_URL = https://your-project-id.supabase.co
+SUPABASE_SERVICE_KEY = your_service_role_key_from_supabase_api_settings
+```
+
+**Optional Variables (for TTS features):**
+```
+# Azure Text-to-Speech (Optional - for podcast generation)
+# Get from: https://portal.azure.com → Cognitive Services → Speech
+AZURE_TTS_KEY = your_azure_speech_service_key
+AZURE_TTS_ENDPOINT = https://eastasia.api.cognitive.microsoft.com/
+AZURE_TTS_DEPLOYMENT = tts
+AZURE_TTS_VOICE = alloy
+AZURE_TTS_API_VERSION = 2025-03-01-preview
+```
+
+**Optional Variables (for Azure OpenAI instead of Gemini):**
+```
+# If you want to use Azure OpenAI instead of Gemini
+# Get from: https://portal.azure.com → Azure OpenAI Service
+AZURE_OPENAI_KEY = your_azure_openai_key
+AZURE_OPENAI_BASE = https://eastasia.api.cognitive.microsoft.com/
+AZURE_API_VERSION = 2024-02-15-preview
+AZURE_DEPLOYMENT_NAME = gpt-4o
+# Then change: LLM_PROVIDER = azure
+```
+
+**💡 Where to get your actual values:**
+- All your actual API keys are already in your local `.env` file
+- Copy them from `.env` to Azure Portal → Configuration → Application settings
+- **Never commit API keys to Git** - use them only in Azure Portal or environment variables
+
+**Add After Frontend Deployment:**
+```
+# Add this after deploying frontend to Netlify
+FRONTEND_URL = https://your-app.netlify.app
 ```
 
 3. Click **"Save"** at the top
+4. Wait for app to restart (30-60 seconds)
 
 #### Using Azure CLI:
 ```bash
+# Set all required environment variables at once
+# Replace the placeholder values with your actual keys from .env file
 az webapp config appsettings set \
   --name ai-pdf-reader-backend \
   --resource-group ai-pdf-reader-rg \
   --settings \
     PYTHON_VERSION="3.11" \
-    GEMINI_API_KEY="your_key_here" \
-    GOOGLE_APPLICATION_CREDENTIALS_JSON='{"type":"service_account",...}'
+    LLM_PROVIDER="gemini" \
+    TTS_PROVIDER="azure" \
+    USE_SUPABASE="true" \
+    GEMINI_API_KEY="your_gemini_api_key_from_env" \
+    SUPABASE_URL="https://your-project.supabase.co" \
+    SUPABASE_SERVICE_KEY="your_service_role_key_from_supabase" \
+    AZURE_TTS_KEY="your_azure_speech_key_from_env" \
+    AZURE_TTS_ENDPOINT="https://eastasia.api.cognitive.microsoft.com/" \
+    AZURE_TTS_DEPLOYMENT="tts" \
+    AZURE_TTS_VOICE="alloy" \
+    AZURE_TTS_API_VERSION="2025-03-01-preview"
 ```
 
-**Note on Google Credentials**: 
-- Use `minify_credentials.py` to convert `credentials.json` to single-line format
-- Your backend has `setup_credentials.py` that automatically handles this
-- It creates a temp file from the env var on startup
+**Environment Variables Summary:**
+
+| Variable | Required? | Purpose | Value |
+|----------|-----------|---------|-------|
+| `PYTHON_VERSION` | ✅ Required | Python runtime version | `3.11` |
+| `GEMINI_API_KEY` | ✅ Required | Google Gemini LLM API | Your key from .env |
+| `SUPABASE_URL` | ✅ Required | Database connection | Your Supabase project URL |
+| `SUPABASE_SERVICE_KEY` | ✅ Required | Database admin access | Your service_role key |
+| `LLM_PROVIDER` | ✅ Required | Which LLM to use | `gemini` |
+| `TTS_PROVIDER` | ✅ Required | Which TTS to use | `azure` |
+| `USE_SUPABASE` | ✅ Required | Enable database | `true` |
+| `AZURE_TTS_KEY` | ⚪ Optional | Text-to-speech API | For podcast features |
+| `AZURE_TTS_ENDPOINT` | ⚪ Optional | TTS service URL | East Asia endpoint |
+| `FRONTEND_URL` | 🔜 Add Later | CORS whitelist | Add after Netlify deploy |
+
+**Note on Credentials**: 
+- Your app uses direct API keys (Gemini, Azure TTS) - no need for Google Cloud service account JSON
+- `SUPABASE_SERVICE_KEY` is the backend service_role key (different from frontend's anon key)
+- All your credentials from `.env` are already configured and ready to copy to Azure
 
 ---
 

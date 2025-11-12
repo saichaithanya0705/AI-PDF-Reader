@@ -12,13 +12,23 @@ az webapp create --name ai-pdf-reader-backend --resource-group ai-pdf-reader-rg 
 
 ### Step 2: Set Environment Variables (2 min)
 ```bash
+# Replace placeholder values with your actual keys from .env file
 az webapp config appsettings set \
   --name ai-pdf-reader-backend \
   --resource-group ai-pdf-reader-rg \
   --settings \
     PYTHON_VERSION="3.11" \
-    GEMINI_API_KEY="your_gemini_key_here"
+    LLM_PROVIDER="gemini" \
+    TTS_PROVIDER="azure" \
+    USE_SUPABASE="true" \
+    GEMINI_API_KEY="your_gemini_key_from_env" \
+    SUPABASE_URL="https://your-project.supabase.co" \
+    SUPABASE_SERVICE_KEY="your_supabase_service_key" \
+    AZURE_TTS_KEY="your_azure_speech_key" \
+    AZURE_TTS_ENDPOINT="https://eastasia.api.cognitive.microsoft.com/"
 ```
+
+**💡 Get your actual keys from:** `.env` file in your project root
 
 ### Step 3: Configure Startup (1 min)
 ```bash
@@ -113,12 +123,41 @@ PROJECT = backend
 
 ## 🔗 Next Steps
 
-1. ✅ Deploy backend to Azure (this guide)
-2. 🔜 Deploy frontend to Netlify:
-   - Build: `npm run build`
-   - Env: `VITE_API_URL = https://ai-pdf-reader-backend.azurewebsites.net`
-3. 🔜 Update backend CORS:
-   - Add env var: `FRONTEND_URL = https://your-app.netlify.app`
+### 1. ✅ Deploy Backend to Azure (Done!)
+Your backend is deployed and configured with all environment variables.
+
+### 2. 🔜 Deploy Frontend to Netlify
+
+**Netlify Setup:**
+1. Go to [Netlify](https://app.netlify.com/) → New site from Git
+2. Connect to GitHub: `saichaithanya0705/AI-PDF-Reader`
+3. Configure build:
+   ```
+   Base directory: frontend
+   Build command: npm run build
+   Publish directory: frontend/dist
+   ```
+
+**Environment Variables (Netlify Dashboard → Site settings → Environment variables):**
+```
+VITE_API_URL = https://ai-pdf-reader-backend.azurewebsites.net
+VITE_SUPABASE_URL = your_supabase_url_from_frontend_env
+VITE_SUPABASE_ANON_KEY = your_supabase_anon_key_from_frontend_env
+```
+
+**💡 Get actual values from:** `frontend/.env` file
+
+**Important**: Replace `ai-pdf-reader-backend` with your actual Azure app name!
+
+### 3. 🔜 Update Backend CORS (After Netlify Deploy)
+
+Once your Netlify site is live, add this to Azure:
+```bash
+az webapp config appsettings set \
+  --name ai-pdf-reader-backend \
+  --resource-group ai-pdf-reader-rg \
+  --settings FRONTEND_URL="https://your-app.netlify.app"
+```
 
 ---
 
