@@ -228,7 +228,7 @@ your-repo/
 │   │   └── main.py          ← FastAPI app here
 │   ├── requirements.txt     ← Dependencies
 │   └── setup_credentials.py
-├── .deployment              ← Optional: custom deployment
+├── .deployment              ← REQUIRED: Tells Azure to use backend folder
 └── startup.sh               ← Optional: custom startup
 ```
 
@@ -236,7 +236,32 @@ Your project already matches this! ✅
 
 ---
 
-## 🔍 **CREATE .deployment FILE (OPTIONAL)**
+## ⚠️ **CRITICAL: Tell Azure Where Backend Is**
+
+Azure needs to know your code is in the `backend/` folder, not the root.
+
+**Create `.deployment` file** in project root:
+
+**File:** `d:\adobe-hackathon-finale-main\.deployment`
+
+```ini
+[config]
+SCM_DO_BUILD_DURING_DEPLOYMENT = true
+PROJECT = backend
+```
+
+This tells Azure:
+- ✅ Install dependencies from `backend/requirements.txt`
+- ✅ Run application from `backend/` folder
+- ✅ Use `backend/` as the root for deployment
+
+**Without this file, Azure will fail to find your app!**
+
+---
+
+## 🔍 **CREATE .deployment FILE (REQUIRED FOR YOUR STRUCTURE)**
+
+**This is CRITICAL** - Azure won't find your backend without this!
 
 Create in project root: `d:\adobe-hackathon-finale-main\.deployment`
 
@@ -246,9 +271,13 @@ SCM_DO_BUILD_DURING_DEPLOYMENT = true
 PROJECT = backend
 ```
 
-This tells Azure to:
-- Install from `backend/requirements.txt`
-- Use backend folder as root
+**What this does:**
+- ✅ Tells Azure to look in `backend/` folder
+- ✅ Install dependencies from `backend/requirements.txt`
+- ✅ Use `backend/` as the application root
+- ✅ Without this, deployment will fail!
+
+**Alternative Method:** Instead of creating `.deployment` file, you can set `PROJECT=backend` in Azure Portal → Configuration → Application Settings. But the `.deployment` file is cleaner.
 
 ---
 
