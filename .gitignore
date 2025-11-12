@@ -26,6 +26,7 @@ credentials_minified*.json
 # API Keys
 api_keys.txt
 .api-keys
+DEPLOYMENT_CREDENTIALS.md
 
 # ============================================================
 # PYTHON / BACKEND
