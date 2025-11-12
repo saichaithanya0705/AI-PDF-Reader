@@ -35,18 +35,18 @@ jobs:
                 
       # By default, when you enable GitHub CI/CD integration through the Azure portal, the platform automatically sets the SCM_DO_BUILD_DURING_DEPLOYMENT application setting to true. This triggers the use of Oryx, a build engine that handles application compilation and dependency installation (e.g., pip install) directly on the platform during deployment. Hence, we exclude the antenv virtual environment directory from the deployment artifact to reduce the payload size.
       # 
-      # 📁 IMPORTANT: Backend Subfolder Structure
-      # This project has backend code in the 'backend/' subfolder. We deploy ONLY the backend folder to Azure so Oryx can find requirements.txt at the root of the deployment.
+      # 📁 IMPORTANT: Backend Subfolder Structure + Pre-built Dependencies
+      # This project has backend code in the 'backend/' subfolder. We deploy ONLY the backend folder to Azure WITH the virtual environment containing all dependencies pre-installed, so Azure doesn't need to run Oryx build.
       - name: Upload artifact for deployment jobs
         uses: actions/upload-artifact@v4
         with:
           name: python-app
           path: |
             backend/
-            !backend/antenv/
             !backend/venv/
             !backend/__pycache__/
             !backend/**/__pycache__/
+            !backend/.env
 
       # 🚫 Opting Out of Oryx Build
       # If you prefer to disable the Oryx build process during deployment, follow these steps:
@@ -71,3 +71,6 @@ jobs:
           app-name: 'AI-PDF-Reader'
           slot-name: 'Production'
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_AFA7BD6EAD084E2999F45BAE11468E1B }}
+        env:
+          WEBSITE_RUN_FROM_PACKAGE: 0
+          SCM_DO_BUILD_DURING_DEPLOYMENT: false
