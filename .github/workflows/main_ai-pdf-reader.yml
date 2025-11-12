@@ -69,3 +69,6 @@ jobs:
           app-name: 'AI-PDF-Reader'
           slot-name: 'Production'
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_AFA7BD6EAD084E2999F45BAE11468E1B }}
+        env:
+          PROJECT: backend
+          SCM_DO_BUILD_DURING_DEPLOYMENT: true
