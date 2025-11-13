@@ -835,9 +835,14 @@ cd frontend
   systemctl restart pdf-backend.service
   systemctl reload nginx
   ```
-- Required GitHub secrets:  
-  `DO_HOST` (e.g. `64.227.179.63`), `DO_USER` (e.g. `root`), and `DO_SSH_KEY` (your private key in PEM format).  
-  Optional: `DO_PORT` if you expose SSH on a non-default port (`22`).
+- Required GitHub secrets:
+  - `DO_HOST` (e.g. `64.227.179.63`)
+  - `DO_USER` (e.g. `root`)
+  - `DO_SSH_KEY` (your private key in PEM format)
+  - `VITE_SUPABASE_URL` (Supabase project URL)
+  - `VITE_SUPABASE_ANON_KEY` (Supabase anon/public key)
+  - Optional: `DO_PORT` if you expose SSH on a non-default port (`22`).
+- Backend `.env`: keep `USE_SUPABASE=false` (SQLite mode). Supabase support for uploads is still experimental and incompatible with the smart upload workflow documented here.
 
 ## 📞 Support
 
