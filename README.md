@@ -782,97 +782,34 @@ cd frontend
 
 2. **Superior User Experience**: Multiple access methods and intuitive interface
 
-## 🚀 Deployment3. **Production-Ready**: Robust error handling and deployment configuration
+## 🚀 Deployment
 
-4. **Scalable Architecture**: Modular design supporting future enhancements
+### Backend on Heroku
+- **Buildpack:** use Heroku’s default Python buildpack; the repository root now exposes `Procfile`, `requirements.txt`, and `runtime.txt`.
+- **Deploy:** connect the repo with `heroku git:remote -a <app-name>` then push (`git push heroku main`). Heroku installs dependencies from `backend/requirements.txt` via the root include directive and runs `uvicorn backend.app.main:app`.
+- **Environment:** configure Supabase, Gemini, and optional Azure TTS keys with `heroku config:set`. Use cloud storage (Supabase/Postgres, S3, etc.) because Heroku’s filesystem is ephemeral.
+- **Database:** enable `USE_SUPABASE=true` or point to another managed database; the bundled SQLite file under `backend/data/` is intended for local testing only.
 
-### Deploy Backend to Render5. **Cross-Platform Compatibility**: Works on desktop, tablet, and mobile
+### Frontend on DigitalOcean App Platform
+- **Component type:** Static Site with root directory `frontend`.
+- **Build command:** `npm install && npm run build`.
+- **Output directory:** `frontend/dist`.
+- **Environment variables:** set `VITE_API_URL=https://<heroku-app>.herokuapp.com` plus any required Supabase public keys.
+- **Post-deploy:** ensure the SPA uses `wss://<heroku-app>.herokuapp.com/ws/{client_id}` for WebSockets. Update the backend CORS configuration if you decide to restrict origins.
 
-6. **Advanced AI Integration**: Leverages latest LLM capabilities effectively
-
-1. Push code to GitHub
-
-2. Go to [Render Dashboard](https://dashboard.render.com/)---
-
-3. Create **New Web Service**
-
-4. Connect GitHub repository## 🔮 Future Enhancements
-
-5. Configure:
-
-   - **Root Directory:** `backend`- **Advanced Knowledge Graphs**: Visual representation of document connections
-
-   - **Build Command:** `pip install -r requirements.txt`- **Collaborative Features**: Shared annotations and insights
-
-   - **Start Command:** `python -m app.main`- **Mobile App**: Native iOS/Android applications
-
-6. Add environment variables (see `.env.example`)- **Integration APIs**: Connect with LMS and productivity tools
-
-7. Upload `credentials.json` as **Secret File**- **Advanced Analytics**: Reading patterns and comprehension insights
-
-8. Deploy!- **Multi-Language Support**: Process documents in multiple languages
-
-
-
-**Backend URL:** `https://your-backend.onrender.com`---
-
-
-
-### Deploy Frontend to Netlify## 📄 License & Credits
-
-
-
-1. Push code to GitHub**Built for Adobe India Hackathon 2025 Grand Finale**
-
-2. Go to [Netlify Dashboard](https://app.netlify.com/)
-
-3. Create **New Site from Git**### **Team Information**
-
-4. Connect GitHub repository- Project: Document Insight & Engagement System
-
-5. Configure:- Theme: From Brains to Experience – Make It Real
-
-   - **Base Directory:** `frontend`- Challenge: Connecting the Dots
-
-   - **Build Command:** `npm run build`
-
-   - **Publish Directory:** `frontend/dist`### **Technologies Used**
-
-6. Add environment variables:- React + TypeScript + Tailwind CSS
-
-   - `VITE_API_URL=https://your-backend.onrender.com`- FastAPI + Python + SQLite
-
-   - `VITE_SUPABASE_URL=https://xxx.supabase.co`- Adobe PDF Embed API
-
-   - `VITE_SUPABASE_ANON_KEY=xxx`- Sentence Transformers + FAISS
-
-7. Deploy!- Gemini 2.5 Flash + Azure TTS
-
-- Docker + Docker Compose
-
-**Frontend URL:** `https://your-app.netlify.app`
-
----
-
-### Update CORS
+### Repository Structure Notes
+- Backend code stays under `backend/`, but Heroku launches it via the root-level `Procfile`.
+- Frontend source remains in `frontend/`; only the compiled `dist/` directory is served by DigitalOcean.
+- Legacy deployment artifacts for Azure, Render, Netlify, and Docker have been removed to keep the repo focused on the Heroku + DigitalOcean workflow.
 
 ## 📞 Support
 
-After frontend deployment, update backend environment:
+For deployment assistance:
+- Check environment variable templates in `.env.example`.
+- Confirm Supabase credentials and Google/Azure keys are entered in both Heroku and DigitalOcean dashboards.
+- Run `python backend/fix_database_paths.py` locally if you migrate existing SQLite content.
 
-```bashFor technical issues or questions:
-
-FRONTEND_URL=https://your-app.netlify.app1. Check the troubleshooting section above
-
-```2. Review the demo script and usage guide
-
-3. Verify environment variables and credentials
-
----4. Run the database fix script if encountering path issues
-
-
-
-## 📊 Database Schema**Ready for Adobe India Hackathon 2025 Grand Finale Evaluation! 🎯**
+## 📊 Database Schema**Ready for Adobe India Hackathon 2025 Grand Finale! 🎯**
 
 ### `documents` Table
 ```sql
