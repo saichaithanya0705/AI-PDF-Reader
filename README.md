@@ -785,8 +785,8 @@ cd frontend
 ## 🚀 Deployment
 
 ### Backend on DigitalOcean Droplets (Python + FastAPI)
-- **Provision:** Create a Droplet with at least 4 GB RAM / 2 vCPUs (the GitHub Student Pack credit covers the $24/mo Basic droplet). Choose Ubuntu LTS and enable SSH keys.
-- **System setup:** SSH into the droplet, install system packages (`sudo apt update && sudo apt install -y python3-venv build-essential nginx`), then clone this repo (`git clone https://github.com/saichaithanya0705/AI-PDF-Reader.git`).
+- **Provision:** Create a Droplet with at least 4 GB RAM / 2 vCPUs (the GitHub Student Pack credit covers the $24/mo Basic droplet). Choose Ubuntu LTS and enable SSH keys.
+- **System setup:** SSH into the droplet, install system packages (`sudo apt update && sudo apt install -y python3-venv build-essential nginx git snapd`), then clone this repo (`git clone https://github.com/saichaithanya0705/AI-PDF-Reader.git`).
 - **Python environment:**
   ```bash
   cd AI-PDF-Reader
@@ -796,35 +796,48 @@ cd frontend
   pip install -r backend/requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
   ```
   Using the CPU wheel keeps the install under 2 GB and avoids the GPU-only `nvidia-*` packages that bloat cloud deployments.
-- **Environment variables:** copy `backend/.env.example` to `.env`, fill in Supabase, Gemini, and TTS keys, and export them via `source .env` or a systemd unit file (`EnvironmentFile=/path/to/.env`). Store PDFs in object storage (DigitalOcean Spaces/S3) if you need durability beyond the droplet disk.
-- **Process manager:** create a systemd service such as:
+- **Environment variables:** copy `backend/.env.example` to `.env`, fill in Supabase, Gemini, TTS keys, and `FRONTEND_URL=https://<your-hostname>`. Keep a copy at the project root because the app loads it from there for convenience.
+- **Process manager:** the deployed droplet runs a systemd unit (`/etc/systemd/system/pdf-backend.service`) that executes:
   ```ini
-  [Unit]
-  Description=FastAPI PDF backend
-  After=network.target
-
-  [Service]
-  User=ubuntu
-  WorkingDirectory=/home/ubuntu/AI-PDF-Reader
-  EnvironmentFile=/home/ubuntu/AI-PDF-Reader/backend/.env
-  ExecStart=/home/ubuntu/AI-PDF-Reader/venv/bin/uvicorn backend.app.main:app --host 0.0.0.0 --port 8000
-  Restart=always
-
-  [Install]
-  WantedBy=multi-user.target
+  ExecStart=/root/AI-PDF-Reader/venv/bin/uvicorn backend.app.main:app --host 0.0.0.0 --port 8000
   ```
-  Then run `sudo systemctl daemon-reload && sudo systemctl enable --now fastapi.service`.
-- **Reverse proxy:** configure nginx to forward HTTPS traffic to `127.0.0.1:8000`, or use a DigitalOcean Load Balancer with TLS termination.
+  After editing the unit or environment file, run `sudo systemctl daemon-reload && sudo systemctl restart pdf-backend.service`.
+- **HTTPS + reverse proxy:** nginx serves the frontend bundle and proxies `/api/*` and `/ws/*` to `127.0.0.1:8000`. We terminate TLS with Let’s Encrypt on the same droplet by issuing:
+  ```bash
+  sudo snap install --classic certbot
+  sudo ln -s /snap/bin/certbot /usr/bin/certbot
+  sudo certbot --nginx -d 64-227-179-63.sslip.io --redirect -m <your-email> --agree-tos --non-interactive
+  ```
+  Replace `64-227-179-63.sslip.io` with any hostname that resolves to the droplet (sslip.io/nip.io subdomains work without a custom domain).
 
-### Hosting the Frontend
-- **Same droplet:** Build the React app (`cd frontend && npm install && npm run build`) and serve `frontend/dist` via nginx (e.g., `/var/www/app`). Add an nginx server block that serves static files and proxies `/api` and `/ws` to the backend service.
-- **DigitalOcean App Platform (Static Site):** Alternatively, create a Static Site pointing to the GitHub repo, root directory `frontend`, build command `npm install && npm run build`, and publish directory `frontend/dist`. Set `VITE_API_URL` to your droplet domain (`https://your-domain.com`) and Supabase keys in App Platform settings.
-- **CORS & WebSockets:** Update `allow_origins` in `backend/app/main.py` (or supply `FRONTEND_URL`) so the SPA domain can call the API. WebSocket clients should use `wss://your-domain.com/ws/{client_id}` if routed through nginx.
+### Hosting the Frontend (on the same droplet)
+- **Build:** `cd frontend && npm install && VITE_API_URL=https://64-227-179-63.sslip.io npm run build`. The CI pipeline described below runs the same command.
+- **Static files:** copy the build artefacts to `/var/www/pdfapp` and let nginx serve them with `try_files $uri /index.html` so client-side routing works.
+- **API/WebSockets:** `/api/*` and `/ws/*` are proxied to the FastAPI service. The SPA can simply point to `VITE_API_URL=https://64-227-179-63.sslip.io` (already used in production) and WebSockets connect to `wss://64-227-179-63.sslip.io/ws/<clientId>`.
+- **Production URL:** https://64-227-179-63.sslip.io is now live with both frontend and backend behind HTTPS.
 
 ### Repository Structure Notes
 - Backend Python code remains under `backend/`; the droplet runs it through uvicorn or gunicorn.
 - Frontend source stays in `frontend/`; only the `dist/` bundle is required in production.
-- Cloud-specific artifacts for Heroku/Render/Netlify have been removed; deployment steps now focus on DigitalOcean infrastructure.
+- Cloud-specific artifacts for Heroku/Render/Netlify have been removed; deployment steps now focus on the all-in-one DigitalOcean droplet.
+
+### Continuous Deployment (GitHub Actions)
+- Workflow file: `.github/workflows/deploy.yml`.
+- On pushes to `main` we build the Vite app (Node.js 22) and install the lightweight Python requirements as a sanity check.
+- If the build job succeeds, `appleboy/ssh-action` connects to the droplet and runs:
+  ```bash
+  git fetch origin main
+  git reset --hard origin/main
+  source venv/bin/activate
+  pip install -r backend/requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
+  cd frontend && npm install && npm run build
+  rm -rf /var/www/pdfapp/* && cp -r dist/* /var/www/pdfapp/
+  systemctl restart pdf-backend.service
+  systemctl reload nginx
+  ```
+- Required GitHub secrets:  
+  `DO_HOST` (e.g. `64.227.179.63`), `DO_USER` (e.g. `root`), and `DO_SSH_KEY` (your private key in PEM format).  
+  Optional: `DO_PORT` if you expose SSH on a non-default port (`22`).
 
 ## 📞 Support
 
@@ -938,47 +951,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 **Built with ❤️ for Adobe Hackathon 2025**
 
 ⭐ **Star this repo if you found it helpful!**
-
-## ✅ Production Deployment Summary
-- **Backend API (Droplet):** `http://64.227.179.63`
-  - Powered by systemd service `pdf-backend.service`
-  - Reverse proxied through nginx (port 80 → Uvicorn on 8000)
-  - Environment file: `/root/AI-PDF-Reader/backend/.env`
-- **Frontend SPA (Railway/Static Host):** deploy the contents of `frontend/dist`
-  - Set `VITE_API_URL=http://64.227.179.63`
-  - Optional Supabase keys: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
-- **WebSocket endpoint:** `ws://64.227.179.63/ws/{clientId}` (Railway will proxy this through the frontend app)
-
-### Deploying the Frontend to Railway
-1. Run `npm install && npm run build` inside `frontend/`.
-2. Push the repo to GitHub (already done).
-3. On Railway, create a **Static** project from GitHub and point it to the `frontend` folder.
-4. Configure environment variables:
-   - `VITE_API_URL=http://64.227.179.63`
-   - `VITE_SUPABASE_URL=<your Supabase project URL>`
-   - `VITE_SUPABASE_ANON_KEY=<your anon key>`
-5. Build command (Railway default): `npm run build`
-6. Output directory: `dist`.
-
-### Optional HTTPS
-You can later map a hostname such as `64-227-179-63.sslip.io` or your own domain to the droplet and use Let’s Encrypt (`certbot --nginx -d <hostname>`) to enable HTTPS. Update `VITE_API_URL` to the HTTPS version once the certificate is in place.
-
-### CI/CD Pipeline
-- GitHub Actions workflow (`.github/workflows/ci.yml`) runs on each push:
-  - Installs backend dependencies with CPU-only PyTorch wheels and verifies Uvicorn starts in check mode.
-  - Builds the frontend with `npm run build` to ensure Railway deploys clean artifacts.
-  - Deploy job (gated to `main`) uses SSH to pull the latest code on the droplet and restart the systemd service. Configure these GitHub secrets before enabling it:
-    - `SSH_HOST` (e.g., `64.227.179.63`)
-    - `SSH_USER` (e.g., `root`)
-    - `SSH_KEY` (your private key contents)
-
-```yaml
-# Example secrets script executed on deploy
-cd /root/AI-PDF-Reader && \
-  git pull && \
-  source venv/bin/activate && \
-  pip install -r backend/requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu && \
-  systemctl restart pdf-backend.service
-```
-
-Once secrets are set, every push to `main` will run tests/builds and (if configured) redeploy automatically.
