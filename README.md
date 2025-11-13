@@ -938,3 +938,47 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 **Built with ❤️ for Adobe Hackathon 2025**
 
 ⭐ **Star this repo if you found it helpful!**
+
+## ✅ Production Deployment Summary
+- **Backend API (Droplet):** `http://64.227.179.63`
+  - Powered by systemd service `pdf-backend.service`
+  - Reverse proxied through nginx (port 80 → Uvicorn on 8000)
+  - Environment file: `/root/AI-PDF-Reader/backend/.env`
+- **Frontend SPA (Railway/Static Host):** deploy the contents of `frontend/dist`
+  - Set `VITE_API_URL=http://64.227.179.63`
+  - Optional Supabase keys: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
+- **WebSocket endpoint:** `ws://64.227.179.63/ws/{clientId}` (Railway will proxy this through the frontend app)
+
+### Deploying the Frontend to Railway
+1. Run `npm install && npm run build` inside `frontend/`.
+2. Push the repo to GitHub (already done).
+3. On Railway, create a **Static** project from GitHub and point it to the `frontend` folder.
+4. Configure environment variables:
+   - `VITE_API_URL=http://64.227.179.63`
+   - `VITE_SUPABASE_URL=<your Supabase project URL>`
+   - `VITE_SUPABASE_ANON_KEY=<your anon key>`
+5. Build command (Railway default): `npm run build`
+6. Output directory: `dist`.
+
+### Optional HTTPS
+You can later map a hostname such as `64-227-179-63.sslip.io` or your own domain to the droplet and use Let’s Encrypt (`certbot --nginx -d <hostname>`) to enable HTTPS. Update `VITE_API_URL` to the HTTPS version once the certificate is in place.
+
+### CI/CD Pipeline
+- GitHub Actions workflow (`.github/workflows/ci.yml`) runs on each push:
+  - Installs backend dependencies with CPU-only PyTorch wheels and verifies Uvicorn starts in check mode.
+  - Builds the frontend with `npm run build` to ensure Railway deploys clean artifacts.
+  - Deploy job (gated to `main`) uses SSH to pull the latest code on the droplet and restart the systemd service. Configure these GitHub secrets before enabling it:
+    - `SSH_HOST` (e.g., `64.227.179.63`)
+    - `SSH_USER` (e.g., `root`)
+    - `SSH_KEY` (your private key contents)
+
+```yaml
+# Example secrets script executed on deploy
+cd /root/AI-PDF-Reader && \
+  git pull && \
+  source venv/bin/activate && \
+  pip install -r backend/requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu && \
+  systemctl restart pdf-backend.service
+```
+
+Once secrets are set, every push to `main` will run tests/builds and (if configured) redeploy automatically.
