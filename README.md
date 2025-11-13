@@ -578,7 +578,7 @@ AI-PDF-Reader/- Select text about "transformer architectures"
 
 │   └── package.json
 
-│## 🚀 Deployment Instructions
+│## 🚀 Deployment
 
 ├── backend/                    # FastAPI + Python
 
@@ -784,30 +784,56 @@ cd frontend
 
 ## 🚀 Deployment
 
-### Backend on Heroku
-- **Buildpack:** use Heroku’s default Python buildpack; the repository root now exposes `Procfile`, `requirements.txt`, and `runtime.txt`.
-- **Deploy:** connect the repo with `heroku git:remote -a <app-name>` then push (`git push heroku main`). Heroku installs dependencies from `backend/requirements.txt` via the root include directive and runs `uvicorn backend.app.main:app`.
-- **Environment:** configure Supabase, Gemini, and optional Azure TTS keys with `heroku config:set`. Use cloud storage (Supabase/Postgres, S3, etc.) because Heroku’s filesystem is ephemeral.
-- **Database:** enable `USE_SUPABASE=true` or point to another managed database; the bundled SQLite file under `backend/data/` is intended for local testing only.
+### Backend on DigitalOcean Droplets (Python + FastAPI)
+- **Provision:** Create a Droplet with at least 4 GB RAM / 2 vCPUs (the GitHub Student Pack credit covers the $24/mo Basic droplet). Choose Ubuntu LTS and enable SSH keys.
+- **System setup:** SSH into the droplet, install system packages (`sudo apt update && sudo apt install -y python3-venv build-essential nginx`), then clone this repo (`git clone https://github.com/saichaithanya0705/AI-PDF-Reader.git`).
+- **Python environment:**
+  ```bash
+  cd AI-PDF-Reader
+  python3 -m venv venv
+  source venv/bin/activate
+  pip install --upgrade pip
+  pip install -r backend/requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
+  ```
+  Using the CPU wheel keeps the install under 2 GB and avoids the GPU-only `nvidia-*` packages that bloat cloud deployments.
+- **Environment variables:** copy `backend/.env.example` to `.env`, fill in Supabase, Gemini, and TTS keys, and export them via `source .env` or a systemd unit file (`EnvironmentFile=/path/to/.env`). Store PDFs in object storage (DigitalOcean Spaces/S3) if you need durability beyond the droplet disk.
+- **Process manager:** create a systemd service such as:
+  ```ini
+  [Unit]
+  Description=FastAPI PDF backend
+  After=network.target
 
-### Frontend on DigitalOcean App Platform
-- **Component type:** Static Site with root directory `frontend`.
-- **Build command:** `npm install && npm run build`.
-- **Output directory:** `frontend/dist`.
-- **Environment variables:** set `VITE_API_URL=https://<heroku-app>.herokuapp.com` plus any required Supabase public keys.
-- **Post-deploy:** ensure the SPA uses `wss://<heroku-app>.herokuapp.com/ws/{client_id}` for WebSockets. Update the backend CORS configuration if you decide to restrict origins.
+  [Service]
+  User=ubuntu
+  WorkingDirectory=/home/ubuntu/AI-PDF-Reader
+  EnvironmentFile=/home/ubuntu/AI-PDF-Reader/backend/.env
+  ExecStart=/home/ubuntu/AI-PDF-Reader/venv/bin/uvicorn backend.app.main:app --host 0.0.0.0 --port 8000
+  Restart=always
+
+  [Install]
+  WantedBy=multi-user.target
+  ```
+  Then run `sudo systemctl daemon-reload && sudo systemctl enable --now fastapi.service`.
+- **Reverse proxy:** configure nginx to forward HTTPS traffic to `127.0.0.1:8000`, or use a DigitalOcean Load Balancer with TLS termination.
+
+### Hosting the Frontend
+- **Same droplet:** Build the React app (`cd frontend && npm install && npm run build`) and serve `frontend/dist` via nginx (e.g., `/var/www/app`). Add an nginx server block that serves static files and proxies `/api` and `/ws` to the backend service.
+- **DigitalOcean App Platform (Static Site):** Alternatively, create a Static Site pointing to the GitHub repo, root directory `frontend`, build command `npm install && npm run build`, and publish directory `frontend/dist`. Set `VITE_API_URL` to your droplet domain (`https://your-domain.com`) and Supabase keys in App Platform settings.
+- **CORS & WebSockets:** Update `allow_origins` in `backend/app/main.py` (or supply `FRONTEND_URL`) so the SPA domain can call the API. WebSocket clients should use `wss://your-domain.com/ws/{client_id}` if routed through nginx.
 
 ### Repository Structure Notes
-- Backend code stays under `backend/`, but Heroku launches it via the root-level `Procfile`.
-- Frontend source remains in `frontend/`; only the compiled `dist/` directory is served by DigitalOcean.
-- Legacy deployment artifacts for Azure, Render, Netlify, and Docker have been removed to keep the repo focused on the Heroku + DigitalOcean workflow.
+- Backend Python code remains under `backend/`; the droplet runs it through uvicorn or gunicorn.
+- Frontend source stays in `frontend/`; only the `dist/` bundle is required in production.
+- Cloud-specific artifacts for Heroku/Render/Netlify have been removed; deployment steps now focus on DigitalOcean infrastructure.
 
 ## 📞 Support
 
-For deployment assistance:
-- Check environment variable templates in `.env.example`.
-- Confirm Supabase credentials and Google/Azure keys are entered in both Heroku and DigitalOcean dashboards.
-- Run `python backend/fix_database_paths.py` locally if you migrate existing SQLite content.
+Need help getting the droplet online?
+- Verify `.env` values match your Supabase, Gemini, and Azure credentials.
+- Check systemd logs (`sudo journalctl -u fastapi.service -f`) if the backend won’t start.
+- Use `curl http://127.0.0.1:8000/docs` from the droplet to confirm the API is reachable before exposing it publicly.
+- For nginx issues, run `sudo nginx -t` after editing configs and restart via `sudo systemctl reload nginx`.
+- Run `python backend/fix_database_paths.py` once if you migrate existing SQLite data onto the server.
 
 ## 📊 Database Schema**Ready for Adobe India Hackathon 2025 Grand Finale! 🎯**
 
