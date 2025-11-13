@@ -48,7 +48,7 @@ class SmartUploadHandler:
             print(f"   Existing document: {duplicate_info['original_name']} (ID: {duplicate_info['id'][:8]}...)")
             
             # Update last_opened time to current time (user is "accessing" it by uploading again)
-            self._update_last_opened(duplicate_info['id'])
+            self._update_last_opened(duplicate_info['id'], duplicate_info.get('client_id'))
             
             return {
                 'is_duplicate': True,
@@ -61,10 +61,10 @@ class SmartUploadHandler:
         print(f"✅ New file detected: {original_name}")
         return self._process_new_upload(file_path, original_name, client_id, persona, job)
     
-    def _update_last_opened(self, document_id: str):
+    def _update_last_opened(self, document_id: str, client_id: Optional[str] = None):
         """Update the last_opened timestamp for an existing document"""
         try:
-            db.update_last_opened(document_id)
+            db.update_last_opened(document_id, client_id=client_id)
             print(f"   📝 Updated last_opened time for document {document_id[:8]}...")
         except Exception as e:
             logger.error(f"Error updating last_opened for {document_id}: {e}")

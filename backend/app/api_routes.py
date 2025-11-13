@@ -28,15 +28,15 @@ async def get_all_documents(
     try:
         print(f"📚 API: get_all_documents called with limit={limit}, offset={offset}, client_id={client_id}, search={search}")
 
+        if not client_id:
+            raise HTTPException(status_code=400, detail="client_id is required to list documents")
+
         if search:
-            documents = db.search_documents(search)
+            documents = db.search_documents(search, client_id=client_id)
             print(f"📚 API: Found {len(documents)} documents matching search '{search}'")
-        elif client_id:
-            documents = db.get_documents_by_client(client_id)
-            print(f"📚 API: Found {len(documents)} documents for client '{client_id}'")
         else:
-            documents = db.get_all_documents(limit=limit, offset=offset)
-            print(f"📚 API: Found {len(documents)} total documents")
+            documents = db.get_all_documents(limit=limit, offset=offset, client_id=client_id)
+            print(f"📚 API: Found {len(documents)} documents for client '{client_id}'")
 
         # Convert documents to dictionaries for JSON response
         document_dicts = []
@@ -47,7 +47,7 @@ async def get_all_documents(
             document_dicts.append(doc_dict)
             print(f"📄 API: Document {doc.id}: {doc.original_name} ({doc.filename})")
 
-        stats = db.get_document_stats()
+        stats = db.get_document_stats(client_id=client_id)
         print(f"📊 API: Database stats: {stats}")
 
         response_data = {
@@ -66,13 +66,17 @@ async def get_all_documents(
 
 @router.get("/documents/{document_id}", response_model=Dict[str, Any])
 async def get_document(
-    document_id: str = Path(..., description="Document ID")
+    document_id: str = Path(..., description="Document ID"),
+    client_id: Optional[str] = Query(None, description="Client ID owning the document")
 ):
     """
     Get a specific document by ID
     """
     try:
-        document = db.get_document_by_id(document_id)
+        if not client_id:
+            raise HTTPException(status_code=400, detail="client_id is required to fetch a document")
+
+        document = db.get_document_by_id(document_id, client_id=client_id)
         if not document:
             raise HTTPException(status_code=404, detail="Document not found")
         
@@ -80,7 +84,7 @@ async def get_document(
         doc_dict['url'] = f"/api/files/{document.filename}"
         
         # Update last opened time
-        db.update_last_opened(document_id)
+        db.update_last_opened(document_id, client_id=client_id)
         
         return {
             "document": doc_dict,
@@ -96,19 +100,23 @@ async def get_document(
 @router.delete("/documents/{document_id}")
 async def delete_document(
     document_id: str = Path(..., description="Document ID"),
-    permanent: bool = Query(False, description="Permanently delete (default: soft delete)")
+    permanent: bool = Query(False, description="Permanently delete (default: soft delete)"),
+    client_id: Optional[str] = Query(None, description="Client ID owning the document")
 ):
     """
     Delete a document (soft delete by default)
     """
     try:
         # Get document info before deleting
-        document = db.get_document_by_id(document_id)
+        if not client_id:
+            raise HTTPException(status_code=400, detail="client_id is required to delete a document")
+
+        document = db.get_document_by_id(document_id, client_id=client_id)
         if not document:
             raise HTTPException(status_code=404, detail="Document not found")
         
         # Delete from database
-        success = db.delete_document(document_id, soft_delete=not permanent)
+        success = db.delete_document(document_id, soft_delete=not permanent, client_id=client_id)
         if not success:
             raise HTTPException(status_code=500, detail="Failed to delete document from database")
         
@@ -136,7 +144,8 @@ async def delete_document(
 @router.put("/documents/{document_id}")
 async def update_document(
     document_id: str = Path(..., description="Document ID"),
-    updates: Dict[str, Any] = None
+    updates: Dict[str, Any] = None,
+    client_id: Optional[str] = Query(None, description="Client ID owning the document")
 ):
     """
     Update document metadata
@@ -146,7 +155,10 @@ async def update_document(
             raise HTTPException(status_code=400, detail="No updates provided")
         
         # Check if document exists
-        document = db.get_document_by_id(document_id)
+        if not client_id:
+            raise HTTPException(status_code=400, detail="client_id is required to update a document")
+
+        document = db.get_document_by_id(document_id, client_id=client_id)
         if not document:
             raise HTTPException(status_code=404, detail="Document not found")
         
@@ -161,12 +173,12 @@ async def update_document(
         if not filtered_updates:
             raise HTTPException(status_code=400, detail="No valid updates provided")
         
-        success = db.update_document(document_id, **filtered_updates)
+        success = db.update_document(document_id, client_id=client_id, **filtered_updates)
         if not success:
             raise HTTPException(status_code=500, detail="Failed to update document")
         
         # Return updated document
-        updated_document = db.get_document_by_id(document_id)
+        updated_document = db.get_document_by_id(document_id, client_id=client_id)
         doc_dict = updated_document.to_dict()
         doc_dict['url'] = f"/api/files/{updated_document.filename}"
         
@@ -211,12 +223,17 @@ async def search_documents(
         raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
 
 @router.get("/documents/stats")
-async def get_document_stats():
+async def get_document_stats(
+    client_id: Optional[str] = Query(None, description="Client ID to scope statistics")
+):
     """
     Get document database statistics
     """
     try:
-        stats = db.get_document_stats()
+        if not client_id:
+            raise HTTPException(status_code=400, detail="client_id is required to fetch stats")
+
+        stats = db.get_document_stats(client_id=client_id)
         return {
             "success": True,
             "stats": stats
@@ -229,17 +246,21 @@ async def get_document_stats():
 @router.post("/documents/{document_id}/validate")
 async def validate_document(
     document_id: str = Path(..., description="Document ID"),
-    validation_result: Dict[str, Any] = None
+    validation_result: Dict[str, Any] = None,
+    client_id: Optional[str] = Query(None, description="Client ID owning the document")
 ):
     """
     Store validation result for a document
     """
     try:
-        document = db.get_document_by_id(document_id)
+        if not client_id:
+            raise HTTPException(status_code=400, detail="client_id is required to validate a document")
+
+        document = db.get_document_by_id(document_id, client_id=client_id)
         if not document:
             raise HTTPException(status_code=404, detail="Document not found")
         
-        success = db.update_document(document_id, validation_result=validation_result)
+        success = db.update_document(document_id, client_id=client_id, validation_result=validation_result)
         if not success:
             raise HTTPException(status_code=500, detail="Failed to store validation result")
         
@@ -259,13 +280,17 @@ async def validate_document(
 async def update_processing_status(
     document_id: str = Path(..., description="Document ID"),
     status: str = Query(..., description="Processing status"),
-    metadata: Optional[Dict[str, Any]] = None
+    metadata: Optional[Dict[str, Any]] = None,
+    client_id: Optional[str] = Query(None, description="Client ID owning the document")
 ):
     """
     Update document processing status and metadata
     """
     try:
-        document = db.get_document_by_id(document_id)
+        if not client_id:
+            raise HTTPException(status_code=400, detail="client_id is required to update processing status")
+
+        document = db.get_document_by_id(document_id, client_id=client_id)
         if not document:
             raise HTTPException(status_code=404, detail="Document not found")
         
@@ -273,7 +298,7 @@ async def update_processing_status(
         if metadata:
             updates["metadata"] = metadata
         
-        success = db.update_document(document_id, **updates)
+        success = db.update_document(document_id, client_id=client_id, **updates)
         if not success:
             raise HTTPException(status_code=500, detail="Failed to update processing status")
         
@@ -291,17 +316,21 @@ async def update_processing_status(
 
 @router.post("/documents/{document_id}/open")
 async def mark_document_opened(
-    document_id: str = Path(..., description="Document ID")
+    document_id: str = Path(..., description="Document ID"),
+    client_id: Optional[str] = Query(None, description="Client ID owning the document")
 ):
     """
     Mark a document as opened (update last_opened timestamp)
     """
     try:
-        document = db.get_document_by_id(document_id)
+        if not client_id:
+            raise HTTPException(status_code=400, detail="client_id is required to mark a document as opened")
+
+        document = db.get_document_by_id(document_id, client_id=client_id)
         if not document:
             raise HTTPException(status_code=404, detail="Document not found")
 
-        success = db.update_last_opened(document_id)
+        success = db.update_last_opened(document_id, client_id=client_id)
         if not success:
             raise HTTPException(status_code=500, detail="Failed to update open time")
 
@@ -322,13 +351,22 @@ async def mark_document_opened(
 async def get_documents_sorted(
     sort_by: str = Path(..., description="Sort field: upload_date, last_uploaded, last_opened, name, size"),
     sort_order: str = Query("desc", description="Sort order: asc or desc"),
-    limit: Optional[int] = Query(None, ge=1, le=1000, description="Maximum number of documents")
+    limit: Optional[int] = Query(None, ge=1, le=1000, description="Maximum number of documents"),
+    client_id: Optional[str] = Query(None, description="Client ID owning the documents")
 ):
     """
     Get documents sorted by specified field
     """
     try:
-        documents = db.get_documents_sorted(sort_by=sort_by, sort_order=sort_order, limit=limit)
+        if not client_id:
+            raise HTTPException(status_code=400, detail="client_id is required to sort documents")
+
+        documents = db.get_documents_sorted(
+            sort_by=sort_by,
+            sort_order=sort_order,
+            limit=limit,
+            client_id=client_id
+        )
 
         # Convert documents to dictionaries for JSON response
         document_dicts = []
@@ -360,12 +398,11 @@ async def delete_all_documents(
     """
     try:
         # Get all documents first (for cleanup if permanent delete)
-        if client_id:
-            documents = db.get_documents_by_client(client_id)
-            target_description = f"all documents for client {client_id}"
-        else:
-            documents = db.get_all_documents()
-            target_description = "all documents"
+        if not client_id:
+            raise HTTPException(status_code=400, detail="client_id is required to delete documents")
+
+        documents = db.get_documents_by_client(client_id)
+        target_description = f"all documents for client {client_id}"
         
         if not documents:
             return {
@@ -380,7 +417,7 @@ async def delete_all_documents(
         for document in documents:
             try:
                 # Delete from database
-                success = db.delete_document(document.id, soft_delete=not permanent)
+                success = db.delete_document(document.id, soft_delete=not permanent, client_id=client_id)
                 if success:
                     deleted_count += 1
                     
@@ -428,7 +465,8 @@ async def delete_all_documents(
 @router.put("/documents/{document_id}/rename")
 async def rename_document(
     document_id: str = Path(..., description="Document ID"),
-    new_name: str = Query(..., description="New document name")
+    new_name: str = Query(..., description="New document name"),
+    client_id: Optional[str] = Query(None, description="Client ID owning the document")
 ):
     """
     Rename a document (update original_name)
@@ -441,7 +479,10 @@ async def rename_document(
         new_name = new_name.strip()
         
         # Check if document exists
-        document = db.get_document_by_id(document_id)
+        if not client_id:
+            raise HTTPException(status_code=400, detail="client_id is required to rename a document")
+
+        document = db.get_document_by_id(document_id, client_id=client_id)
         if not document:
             raise HTTPException(status_code=404, detail="Document not found")
         
@@ -458,14 +499,14 @@ async def rename_document(
             }
         
         # Update the document name
-        success = db.update_document(document_id, original_name=new_name)
+        success = db.update_document(document_id, client_id=client_id, original_name=new_name)
         if not success:
             raise HTTPException(status_code=500, detail="Failed to update document name in database")
         
         print(f"✏️ Renamed document {document_id}: '{old_name}' → '{new_name}'")
         
         # Return updated document
-        updated_document = db.get_document_by_id(document_id)
+        updated_document = db.get_document_by_id(document_id, client_id=client_id)
         doc_dict = updated_document.to_dict()
         doc_dict['url'] = f"/api/files/{updated_document.filename}"
         
@@ -487,14 +528,18 @@ async def rename_document(
 @router.delete("/documents/{document_id}/force")
 async def force_delete_document(
     document_id: str = Path(..., description="Document ID"),
-    remove_file: bool = Query(True, description="Also remove physical file")
+    remove_file: bool = Query(True, description="Also remove physical file"),
+    client_id: Optional[str] = Query(None, description="Client ID owning the document")
 ):
     """
     Force delete a document (permanent deletion with file removal)
     """
     try:
         # Get document info before deleting
-        document = db.get_document_by_id(document_id)
+        if not client_id:
+            raise HTTPException(status_code=400, detail="client_id is required to force delete a document")
+
+        document = db.get_document_by_id(document_id, client_id=client_id)
         if not document:
             raise HTTPException(status_code=404, detail="Document not found")
         
@@ -508,7 +553,7 @@ async def force_delete_document(
                 print(f"🗑️ Deleted file: {document.filename}")
         
         # Delete from database (permanent)
-        success = db.delete_document(document_id, soft_delete=False)
+        success = db.delete_document(document_id, soft_delete=False, client_id=client_id)
         if not success:
             raise HTTPException(status_code=500, detail="Failed to delete document from database")
         
@@ -532,7 +577,8 @@ async def force_delete_document(
 @router.post("/documents/bulk-delete")
 async def bulk_delete_documents(
     document_ids: List[str],
-    permanent: bool = Query(False, description="Permanently delete documents (default: soft delete)")
+    permanent: bool = Query(False, description="Permanently delete documents (default: soft delete)"),
+    client_id: Optional[str] = Query(None, description="Client ID owning the documents")
 ):
     """
     Delete multiple documents in bulk
@@ -541,6 +587,9 @@ async def bulk_delete_documents(
         if not document_ids:
             raise HTTPException(status_code=400, detail="No document IDs provided")
         
+        if not client_id:
+            raise HTTPException(status_code=400, detail="client_id is required for bulk delete")
+
         deleted_count = 0
         failed_deletes = []
         deleted_files = []
@@ -548,13 +597,13 @@ async def bulk_delete_documents(
         for doc_id in document_ids:
             try:
                 # Get document info before deleting
-                document = db.get_document_by_id(doc_id)
+                document = db.get_document_by_id(doc_id, client_id=client_id)
                 if not document:
                     failed_deletes.append({"id": doc_id, "reason": "Document not found"})
                     continue
                 
                 # Delete from database
-                success = db.delete_document(doc_id, soft_delete=not permanent)
+                success = db.delete_document(doc_id, soft_delete=not permanent, client_id=client_id)
                 if success:
                     deleted_count += 1
                     

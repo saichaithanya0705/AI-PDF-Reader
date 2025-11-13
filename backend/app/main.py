@@ -414,12 +414,13 @@ async def upload_context_files(
     job: str = None,      # Optional
     consider_previous: bool = False,  # Consider previously opened PDFs for recommendations
     files: List[UploadFile] = File(...),
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    client_id: Optional[str] = Query(None, description="User identifier for multi-tenant uploads")
 ):
     """
     Accepts multiple "past" PDFs to build the knowledge base.
     """
-    user_id = current_user["sub"]
+    user_id = client_id or current_user.get("sub", "local-user")
     job_ids = []
     file_urls = []
 
@@ -482,12 +483,13 @@ async def upload_active_file(
     persona: str = None,
     job: str = None,
     file: UploadFile = File(...),
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    client_id: Optional[str] = Query(None, description="User identifier for multi-tenant uploads")
 ):
     """
     Accepts a single "current" PDF for immediate viewing and analysis.
     """
-    user_id = current_user["sub"]
+    user_id = client_id or current_user.get("sub", "local-user")
     job_id = str(uuid.uuid4())
     filename_with_id = f"{job_id}_{file.filename}"
     file_path = DOCS_DIR / filename_with_id
@@ -538,7 +540,7 @@ async def upload_active_file(
             print(f"✅ New document processed successfully: {filename_with_id}")
 
             # Verify it was stored
-            all_docs = db.get_all_documents()
+            all_docs = db.get_all_documents(client_id=user_id)
             print(f"📊 Total documents in database after upload: {len(all_docs)}")
 
         # Start the background processing task for this file
@@ -866,7 +868,7 @@ COMPLETE DOCUMENT CONTENT:
         related_sections = []
         try:
             # Get related sections from the same document and others
-            all_documents = db.get_all_documents()
+            all_documents = db.get_all_documents(client_id=user_id)
             for doc in all_documents[:3]:  # Limit to 3 documents for context
                 if doc.id != document_id:  # Skip current document
                     doc_metadata = db.get_document_metadata(doc.id)

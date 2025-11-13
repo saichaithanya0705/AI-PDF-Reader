@@ -89,6 +89,11 @@ export const PDFProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isLoadingDocuments, setIsLoadingDocuments] = useState(false);
 
+  const getClientId = () => {
+    const stored = localStorage.getItem('currentClientId');
+    return stored && stored.trim().length > 0 ? stored : undefined;
+  };
+
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
@@ -364,7 +369,16 @@ export const PDFProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setIsLoadingDocuments(true);
       console.log(`📚 Fetching sorted documents: ${sortBy} ${sortOrder}`);
 
-      const response = await fetch(`${BACKEND_URL}/api/documents/sorted/${sortBy}?sort_order=${sortOrder}`);
+      const clientId = getClientId();
+      if (!clientId) {
+        console.warn('📚 No client_id found; falling back to unsorted fetch.');
+        await fetchAllDocuments();
+        return;
+      }
+
+      const response = await fetch(
+        `${BACKEND_URL}/api/documents/sorted/${sortBy}?sort_order=${sortOrder}&client_id=${encodeURIComponent(clientId)}`
+      );
 
       if (response.ok) {
         const data = await response.json();
@@ -445,7 +459,14 @@ export const PDFProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       console.log('📚 Backend URL:', BACKEND_URL);
       console.log('📚 Full URL:', `${BACKEND_URL}/api/documents`);
 
-      const response = await fetch(`${BACKEND_URL}/api/documents`);
+      const clientId = getClientId();
+      if (!clientId) {
+        console.warn('📚 No client_id found; skipping remote document fetch.');
+        setIsLoadingDocuments(false);
+        return;
+      }
+
+      const response = await fetch(`${BACKEND_URL}/api/documents?client_id=${encodeURIComponent(clientId)}`);
       console.log('📚 Response status:', response.status);
       console.log('📚 Response headers:', Object.fromEntries(response.headers.entries()));
 
@@ -600,7 +621,12 @@ export const PDFProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       console.log('🗑️ Deleting document:', documentId);
 
       try {
-        const response = await fetch(`${BACKEND_URL}/api/documents/${documentId}`, {
+        const clientId = getClientId();
+        const url = clientId
+          ? `${BACKEND_URL}/api/documents/${documentId}?client_id=${encodeURIComponent(clientId)}`
+          : `${BACKEND_URL}/api/documents/${documentId}`;
+
+        const response = await fetch(url, {
           method: 'DELETE'
         });
 
@@ -639,7 +665,15 @@ export const PDFProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       console.log('🗑️ Deleting all documents, permanent:', permanent);
 
       try {
-        const response = await fetch(`${BACKEND_URL}/api/documents?permanent=${permanent}`, {
+        const clientId = getClientId();
+        const query = new URLSearchParams({
+          permanent: String(permanent),
+        });
+        if (clientId) {
+          query.append('client_id', clientId);
+        }
+
+        const response = await fetch(`${BACKEND_URL}/api/documents?${query.toString()}`, {
           method: 'DELETE'
         });
 
@@ -687,7 +721,13 @@ export const PDFProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ));
 
       try {
-        const response = await fetch(`${BACKEND_URL}/api/documents/${documentId}/rename?new_name=${encodeURIComponent(newName)}`, {
+        const clientId = getClientId();
+        const params = new URLSearchParams({ new_name: newName });
+        if (clientId) {
+          params.append('client_id', clientId);
+        }
+
+        const response = await fetch(`${BACKEND_URL}/api/documents/${documentId}/rename?${params.toString()}`, {
           method: 'PUT'
         });
 

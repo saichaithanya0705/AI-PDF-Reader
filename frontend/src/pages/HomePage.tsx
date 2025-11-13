@@ -78,8 +78,6 @@ const HomePage: React.FC = () => {
 
   // Generate clientId on mount and load saved persona/job
   useEffect(() => {
-    setClientId(crypto.randomUUID());
-
     // Load saved persona and job
     const savedPersona = localStorage.getItem('lastPersona');
     const savedJob = localStorage.getItem('lastJob');
@@ -96,10 +94,22 @@ const HomePage: React.FC = () => {
       console.warn('⚠️ Corrupted documents in localStorage, clearing...', error);
       localStorage.removeItem('documents');
     }
+  }, []);
 
-    // Fetch all documents from database
+  useEffect(() => {
+    if (authLoading) return;
+
+    const storedId = localStorage.getItem('currentClientId');
+    const resolvedId = user?.id || storedId || crypto.randomUUID();
+
+    setClientId(resolvedId);
+    localStorage.setItem('currentClientId', resolvedId);
+  }, [authLoading, user]);
+
+  useEffect(() => {
+    if (!clientId) return;
     fetchAllDocuments();
-  }, []); // Remove fetchAllDocuments dependency to prevent infinite loop // Only run once on mount
+  }, [clientId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Debug: Log current documents when they change
   useEffect(() => {

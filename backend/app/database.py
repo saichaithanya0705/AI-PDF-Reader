@@ -262,26 +262,39 @@ class DocumentDatabase:
         
         return document
     
-    def get_all_documents(self, limit: Optional[int] = None, offset: int = 0) -> List[Document]:
-        """Get all documents with optional pagination"""
+    def get_all_documents(
+        self,
+        limit: Optional[int] = None,
+        offset: int = 0,
+        client_id: Optional[str] = None
+    ) -> List[Document]:
+        """Get documents with optional pagination and tenant filtering"""
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
-            
-            # Smart sorting: prioritize last_opened, fallback to upload_date
+
+            params: List[Any] = []
             query = """
                 SELECT * FROM documents
                 WHERE status != 'deleted'
+            """
+
+            if client_id:
+                query += " AND client_id = ?"
+                params.append(client_id)
+
+            query += """
                 ORDER BY
                     CASE
                         WHEN last_opened IS NOT NULL THEN last_opened
                         ELSE upload_date
                     END DESC
             """
-            
+
             if limit:
-                query += f" LIMIT {limit} OFFSET {offset}"
-            
-            cursor = conn.execute(query)
+                query += " LIMIT ? OFFSET ?"
+                params.extend([limit, offset])
+
+            cursor = conn.execute(query, params)
             rows = cursor.fetchall()
             
             documents = []
@@ -313,13 +326,43 @@ class DocumentDatabase:
             
             return documents
     
-    def get_document_by_id(self, document_id: str) -> Optional[Document]:
-        """Get a specific document by ID"""
-        documents = self.get_all_documents()
-        for doc in documents:
-            if doc.id == document_id:
-                return doc
-        return None
+    def get_document_by_id(self, document_id: str, client_id: Optional[str] = None) -> Optional[Document]:
+        """Get a specific document by ID with optional tenant filtering"""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            params: List[Any] = [document_id]
+            query = "SELECT * FROM documents WHERE id = ? AND status != 'deleted'"
+
+            if client_id:
+                query += " AND client_id = ?"
+                params.append(client_id)
+
+            cursor = conn.execute(query, params)
+            row = cursor.fetchone()
+
+            if not row:
+                return None
+
+            doc_data = dict(row)
+            if doc_data['validation_result']:
+                doc_data['validation_result'] = json.loads(doc_data['validation_result'])
+            if doc_data['metadata']:
+                doc_data['metadata'] = json.loads(doc_data['metadata'])
+            if doc_data['tags']:
+                doc_data['tags'] = json.loads(doc_data['tags'])
+
+            doc_data['upload_date'] = datetime.fromisoformat(doc_data['upload_date'])
+            if doc_data['last_uploaded']:
+                doc_data['last_uploaded'] = datetime.fromisoformat(doc_data['last_uploaded'])
+            if doc_data['last_opened']:
+                doc_data['last_opened'] = datetime.fromisoformat(doc_data['last_opened'])
+            if doc_data['last_accessed']:
+                doc_data['last_accessed'] = datetime.fromisoformat(doc_data['last_accessed'])
+
+            doc_data.pop('created_at', None)
+            doc_data.pop('updated_at', None)
+
+            return Document(**doc_data)
 
     def get_document_metadata(self, document_id: str) -> List[Dict[str, Any]]:
         """Get metadata/sections for a document"""
@@ -370,7 +413,12 @@ class DocumentDatabase:
             self.conn.rollback()
             return False
     
-    def update_document(self, document_id: str, **updates) -> bool:
+    def update_document(
+        self,
+        document_id: str,
+        client_id: Optional[str] = None,
+        **updates
+    ) -> bool:
         """Update document fields"""
         if not updates:
             return False
@@ -383,56 +431,76 @@ class DocumentDatabase:
         if 'tags' in updates and updates['tags']:
             updates['tags'] = json.dumps(updates['tags'])
         
-        # Add updated_at timestamp
-        updates['updated_at'] = datetime.now()
+        # Add updated_at timestamp if not explicitly provided
+        updates.setdefault('updated_at', datetime.now())
         
         # Build dynamic query
         set_clause = ", ".join([f"{key} = ?" for key in updates.keys()])
         values = list(updates.values()) + [document_id]
+        query = f"UPDATE documents SET {set_clause} WHERE id = ?"
+
+        if client_id:
+            query += " AND client_id = ?"
+            values.append(client_id)
         
         with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.execute(
-                f"UPDATE documents SET {set_clause} WHERE id = ?",
-                values
-            )
+            cursor = conn.execute(query, values)
             conn.commit()
             return cursor.rowcount > 0
     
-    def delete_document(self, document_id: str, soft_delete: bool = True) -> bool:
+    def delete_document(
+        self,
+        document_id: str,
+        soft_delete: bool = True,
+        client_id: Optional[str] = None
+    ) -> bool:
         """Delete a document (soft delete by default)"""
         with sqlite3.connect(self.db_path) as conn:
+            params: List[Any]
             if soft_delete:
-                cursor = conn.execute(
-                    "UPDATE documents SET status = 'deleted', updated_at = ? WHERE id = ?",
-                    (datetime.now(), document_id)
-                )
+                query = "UPDATE documents SET status = 'deleted', updated_at = ? WHERE id = ?"
+                params = [datetime.now(), document_id]
             else:
-                cursor = conn.execute("DELETE FROM documents WHERE id = ?", (document_id,))
-            
+                query = "DELETE FROM documents WHERE id = ?"
+                params = [document_id]
+
+            if client_id:
+                query += " AND client_id = ?"
+                params.append(client_id)
+
+            cursor = conn.execute(query, params)
             conn.commit()
             return cursor.rowcount > 0
 
-    def update_last_opened(self, document_id: str) -> bool:
+    def update_last_opened(self, document_id: str, client_id: Optional[str] = None) -> bool:
         """Update the last_opened timestamp for a document"""
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.execute(
-                "UPDATE documents SET last_opened = ?, updated_at = ? WHERE id = ?",
-                (datetime.now(), datetime.now(), document_id)
-            )
-            conn.commit()
-            return cursor.rowcount > 0
+        return self.update_document(
+            document_id,
+            client_id=client_id,
+            last_opened=datetime.now(),
+            updated_at=datetime.now()
+        )
 
-    def get_documents_by_client(self, client_id: str) -> List[Document]:
-        """Get all documents for a specific client"""
-        documents = self.get_all_documents()
-        return [doc for doc in documents if doc.client_id == client_id]
+    def get_documents_by_client(
+        self,
+        client_id: str,
+        limit: Optional[int] = None,
+        offset: int = 0
+    ) -> List[Document]:
+        """Get documents for a specific client"""
+        return self.get_all_documents(limit=limit, offset=offset, client_id=client_id)
     
-    def search_documents(self, query: str, fields: List[str] = None) -> List[Document]:
+    def search_documents(
+        self,
+        query: str,
+        fields: List[str] = None,
+        client_id: Optional[str] = None
+    ) -> List[Document]:
         """Search documents by text in specified fields"""
         if not fields:
             fields = ['original_name', 'filename', 'persona', 'job_role']
         
-        documents = self.get_all_documents()
+        documents = self.get_all_documents(client_id=client_id)
         results = []
         
         query_lower = query.lower()
@@ -445,10 +513,11 @@ class DocumentDatabase:
         
         return results
     
-    def get_document_stats(self) -> Dict[str, Any]:
+    def get_document_stats(self, client_id: Optional[str] = None) -> Dict[str, Any]:
         """Get database statistics"""
         with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.execute("""
+            params: List[Any] = []
+            query = """
                 SELECT
                     COUNT(*) as total_documents,
                     COUNT(CASE WHEN status = 'uploaded' THEN 1 END) as uploaded,
@@ -457,9 +526,15 @@ class DocumentDatabase:
                     SUM(file_size) as total_size
                 FROM documents
                 WHERE status != 'deleted'
-            """)
+            """
 
+            if client_id:
+                query += " AND client_id = ?"
+                params.append(client_id)
+
+            cursor = conn.execute(query, params)
             row = cursor.fetchone()
+
             return {
                 'total_documents': row[0],
                 'uploaded_documents': row[1],
@@ -506,17 +581,29 @@ class DocumentDatabase:
 
             return None
 
-    def update_last_uploaded(self, document_id: str) -> bool:
+    def update_last_uploaded(self, document_id: str, client_id: Optional[str] = None) -> bool:
         """Update last uploaded timestamp"""
-        return self.update_document(document_id, last_uploaded=datetime.now())
+        return self.update_document(
+            document_id,
+            client_id=client_id,
+            last_uploaded=datetime.now()
+        )
 
-    def update_last_opened(self, document_id: str) -> bool:
+    def update_last_opened(self, document_id: str, client_id: Optional[str] = None) -> bool:
         """Update last opened timestamp"""
-        return self.update_document(document_id, last_opened=datetime.now())
+        return self.update_document(
+            document_id,
+            client_id=client_id,
+            last_opened=datetime.now()
+        )
 
-    def get_documents_sorted(self, sort_by: str = 'upload_date',
-                           sort_order: str = 'desc',
-                           limit: Optional[int] = None) -> List[Document]:
+    def get_documents_sorted(
+        self,
+        sort_by: str = 'upload_date',
+        sort_order: str = 'desc',
+        limit: Optional[int] = None,
+        client_id: Optional[str] = None
+    ) -> List[Document]:
         """
         Get documents with sorting options
 
@@ -550,15 +637,22 @@ class DocumentDatabase:
         query = f"""
             SELECT * FROM documents
             WHERE status != 'deleted'
-            ORDER BY {order_clause}
         """
+        params: List[Any] = []
+
+        if client_id:
+            query += " AND client_id = ?"
+            params.append(client_id)
+
+        query += f" ORDER BY {order_clause}"
 
         if limit:
-            query += f" LIMIT {limit}"
+            query += " LIMIT ?"
+            params.append(limit)
 
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
-            cursor = conn.execute(query)
+            cursor = conn.execute(query, params)
             rows = cursor.fetchall()
 
             documents = []

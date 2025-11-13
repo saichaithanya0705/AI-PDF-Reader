@@ -89,13 +89,6 @@ const LandingPage = () => {
           >
             Login
           </Link>
-          <Link
-            to="/signup"
-            className="flex items-center gap-2 rounded-full bg-brand-500 px-5 py-2 text-sm font-semibold text-white shadow-glow transition hover:-translate-y-0.5 hover:bg-brand-400"
-          >
-            Start free trial
-            <ArrowRight className="h-4 w-4" />
-          </Link>
         </div>
 
         <div className="flex items-center gap-2 md:hidden">
