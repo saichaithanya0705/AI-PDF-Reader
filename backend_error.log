@@ -1,0 +1,849 @@
+
+
+--- Error at 2025-12-25T16:55:28.391765 ---
+Error: All LLM providers failed: Error calling model 'gemini-1.5-flash' (NOT_FOUND): 404 NOT_FOUND. {'error': {'code': 404, 'message': 'models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.', 'status': 'NOT_FOUND'}}
+Traceback (most recent call last):
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\langchain_google_genai\chat_models.py", line 3081, in _agenerate
+    await self.client.aio.models.generate_content(
+        **request,
+    )
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\google\genai\models.py", line 7018, in generate_content
+    response = await self._generate_content(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        model=model, contents=contents, config=parsed_config
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\google\genai\models.py", line 5824, in _generate_content
+    response = await self._api_client.async_request(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        'post', path, request_dict, http_options
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\google\genai\_api_client.py", line 1434, in async_request
+    result = await self._async_request(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        http_request=http_request, http_options=http_options, stream=False
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\google\genai\_api_client.py", line 1366, in _async_request
+    return await retry(self._async_request_once, http_request, stream)  # type: ignore[no-any-return]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\tenacity\asyncio\__init__.py", line 111, in __call__
+    do = await self.iter(retry_state=retry_state)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\tenacity\asyncio\__init__.py", line 153, in iter
+    result = await action(retry_state)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\tenacity\_utils.py", line 99, in inner
+    return call(*args, **kwargs)
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\tenacity\__init__.py", line 400, in <lambda>
+    self._add_action_func(lambda rs: rs.outcome.result())
+                                     ~~~~~~~~~~~~~~~~~^^
+  File "C:\Python313\Lib\concurrent\futures\_base.py", line 449, in result
+    return self.__get_result()
+           ~~~~~~~~~~~~~~~~~^^
+  File "C:\Python313\Lib\concurrent\futures\_base.py", line 401, in __get_result
+    raise self._exception
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\tenacity\asyncio\__init__.py", line 114, in __call__
+    result = await fn(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\google\genai\_api_client.py", line 1312, in _async_request_once
+    await errors.APIError.raise_for_async_response(response)
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\google\genai\errors.py", line 203, in raise_for_async_response
+    await cls.raise_error_async(status_code, response_json, response)
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\google\genai\errors.py", line 225, in raise_error_async
+    raise ClientError(status_code, response_json, response)
+google.genai.errors.ClientError: 404 NOT_FOUND. {'error': {'code': 404, 'message': 'models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.', 'status': 'NOT_FOUND'}}
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\llm_providers.py", line 141, in generate_chat_response
+    response = await self.model.ainvoke(langchain_messages)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\langchain_core\language_models\chat_models.py", line 421, in ainvoke
+    llm_result = await self.agenerate_prompt(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<8 lines>...
+    )
+    ^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\langchain_core\language_models\chat_models.py", line 1128, in agenerate_prompt
+    return await self.agenerate(
+           ^^^^^^^^^^^^^^^^^^^^^
+        prompt_messages, stop=stop, callbacks=callbacks, **kwargs
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\langchain_core\language_models\chat_models.py", line 1086, in agenerate
+    raise exceptions[0]
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\langchain_core\language_models\chat_models.py", line 1339, in _agenerate_with_cache
+    result = await self._agenerate(
+             ^^^^^^^^^^^^^^^^^^^^^^
+        messages, stop=stop, run_manager=run_manager, **kwargs
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\langchain_google_genai\chat_models.py", line 3086, in _agenerate
+    _handle_client_error(e, request)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\langchain_google_genai\chat_models.py", line 145, in _handle_client_error
+    raise ChatGoogleGenerativeAIError(msg) from e
+langchain_google_genai.chat_models.ChatGoogleGenerativeAIError: Error calling model 'gemini-1.5-flash' (NOT_FOUND): 404 NOT_FOUND. {'error': {'code': 404, 'message': 'models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.', 'status': 'NOT_FOUND'}}
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1933, in chat_endpoint
+    response_text = await llm_provider.generate_chat_response(enriched_messages)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\adobe-hackathon-finale-main\backend\app\llm_providers.py", line 159, in generate_chat_response
+    raise Exception(f"All LLM providers failed: {str(e)}")
+Exception: All LLM providers failed: Error calling model 'gemini-1.5-flash' (NOT_FOUND): 404 NOT_FOUND. {'error': {'code': 404, 'message': 'models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.', 'status': 'NOT_FOUND'}}
+
+
+--- Error at 2025-12-25T16:56:14.806845 ---
+Error: All LLM providers failed: Error calling model 'gemini-1.5-flash' (NOT_FOUND): 404 NOT_FOUND. {'error': {'code': 404, 'message': 'models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.', 'status': 'NOT_FOUND'}}
+Traceback (most recent call last):
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\langchain_google_genai\chat_models.py", line 3081, in _agenerate
+    await self.client.aio.models.generate_content(
+        **request,
+    )
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\google\genai\models.py", line 7018, in generate_content
+    response = await self._generate_content(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        model=model, contents=contents, config=parsed_config
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\google\genai\models.py", line 5824, in _generate_content
+    response = await self._api_client.async_request(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        'post', path, request_dict, http_options
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\google\genai\_api_client.py", line 1434, in async_request
+    result = await self._async_request(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        http_request=http_request, http_options=http_options, stream=False
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\google\genai\_api_client.py", line 1366, in _async_request
+    return await retry(self._async_request_once, http_request, stream)  # type: ignore[no-any-return]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\tenacity\asyncio\__init__.py", line 111, in __call__
+    do = await self.iter(retry_state=retry_state)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\tenacity\asyncio\__init__.py", line 153, in iter
+    result = await action(retry_state)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\tenacity\_utils.py", line 99, in inner
+    return call(*args, **kwargs)
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\tenacity\__init__.py", line 400, in <lambda>
+    self._add_action_func(lambda rs: rs.outcome.result())
+                                     ~~~~~~~~~~~~~~~~~^^
+  File "C:\Python313\Lib\concurrent\futures\_base.py", line 449, in result
+    return self.__get_result()
+           ~~~~~~~~~~~~~~~~~^^
+  File "C:\Python313\Lib\concurrent\futures\_base.py", line 401, in __get_result
+    raise self._exception
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\tenacity\asyncio\__init__.py", line 114, in __call__
+    result = await fn(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\google\genai\_api_client.py", line 1312, in _async_request_once
+    await errors.APIError.raise_for_async_response(response)
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\google\genai\errors.py", line 203, in raise_for_async_response
+    await cls.raise_error_async(status_code, response_json, response)
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\google\genai\errors.py", line 225, in raise_error_async
+    raise ClientError(status_code, response_json, response)
+google.genai.errors.ClientError: 404 NOT_FOUND. {'error': {'code': 404, 'message': 'models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.', 'status': 'NOT_FOUND'}}
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\llm_providers.py", line 141, in generate_chat_response
+    response = await self.model.ainvoke(langchain_messages)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\langchain_core\language_models\chat_models.py", line 421, in ainvoke
+    llm_result = await self.agenerate_prompt(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<8 lines>...
+    )
+    ^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\langchain_core\language_models\chat_models.py", line 1128, in agenerate_prompt
+    return await self.agenerate(
+           ^^^^^^^^^^^^^^^^^^^^^
+        prompt_messages, stop=stop, callbacks=callbacks, **kwargs
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\langchain_core\language_models\chat_models.py", line 1086, in agenerate
+    raise exceptions[0]
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\langchain_core\language_models\chat_models.py", line 1339, in _agenerate_with_cache
+    result = await self._agenerate(
+             ^^^^^^^^^^^^^^^^^^^^^^
+        messages, stop=stop, run_manager=run_manager, **kwargs
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\langchain_google_genai\chat_models.py", line 3086, in _agenerate
+    _handle_client_error(e, request)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\langchain_google_genai\chat_models.py", line 145, in _handle_client_error
+    raise ChatGoogleGenerativeAIError(msg) from e
+langchain_google_genai.chat_models.ChatGoogleGenerativeAIError: Error calling model 'gemini-1.5-flash' (NOT_FOUND): 404 NOT_FOUND. {'error': {'code': 404, 'message': 'models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.', 'status': 'NOT_FOUND'}}
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1933, in chat_endpoint
+    response_text = await llm_provider.generate_chat_response(enriched_messages)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\adobe-hackathon-finale-main\backend\app\llm_providers.py", line 159, in generate_chat_response
+    raise Exception(f"All LLM providers failed: {str(e)}")
+Exception: All LLM providers failed: Error calling model 'gemini-1.5-flash' (NOT_FOUND): 404 NOT_FOUND. {'error': {'code': 404, 'message': 'models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.', 'status': 'NOT_FOUND'}}
+
+
+--- Error at 2025-12-25T18:30:57.375000 ---
+Error: All LLM providers failed: Error calling model 'gemini-2.0-flash' (RESOURCE_EXHAUSTED): 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_input_token_count, limit: 0, model: gemini-2.0-flash\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-2.0-flash\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-2.0-flash\nPlease retry in 2.535537009s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_input_token_count', 'quotaId': 'GenerateContentInputTokensPerModelPerMinute-FreeTier', 'quotaDimensions': {'model': 'gemini-2.0-flash', 'location': 'global'}}, {'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'model': 'gemini-2.0-flash', 'location': 'global'}}, {'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.0-flash'}}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '2s'}]}}
+Traceback (most recent call last):
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\langchain_google_genai\chat_models.py", line 3081, in _agenerate
+    await self.client.aio.models.generate_content(
+        **request,
+    )
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\google\genai\models.py", line 7018, in generate_content
+    response = await self._generate_content(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        model=model, contents=contents, config=parsed_config
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\google\genai\models.py", line 5824, in _generate_content
+    response = await self._api_client.async_request(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        'post', path, request_dict, http_options
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\google\genai\_api_client.py", line 1434, in async_request
+    result = await self._async_request(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        http_request=http_request, http_options=http_options, stream=False
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\google\genai\_api_client.py", line 1366, in _async_request
+    return await retry(self._async_request_once, http_request, stream)  # type: ignore[no-any-return]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\tenacity\asyncio\__init__.py", line 111, in __call__
+    do = await self.iter(retry_state=retry_state)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\tenacity\asyncio\__init__.py", line 153, in iter
+    result = await action(retry_state)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\tenacity\_utils.py", line 99, in inner
+    return call(*args, **kwargs)
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\tenacity\__init__.py", line 420, in exc_check
+    raise retry_exc.reraise()
+          ~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\tenacity\__init__.py", line 187, in reraise
+    raise self.last_attempt.result()
+          ~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Python313\Lib\concurrent\futures\_base.py", line 449, in result
+    return self.__get_result()
+           ~~~~~~~~~~~~~~~~~^^
+  File "C:\Python313\Lib\concurrent\futures\_base.py", line 401, in __get_result
+    raise self._exception
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\tenacity\asyncio\__init__.py", line 114, in __call__
+    result = await fn(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\google\genai\_api_client.py", line 1312, in _async_request_once
+    await errors.APIError.raise_for_async_response(response)
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\google\genai\errors.py", line 203, in raise_for_async_response
+    await cls.raise_error_async(status_code, response_json, response)
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\google\genai\errors.py", line 225, in raise_error_async
+    raise ClientError(status_code, response_json, response)
+google.genai.errors.ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_input_token_count, limit: 0, model: gemini-2.0-flash\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-2.0-flash\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-2.0-flash\nPlease retry in 2.535537009s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_input_token_count', 'quotaId': 'GenerateContentInputTokensPerModelPerMinute-FreeTier', 'quotaDimensions': {'model': 'gemini-2.0-flash', 'location': 'global'}}, {'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'model': 'gemini-2.0-flash', 'location': 'global'}}, {'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.0-flash'}}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '2s'}]}}
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\llm_providers.py", line 141, in generate_chat_response
+    response = await self.model.ainvoke(langchain_messages)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\langchain_core\language_models\chat_models.py", line 421, in ainvoke
+    llm_result = await self.agenerate_prompt(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<8 lines>...
+    )
+    ^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\langchain_core\language_models\chat_models.py", line 1128, in agenerate_prompt
+    return await self.agenerate(
+           ^^^^^^^^^^^^^^^^^^^^^
+        prompt_messages, stop=stop, callbacks=callbacks, **kwargs
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\langchain_core\language_models\chat_models.py", line 1086, in agenerate
+    raise exceptions[0]
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\langchain_core\language_models\chat_models.py", line 1339, in _agenerate_with_cache
+    result = await self._agenerate(
+             ^^^^^^^^^^^^^^^^^^^^^^
+        messages, stop=stop, run_manager=run_manager, **kwargs
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\langchain_google_genai\chat_models.py", line 3086, in _agenerate
+    _handle_client_error(e, request)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\langchain_google_genai\chat_models.py", line 145, in _handle_client_error
+    raise ChatGoogleGenerativeAIError(msg) from e
+langchain_google_genai.chat_models.ChatGoogleGenerativeAIError: Error calling model 'gemini-2.0-flash' (RESOURCE_EXHAUSTED): 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_input_token_count, limit: 0, model: gemini-2.0-flash\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-2.0-flash\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-2.0-flash\nPlease retry in 2.535537009s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_input_token_count', 'quotaId': 'GenerateContentInputTokensPerModelPerMinute-FreeTier', 'quotaDimensions': {'model': 'gemini-2.0-flash', 'location': 'global'}}, {'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'model': 'gemini-2.0-flash', 'location': 'global'}}, {'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.0-flash'}}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '2s'}]}}
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1933, in chat_endpoint
+    response_text = await llm_provider.generate_chat_response(enriched_messages)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\adobe-hackathon-finale-main\backend\app\llm_providers.py", line 159, in generate_chat_response
+    raise Exception(f"All LLM providers failed: {str(e)}")
+Exception: All LLM providers failed: Error calling model 'gemini-2.0-flash' (RESOURCE_EXHAUSTED): 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_input_token_count, limit: 0, model: gemini-2.0-flash\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-2.0-flash\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-2.0-flash\nPlease retry in 2.535537009s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_input_token_count', 'quotaId': 'GenerateContentInputTokensPerModelPerMinute-FreeTier', 'quotaDimensions': {'model': 'gemini-2.0-flash', 'location': 'global'}}, {'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'model': 'gemini-2.0-flash', 'location': 'global'}}, {'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.0-flash'}}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '2s'}]}}
+
+
+--- Error at 2025-12-25T18:41:15.995307 ---
+Error: All LLM providers failed: Error calling model 'gemini-1.5-pro' (NOT_FOUND): 404 NOT_FOUND. {'error': {'code': 404, 'message': 'models/gemini-1.5-pro is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.', 'status': 'NOT_FOUND'}}
+Traceback (most recent call last):
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\langchain_google_genai\chat_models.py", line 3081, in _agenerate
+    await self.client.aio.models.generate_content(
+        **request,
+    )
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\google\genai\models.py", line 7018, in generate_content
+    response = await self._generate_content(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        model=model, contents=contents, config=parsed_config
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\google\genai\models.py", line 5824, in _generate_content
+    response = await self._api_client.async_request(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        'post', path, request_dict, http_options
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\google\genai\_api_client.py", line 1434, in async_request
+    result = await self._async_request(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        http_request=http_request, http_options=http_options, stream=False
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\google\genai\_api_client.py", line 1366, in _async_request
+    return await retry(self._async_request_once, http_request, stream)  # type: ignore[no-any-return]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\tenacity\asyncio\__init__.py", line 111, in __call__
+    do = await self.iter(retry_state=retry_state)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\tenacity\asyncio\__init__.py", line 153, in iter
+    result = await action(retry_state)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\tenacity\_utils.py", line 99, in inner
+    return call(*args, **kwargs)
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\tenacity\__init__.py", line 400, in <lambda>
+    self._add_action_func(lambda rs: rs.outcome.result())
+                                     ~~~~~~~~~~~~~~~~~^^
+  File "C:\Python313\Lib\concurrent\futures\_base.py", line 449, in result
+    return self.__get_result()
+           ~~~~~~~~~~~~~~~~~^^
+  File "C:\Python313\Lib\concurrent\futures\_base.py", line 401, in __get_result
+    raise self._exception
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\tenacity\asyncio\__init__.py", line 114, in __call__
+    result = await fn(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\google\genai\_api_client.py", line 1312, in _async_request_once
+    await errors.APIError.raise_for_async_response(response)
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\google\genai\errors.py", line 203, in raise_for_async_response
+    await cls.raise_error_async(status_code, response_json, response)
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\google\genai\errors.py", line 225, in raise_error_async
+    raise ClientError(status_code, response_json, response)
+google.genai.errors.ClientError: 404 NOT_FOUND. {'error': {'code': 404, 'message': 'models/gemini-1.5-pro is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.', 'status': 'NOT_FOUND'}}
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\llm_providers.py", line 141, in generate_chat_response
+    response = await self.model.ainvoke(langchain_messages)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\langchain_core\language_models\chat_models.py", line 421, in ainvoke
+    llm_result = await self.agenerate_prompt(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<8 lines>...
+    )
+    ^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\langchain_core\language_models\chat_models.py", line 1128, in agenerate_prompt
+    return await self.agenerate(
+           ^^^^^^^^^^^^^^^^^^^^^
+        prompt_messages, stop=stop, callbacks=callbacks, **kwargs
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\langchain_core\language_models\chat_models.py", line 1086, in agenerate
+    raise exceptions[0]
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\langchain_core\language_models\chat_models.py", line 1339, in _agenerate_with_cache
+    result = await self._agenerate(
+             ^^^^^^^^^^^^^^^^^^^^^^
+        messages, stop=stop, run_manager=run_manager, **kwargs
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\langchain_google_genai\chat_models.py", line 3086, in _agenerate
+    _handle_client_error(e, request)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\langchain_google_genai\chat_models.py", line 145, in _handle_client_error
+    raise ChatGoogleGenerativeAIError(msg) from e
+langchain_google_genai.chat_models.ChatGoogleGenerativeAIError: Error calling model 'gemini-1.5-pro' (NOT_FOUND): 404 NOT_FOUND. {'error': {'code': 404, 'message': 'models/gemini-1.5-pro is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.', 'status': 'NOT_FOUND'}}
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1933, in chat_endpoint
+    response_text = await llm_provider.generate_chat_response(enriched_messages)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\adobe-hackathon-finale-main\backend\app\llm_providers.py", line 159, in generate_chat_response
+    raise Exception(f"All LLM providers failed: {str(e)}")
+Exception: All LLM providers failed: Error calling model 'gemini-1.5-pro' (NOT_FOUND): 404 NOT_FOUND. {'error': {'code': 404, 'message': 'models/gemini-1.5-pro is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.', 'status': 'NOT_FOUND'}}
+
+
+--- Error at 2025-12-25T18:53:52.455778 ---
+Error: All LLM providers failed: Error calling model 'gemini-2.0-flash' (RESOURCE_EXHAUSTED): 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_input_token_count, limit: 0, model: gemini-2.0-flash\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-2.0-flash\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-2.0-flash\nPlease retry in 7.345177794s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_input_token_count', 'quotaId': 'GenerateContentInputTokensPerModelPerMinute-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.0-flash'}}, {'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'model': 'gemini-2.0-flash', 'location': 'global'}}, {'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.0-flash'}}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '7s'}]}}
+Traceback (most recent call last):
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\langchain_google_genai\chat_models.py", line 3081, in _agenerate
+    await self.client.aio.models.generate_content(
+        **request,
+    )
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\google\genai\models.py", line 7018, in generate_content
+    response = await self._generate_content(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        model=model, contents=contents, config=parsed_config
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\google\genai\models.py", line 5824, in _generate_content
+    response = await self._api_client.async_request(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        'post', path, request_dict, http_options
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\google\genai\_api_client.py", line 1434, in async_request
+    result = await self._async_request(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        http_request=http_request, http_options=http_options, stream=False
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\google\genai\_api_client.py", line 1366, in _async_request
+    return await retry(self._async_request_once, http_request, stream)  # type: ignore[no-any-return]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\tenacity\asyncio\__init__.py", line 111, in __call__
+    do = await self.iter(retry_state=retry_state)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\tenacity\asyncio\__init__.py", line 153, in iter
+    result = await action(retry_state)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\tenacity\_utils.py", line 99, in inner
+    return call(*args, **kwargs)
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\tenacity\__init__.py", line 420, in exc_check
+    raise retry_exc.reraise()
+          ~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\tenacity\__init__.py", line 187, in reraise
+    raise self.last_attempt.result()
+          ~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Python313\Lib\concurrent\futures\_base.py", line 449, in result
+    return self.__get_result()
+           ~~~~~~~~~~~~~~~~~^^
+  File "C:\Python313\Lib\concurrent\futures\_base.py", line 401, in __get_result
+    raise self._exception
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\tenacity\asyncio\__init__.py", line 114, in __call__
+    result = await fn(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\google\genai\_api_client.py", line 1312, in _async_request_once
+    await errors.APIError.raise_for_async_response(response)
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\google\genai\errors.py", line 203, in raise_for_async_response
+    await cls.raise_error_async(status_code, response_json, response)
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\google\genai\errors.py", line 225, in raise_error_async
+    raise ClientError(status_code, response_json, response)
+google.genai.errors.ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_input_token_count, limit: 0, model: gemini-2.0-flash\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-2.0-flash\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-2.0-flash\nPlease retry in 7.345177794s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_input_token_count', 'quotaId': 'GenerateContentInputTokensPerModelPerMinute-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.0-flash'}}, {'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'model': 'gemini-2.0-flash', 'location': 'global'}}, {'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.0-flash'}}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '7s'}]}}
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\llm_providers.py", line 141, in generate_chat_response
+    response = await self.model.ainvoke(langchain_messages)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\langchain_core\language_models\chat_models.py", line 421, in ainvoke
+    llm_result = await self.agenerate_prompt(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<8 lines>...
+    )
+    ^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\langchain_core\language_models\chat_models.py", line 1128, in agenerate_prompt
+    return await self.agenerate(
+           ^^^^^^^^^^^^^^^^^^^^^
+        prompt_messages, stop=stop, callbacks=callbacks, **kwargs
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\langchain_core\language_models\chat_models.py", line 1086, in agenerate
+    raise exceptions[0]
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\langchain_core\language_models\chat_models.py", line 1339, in _agenerate_with_cache
+    result = await self._agenerate(
+             ^^^^^^^^^^^^^^^^^^^^^^
+        messages, stop=stop, run_manager=run_manager, **kwargs
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\langchain_google_genai\chat_models.py", line 3086, in _agenerate
+    _handle_client_error(e, request)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\langchain_google_genai\chat_models.py", line 145, in _handle_client_error
+    raise ChatGoogleGenerativeAIError(msg) from e
+langchain_google_genai.chat_models.ChatGoogleGenerativeAIError: Error calling model 'gemini-2.0-flash' (RESOURCE_EXHAUSTED): 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_input_token_count, limit: 0, model: gemini-2.0-flash\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-2.0-flash\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-2.0-flash\nPlease retry in 7.345177794s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_input_token_count', 'quotaId': 'GenerateContentInputTokensPerModelPerMinute-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.0-flash'}}, {'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'model': 'gemini-2.0-flash', 'location': 'global'}}, {'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.0-flash'}}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '7s'}]}}
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1933, in chat_endpoint
+    response_text = await llm_provider.generate_chat_response(enriched_messages)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\adobe-hackathon-finale-main\backend\app\llm_providers.py", line 159, in generate_chat_response
+    raise Exception(f"All LLM providers failed: {str(e)}")
+Exception: All LLM providers failed: Error calling model 'gemini-2.0-flash' (RESOURCE_EXHAUSTED): 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_input_token_count, limit: 0, model: gemini-2.0-flash\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-2.0-flash\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-2.0-flash\nPlease retry in 7.345177794s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_input_token_count', 'quotaId': 'GenerateContentInputTokensPerModelPerMinute-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.0-flash'}}, {'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'model': 'gemini-2.0-flash', 'location': 'global'}}, {'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.0-flash'}}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '7s'}]}}
+
+
+--- Error at 2025-12-26T17:58:27.365756 ---
+Error: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+
+
+--- Error at 2025-12-26T17:59:53.584343 ---
+Error: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+
+
+--- Error at 2025-12-26T18:02:42.848298 ---
+Error: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+
+
+--- Error at 2025-12-26T18:03:20.766399 ---
+Error: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+
+
+--- Error at 2025-12-26T18:04:47.285652 ---
+Error: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+
+
+--- Error at 2025-12-26T18:24:10.285455 ---
+Error: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+
+
+--- Error at 2025-12-26T18:28:08.937667 ---
+Error: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+
+
+--- Error at 2025-12-26T18:31:00.390268 ---
+Error: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+
+
+--- Error at 2025-12-26T18:42:35.103844 ---
+Error: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+
+
+--- Error at 2025-12-26T18:51:36.296366 ---
+Error: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+
+
+--- Error at 2025-12-26T19:05:40.583666 ---
+Error: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+
+
+--- Error at 2025-12-26T19:22:09.532057 ---
+Error: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+
+
+--- Error at 2025-12-26T20:00:58.543388 ---
+Error: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+
+
+--- Error at 2025-12-26T20:34:40.354548 ---
+Error: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+
+
+--- Error at 2025-12-26T22:20:09.201745 ---
+Error: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+
+
+--- Error at 2025-12-26T22:21:24.709735 ---
+Error: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+
+
+--- Error at 2025-12-26T22:48:28.336252 ---
+Error: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+
+
+--- Error at 2025-12-26T22:55:04.317498 ---
+Error: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+
+
+--- Error at 2025-12-26T23:36:21.949236 ---
+Error: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}

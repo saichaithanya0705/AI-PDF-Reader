@@ -14,6 +14,15 @@ from supabase import create_client, Client
 import logging
 
 logger = logging.getLogger(__name__)
+print("!!! LOADED MY PATCHED SUPABASE_DATABASE FILE !!!")
+
+def is_valid_uuid(val):
+    try:
+        uuid.UUID(str(val))
+        return True
+    except ValueError:
+        return False
+
 
 @dataclass
 class Document:
@@ -128,27 +137,42 @@ class SupabaseDatabase:
         else:
             raise Exception("Failed to create document")
     
-    def get_all_documents(self, user_id: str, limit: Optional[int] = None, offset: int = 0) -> List[Document]:
+    def get_all_documents(self, user_id: Optional[str] = None, limit: Optional[int] = None, offset: int = 0, client_id: Optional[str] = None) -> List[Document]:
         """Get all documents for a specific user with optional pagination"""
-        query = self.client.table('documents').select('*').eq('user_id', user_id).neq('status', 'deleted')
-        
-        # Sort by last_opened if available, otherwise by upload_date
-        query = query.order('last_opened', desc=True, nullsfirst=False).order('upload_date', desc=True)
-        
+        target_id = user_id or client_id
+
+        if not target_id:
+            logger.warning("No user_id or client_id provided for get_all_documents")
+            return []
+
+        # Build query
+        query = self.client.table('documents').select('*').eq('user_id', target_id).neq('status', 'deleted')
+
+        # Apply pagination if specified
         if limit:
-            query = query.limit(limit).range(offset, offset + limit - 1)
-        
+            query = query.limit(limit)
+        if offset > 0:
+            query = query.range(offset, offset + (limit or 100) - 1)
+
+        # Order by upload date descending
+        query = query.order('upload_date', desc=True)
+
         result = query.execute()
-        
+        logger.info(f"Found {len(result.data)} documents for user {target_id}")
+
         documents = []
         for row in result.data:
             documents.append(Document.from_dict(row))
-        
+
         return documents
     
-    def get_document_by_id(self, document_id: str, user_id: str) -> Optional[Document]:
+    def get_document_by_id(self, document_id: str, user_id: Optional[str] = None, client_id: Optional[str] = None) -> Optional[Document]:
         """Get a specific document by ID for a user"""
-        result = self.client.table('documents').select('*').eq('id', document_id).eq('user_id', user_id).execute()
+        target_id = user_id or client_id
+        if not target_id:
+            return None
+            
+        result = self.client.table('documents').select('*').eq('id', document_id).eq('user_id', target_id).execute()
         
         if result.data:
             return Document.from_dict(result.data[0])
@@ -192,6 +216,11 @@ class SupabaseDatabase:
     
     def get_document_stats(self, user_id: str) -> Dict[str, Any]:
         """Get database statistics for a user"""
+        if user_id == 'anonymous' or not is_valid_uuid(user_id):
+             return {
+                'total_documents': 0, 'uploaded_documents': 0, 'processed_documents': 0,
+                'opened_documents': 0, 'total_size_bytes': 0
+             }
         result = self.client.table('documents').select('*', count='exact').eq('user_id', user_id).neq('status', 'deleted').execute()
         
         total_documents = result.count or 0
@@ -249,15 +278,44 @@ class SupabaseDatabase:
         result = self.client.table('document_chunks').delete().eq('document_id', document_id).eq('user_id', user_id).execute()
         return len(result.data)
     
-    def get_chunk_count(self, user_id: str, document_id: Optional[str] = None) -> int:
-        """Get total chunk count for a user, optionally filtered by document"""
-        query = self.client.table('document_chunks').select('*', count='exact').eq('user_id', user_id)
+    def get_chunk_count(self, user_id: Optional[str] = None, document_id: Optional[str] = None) -> int:
+        """Get total chunk count, optionally filtered by user and/or document"""
+        query = self.client.table('document_chunks').select('*', count='exact')
+        
+        if user_id:
+            query = query.eq('user_id', user_id)
         
         if document_id:
             query = query.eq('document_id', document_id)
         
         result = query.execute()
         return result.count or 0
+    
+    def search_vectors(
+        self,
+        query_embedding: List[float],
+        match_threshold: float = 0.5,
+        match_count: int = 5,
+        user_id: Optional[str] = None,
+        document_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Search for similar vectors using pgvector"""
+        
+        # Handle anonymous/invalid user_id for filtering
+        filter_user = user_id
+        if user_id and ('anonymous' in str(user_id).lower() or not is_valid_uuid(user_id)):
+            filter_user = None
+
+        params = {
+            'query_embedding': query_embedding,
+            'match_threshold': match_threshold,
+            'match_count': match_count,
+            'filter_user_id': filter_user,
+            'filter_document_id': document_id
+        }
+        
+        result = self.client.rpc('match_documents', params).execute()
+        return result.data
 
 
 # Global database instance - will be initialized in main.py
@@ -268,5 +326,7 @@ def get_supabase_db() -> SupabaseDatabase:
     """Get the global Supabase database instance"""
     global supabase_db
     if supabase_db is None:
+        print("DEBUG: Initializing SupabaseDatabase singleton")
         supabase_db = SupabaseDatabase()
+    print(f"DEBUG: Returning SupabaseDatabase instance: {supabase_db}")
     return supabase_db

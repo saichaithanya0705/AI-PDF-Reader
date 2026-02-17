@@ -769,3 +769,136 @@ async def get_available_jobs():
     except Exception as e:
         print(f"❌ Error getting available jobs: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get jobs: {str(e)}")
+
+
+# ==============================================================================
+# Chat History Endpoints
+# ==============================================================================
+
+@router.post("/chat/sessions", response_model=Dict[str, Any])
+async def create_chat_session_endpoint(
+    title: Optional[str] = Query(None, description="Session title"),
+    context_type: str = Query("library", description="Context type: library or pdf_viewer"),
+    client_id: Optional[str] = Query(None, description="Client ID")
+):
+    """
+    Create a new chat session
+    """
+    try:
+        from .chat_history import get_chat_history_manager
+        
+        user_id = client_id or "anonymous"
+        chat_mgr = get_chat_history_manager()
+        
+        session_id = await chat_mgr.create_session(
+            user_id=user_id,
+            title=title,
+            context_type=context_type
+        )
+        
+        return {
+            "status": "success",
+            "session_id": session_id,
+            "message": "Chat session created successfully"
+        }
+        
+    except Exception as e:
+        print(f"❌ Error creating chat session: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to create session: {str(e)}")
+
+
+@router.get("/chat/sessions", response_model=Dict[str, Any])
+async def list_chat_sessions_endpoint(
+    client_id: Optional[str] = Query(None, description="Client ID"),
+    limit: int = Query(50, ge=1, le=100, description="Maximum sessions to return")
+):
+    """
+    Get all chat sessions for current user
+    """
+    try:
+        from .chat_history import get_chat_history_manager
+        
+        user_id = client_id or "anonymous"
+        chat_mgr = get_chat_history_manager()
+        
+        sessions = await chat_mgr.list_user_sessions(
+            user_id=user_id,
+            limit=limit
+        )
+        
+        return {
+            "status": "success",
+            "sessions": sessions,
+            "count": len(sessions)
+        }
+        
+    except Exception as e:
+        print(f"❌ Error listing chat sessions: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to list sessions: {str(e)}")
+
+
+@router.get("/chat/sessions/{session_id}", response_model=Dict[str, Any])
+async def get_chat_session_endpoint(
+    session_id: str = Path(..., description="Session ID"),
+    client_id: Optional[str] = Query(None, description="Client ID")
+):
+    """
+    Get messages for a specific session
+    """
+    try:
+        from .chat_history import get_chat_history_manager
+        
+        user_id = client_id or "anonymous"
+        chat_mgr = get_chat_history_manager()
+        
+        # Verify session ownership
+        session = await chat_mgr.get_session(session_id, user_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found or not authorized")
+        
+        # Get messages
+        messages = await chat_mgr.get_session_history(session_id)
+        
+        return {
+            "status": "success",
+            "session": session,
+            "messages": messages,
+            "count": len(messages)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error getting chat session: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get session: {str(e)}")
+
+
+@router.delete("/chat/sessions/{session_id}", response_model=Dict[str, Any])
+async def delete_chat_session_endpoint(
+    session_id: str = Path(..., description="Session ID"),
+    client_id: Optional[str] = Query(None, description="Client ID")
+):
+    """
+    Delete a chat session
+    """
+    try:
+        from .chat_history import get_chat_history_manager
+        
+        user_id = client_id or "anonymous"
+        chat_mgr = get_chat_history_manager()
+        
+        success = await chat_mgr.delete_session(session_id, user_id)
+        
+        if not success:
+            raise HTTPException(status_code=404, detail="Session not found or not authorized")
+        
+        return {
+            "status": "success",
+            "message": "Chat session deleted successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error deleting chat session: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete session: {str(e)}")

@@ -1,10 +1,9 @@
 """
 Embedding Service for RAG
-Generates vector embeddings for text using SentenceTransformer
+Generates vector embeddings for text using SentenceTransformer or Transformers fallback
 """
-from typing import List, Union
+from typing import List
 import numpy as np
-from sentence_transformers import SentenceTransformer
 import torch
 
 
@@ -20,18 +19,52 @@ class EmbeddingService:
         """
         self.model_name = model_name
         self.embedding_dim = 384  # Dimension for all-MiniLM-L6-v2
+        self.model = None
+        self.tokenizer = None
+        self.transformers_model = None
+        self.use_transformers_fallback = False
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         
-        print(f"🔄 Loading embedding model: {model_name}")
+        print(f"[*] Loading embedding model: {model_name}")
+        
+        # Try sentence_transformers first
         try:
+            from sentence_transformers import SentenceTransformer
             self.model = SentenceTransformer(model_name)
-            # Use GPU if available
-            device = 'cuda' if torch.cuda.is_available() else 'cpu'
-            self.model = self.model.to(device)
-            print(f"✅ Embedding model loaded successfully on {device}")
-            print(f"   Embedding dimension: {self.embedding_dim}")
+            self.model = self.model.to(self.device)
+            print(f"[OK] sentence_transformers loaded successfully on {self.device}")
+            print(f"     Embedding dimension: {self.embedding_dim}")
         except Exception as e:
-            print(f"❌ Error loading embedding model: {str(e)}")
-            raise
+            print(f"[ERROR] Error loading sentence_transformers: {str(e)}")
+            print(f"[*] Attempting fallback to transformers library...")
+            
+            # Try transformers library as fallback
+            try:
+                from transformers import AutoTokenizer, AutoModel
+                
+                # Use the same model but via transformers
+                model_path = f"sentence-transformers/{model_name}"
+                print(f"     Loading tokenizer from: {model_path}")
+                self.tokenizer = AutoTokenizer.from_pretrained(model_path)
+                
+                print(f"     Loading model from: {model_path}")
+                self.transformers_model = AutoModel.from_pretrained(model_path)
+                self.transformers_model = self.transformers_model.to(self.device)
+                self.use_transformers_fallback = True
+                
+                print(f"[OK] Transformers fallback loaded successfully on {self.device}")
+                print(f"     Embedding dimension: {self.embedding_dim}")
+            except Exception as fallback_error:
+                print(f"[ERROR] Error loading transformers fallback: {str(fallback_error)}")
+                print("[WARN] Running in dummy mode: Embeddings will be zero vectors.")
+                self.model = None
+                self.transformers_model = None
+    
+    def _mean_pooling(self, model_output, attention_mask):
+        """Mean pooling - take average of all tokens"""
+        token_embeddings = model_output[0]  # First element contains all token embeddings
+        input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
+        return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
     
     def generate_embedding(self, text: str) -> List[float]:
         """
@@ -44,28 +77,62 @@ class EmbeddingService:
             List of floats representing the embedding vector
         """
         try:
+            # Check if any model is loaded
+            if self.model is None and self.transformers_model is None:
+                return [0.0] * self.embedding_dim
+
             if not text or not text.strip():
-                # Return zero vector for empty text
                 return [0.0] * self.embedding_dim
             
-            # Generate embedding
-            embedding = self.model.encode(
-                text,
-                convert_to_numpy=True,
-                show_progress_bar=False
-            )
+            # Use sentence_transformers if available
+            if self.model is not None:
+                embedding = self.model.encode(
+                    text,
+                    convert_to_numpy=True,
+                    show_progress_bar=False
+                )
+                
+                # Normalize for cosine similarity
+                norm = np.linalg.norm(embedding)
+                if norm > 0:
+                    embedding = embedding / norm
+                
+                return embedding.tolist()
             
-            # Normalize for cosine similarity
-            norm = np.linalg.norm(embedding)
-            if norm > 0:
-                embedding = embedding / norm
+            # Use transformers fallback
+            elif self.use_transformers_fallback and self.transformers_model is not None:
+                # Tokenize
+                encoded_input = self.tokenizer(
+                    text,
+                    padding=True,
+                    truncation=True,
+                    return_tensors='pt',
+                    max_length=512
+                )
+                
+                # Move to device
+                encoded_input = {k: v.to(self.device) for k, v in encoded_input.items()}
+                
+                # Compute token embeddings
+                with torch.no_grad():
+                    model_output = self.transformers_model(**encoded_input)
+                
+                # Perform pooling
+                sentence_embedding = self._mean_pooling(model_output, encoded_input['attention_mask'])
+                
+                # Normalize
+                sentence_embedding = torch.nn.functional.normalize(sentence_embedding, p=2, dim=1)
+                
+                # Convert to list
+                embedding = sentence_embedding.cpu().numpy()[0]
+                return embedding.tolist()
             
-            return embedding.tolist()
+            else:
+                raise Exception("No embedding model loaded")
             
         except Exception as e:
-            print(f"❌ Error generating embedding: {str(e)}")
-            # Return zero vector on error
-            return [0.0] * self.embedding_dim
+            print(f"[ERROR] Error generating embedding: {str(e)}")
+            raise e
     
     def generate_embeddings_batch(
         self,
@@ -88,6 +155,10 @@ class EmbeddingService:
             if not texts:
                 return []
             
+            # Fallback if no model loaded
+            if self.model is None and self.transformers_model is None:
+                return [[0.0] * self.embedding_dim] * len(texts)
+            
             # Filter out empty texts but keep track of indices
             non_empty_texts = []
             non_empty_indices = []
@@ -97,20 +168,58 @@ class EmbeddingService:
                     non_empty_indices.append(i)
             
             if not non_empty_texts:
-                # All texts are empty
                 return [[0.0] * self.embedding_dim] * len(texts)
             
-            # Generate embeddings for non-empty texts
-            embeddings = self.model.encode(
-                non_empty_texts,
-                batch_size=batch_size,
-                convert_to_numpy=True,
-                show_progress_bar=show_progress
-            )
+            # Use sentence_transformers if available
+            if self.model is not None:
+                embeddings = self.model.encode(
+                    non_empty_texts,
+                    batch_size=batch_size,
+                    convert_to_numpy=True,
+                    show_progress_bar=show_progress
+                )
+                
+                # Normalize embeddings
+                norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+                embeddings = np.where(norms > 0, embeddings / norms, embeddings)
+                
+            # Use transformers fallback
+            elif self.use_transformers_fallback and self.transformers_model is not None:
+                all_embeddings = []
+                
+                # Process in batches
+                for i in range(0, len(non_empty_texts), batch_size):
+                    batch_texts = non_empty_texts[i:i + batch_size]
+                    
+                    # Tokenize batch
+                    encoded_input = self.tokenizer(
+                        batch_texts,
+                        padding=True,
+                        truncation=True,
+                        return_tensors='pt',
+                        max_length=512
+                    )
+                    
+                    # Move to device
+                    encoded_input = {k: v.to(self.device) for k, v in encoded_input.items()}
+                    
+                    # Compute embeddings
+                    with torch.no_grad():
+                        model_output = self.transformers_model(**encoded_input)
+                    
+                    # Perform pooling
+                    batch_embeddings = self._mean_pooling(model_output, encoded_input['attention_mask'])
+                    
+                    # Normalize
+                    batch_embeddings = torch.nn.functional.normalize(batch_embeddings, p=2, dim=1)
+                    
+                    all_embeddings.append(batch_embeddings.cpu().numpy())
+                
+                # Concatenate all batches
+                embeddings = np.vstack(all_embeddings)
             
-            # Normalize embeddings
-            norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
-            embeddings = np.where(norms > 0, embeddings / norms, embeddings)
+            else:
+                return [[0.0] * self.embedding_dim] * len(texts)
             
             # Create result list with zero vectors for empty texts
             result = [[0.0] * self.embedding_dim] * len(texts)
@@ -122,8 +231,9 @@ class EmbeddingService:
             return result
             
         except Exception as e:
-            print(f"❌ Error generating batch embeddings: {str(e)}")
-            # Return zero vectors on error
+            print(f"[ERROR] Error generating batch embeddings: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return [[0.0] * self.embedding_dim] * len(texts)
     
     def compute_similarity(
@@ -152,7 +262,7 @@ class EmbeddingService:
             return float(max(0.0, min(1.0, similarity)))
             
         except Exception as e:
-            print(f"❌ Error computing similarity: {str(e)}")
+            print(f"[ERROR] Error computing similarity: {str(e)}")
             return 0.0
 
 

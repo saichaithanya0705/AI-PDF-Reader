@@ -31,6 +31,7 @@ async def get_all_documents(
     """
     try:
         user_id = current_user["sub"]
+        print(f"DEBUG: get_all_documents user_id: {user_id}")
         logger.info(f"📚 API: get_all_documents called for user {user_id}")
         
         db = get_supabase_db()
@@ -211,3 +212,142 @@ async def health_check():
         "status": "healthy",
         "timestamp": datetime.now().isoformat()
     }
+
+
+# ==============================================================================
+# Chat History Endpoints (Supabase)
+# ==============================================================================
+
+@router.post("/chat/sessions", response_model=Dict[str, Any])
+async def create_chat_session_endpoint(
+    title: Optional[str] = Query(None, description="Session title"),
+    context_type: str = Query("library", description="Context type: library or pdf_viewer"),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Create a new chat session for authenticated user
+    """
+    try:
+        from .chat_history import get_chat_history_manager
+        
+        user_id = current_user["sub"]
+        logger.info(f"💬 Creating chat session for user {user_id}")
+        
+        chat_mgr = get_chat_history_manager()
+        
+        session_id = await chat_mgr.create_session(
+            user_id=user_id,
+            title=title,
+            context_type=context_type
+        )
+        
+        return {
+            "status": "success",
+            "session_id": session_id,
+            "message": "Chat session created successfully"
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Error creating chat session: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to create session: {str(e)}")
+
+
+@router.get("/chat/sessions", response_model=Dict[str, Any])
+async def list_chat_sessions_endpoint(
+    limit: int = Query(50, ge=1, le=100, description="Maximum sessions to return"),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get all chat sessions for authenticated user
+    """
+    try:
+        from .chat_history import get_chat_history_manager
+        
+        user_id = current_user["sub"]
+        logger.info(f"💬 Listing chat sessions for user {user_id}")
+        
+        chat_mgr = get_chat_history_manager()
+        
+        sessions = await chat_mgr.list_user_sessions(
+            user_id=user_id,
+            limit=limit
+        )
+        
+        logger.info(f"💬 Found {len(sessions)} sessions")
+        
+        return {
+            "status": "success",
+            "sessions": sessions,
+            "count": len(sessions)
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Error listing chat sessions: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to list sessions: {str(e)}")
+
+
+@router.get("/chat/sessions/{session_id}", response_model=Dict[str, Any])
+async def get_chat_session_endpoint(
+    session_id: str = Path(..., description="Session ID"),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get messages for a specific session
+    """
+    try:
+        from .chat_history import get_chat_history_manager
+        
+        user_id = current_user["sub"]
+        chat_mgr = get_chat_history_manager()
+        
+        # Verify session ownership
+        session = await chat_mgr.get_session(session_id, user_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found or not authorized")
+        
+        # Get messages
+        messages = await chat_mgr.get_session_history(session_id)
+        
+        return {
+            "status": "success",
+            "session": session,
+            "messages": messages,
+            "count": len(messages)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error getting chat session: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get session: {str(e)}")
+
+
+@router.delete("/chat/sessions/{session_id}", response_model=Dict[str, Any])
+async def delete_chat_session_endpoint(
+    session_id: str = Path(..., description="Session ID"),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Delete a chat session
+    """
+    try:
+        from .chat_history import get_chat_history_manager
+        
+        user_id = current_user["sub"]
+        chat_mgr = get_chat_history_manager()
+        
+        success = await chat_mgr.delete_session(session_id, user_id)
+        
+        if not success:
+            raise HTTPException(status_code=404, detail="Session not found or not authorized")
+        
+        return {
+            "status": "success",
+            "message": "Chat session deleted successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error deleting chat session: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete session: {str(e)}")

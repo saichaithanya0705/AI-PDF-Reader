@@ -1,0 +1,1061 @@
+
+
+--- Error at 2025-11-22T20:35:12.864104 ---
+Error: {'message': "Could not find the 'context_type' column of 'chat_sessions' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1869, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "D:\adobe-hackathon-finale-main\backend\venv\Lib\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': "Could not find the 'context_type' column of 'chat_sessions' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+
+
+--- Error at 2025-11-22T20:36:11.624360 ---
+Error: {'message': "Could not find the 'context_type' column of 'chat_sessions' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1869, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "D:\adobe-hackathon-finale-main\backend\venv\Lib\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': "Could not find the 'context_type' column of 'chat_sessions' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+
+
+--- Error at 2025-11-22T20:37:44.250686 ---
+Error: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1869, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "D:\adobe-hackathon-finale-main\backend\venv\Lib\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+
+
+--- Error at 2025-11-22T21:33:00.194787 ---
+Error: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1878, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "D:\adobe-hackathon-finale-main\backend\venv\Lib\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+
+
+--- Error at 2025-11-23T11:43:05.636449 ---
+Error: 
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1857, in chat_endpoint
+    raise HTTPException(status_code=503, detail="LLM service not available")
+fastapi.exceptions.HTTPException
+
+
+--- Error at 2025-11-23T11:46:49.191436 ---
+Error: 
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1857, in chat_endpoint
+    raise HTTPException(status_code=503, detail="LLM service not available")
+fastapi.exceptions.HTTPException
+
+
+--- Error at 2025-11-23T11:56:49.850428 ---
+Error: 
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1857, in chat_endpoint
+    raise HTTPException(status_code=503, detail="LLM service not available")
+fastapi.exceptions.HTTPException
+
+
+--- Error at 2026-01-14T11:21:39.007680 ---
+Error: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+
+
+--- Error at 2026-01-14T11:23:07.720981 ---
+Error: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+
+
+--- Error at 2026-01-14T11:24:19.560038 ---
+Error: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+
+
+--- Error at 2026-01-14T11:26:06.195078 ---
+Error: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+
+
+--- Error at 2026-01-14T11:27:53.945067 ---
+Error: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+
+
+--- Error at 2026-01-14T11:29:22.406731 ---
+Error: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+
+
+--- Error at 2026-01-14T11:46:07.981971 ---
+Error: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+
+
+--- Error at 2026-01-14T11:55:30.678918 ---
+Error: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+
+
+--- Error at 2026-01-14T12:13:57.341097 ---
+Error: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+
+
+--- Error at 2026-01-14T12:21:46.222244 ---
+Error: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+
+
+--- Error at 2026-01-14T12:26:00.711248 ---
+Error: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+
+
+--- Error at 2026-01-14T12:40:49.023462 ---
+Error: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+
+
+--- Error at 2026-01-14T12:42:27.059742 ---
+Error: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+
+
+--- Error at 2026-01-14T12:50:27.455788 ---
+Error: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+
+
+--- Error at 2026-01-14T12:50:29.863246 ---
+Error: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+
+
+--- Error at 2026-01-14T12:50:55.758901 ---
+Error: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+
+
+--- Error at 2026-01-14T12:50:58.412970 ---
+Error: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+
+
+--- Error at 2026-01-14T12:51:00.830118 ---
+Error: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+
+
+--- Error at 2026-01-14T13:13:27.880615 ---
+Error: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+
+
+--- Error at 2026-01-14T13:13:30.323753 ---
+Error: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+
+
+--- Error at 2026-01-14T13:13:33.822524 ---
+Error: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+
+
+--- Error at 2026-01-14T13:15:37.735544 ---
+Error: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+
+
+--- Error at 2026-01-14T13:15:40.726741 ---
+Error: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+
+
+--- Error at 2026-01-14T13:15:43.536792 ---
+Error: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'invalid input syntax for type uuid: "anonymous"', 'code': '22P02', 'hint': None, 'details': None}
+
+
+--- Error at 2026-01-14T13:19:04.199541 ---
+Error: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+
+
+--- Error at 2026-01-14T13:19:06.707165 ---
+Error: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+
+
+--- Error at 2026-01-14T13:19:09.163514 ---
+Error: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+
+
+--- Error at 2026-01-14T13:21:46.741925 ---
+Error: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+
+
+--- Error at 2026-01-14T13:21:49.182533 ---
+Error: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+
+
+--- Error at 2026-01-14T13:21:51.599874 ---
+Error: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+
+
+--- Error at 2026-01-14T13:25:17.921838 ---
+Error: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+
+
+--- Error at 2026-01-14T13:25:20.395011 ---
+Error: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+
+
+--- Error at 2026-01-14T13:25:22.821231 ---
+Error: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+
+
+--- Error at 2026-01-14T13:25:46.567932 ---
+Error: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+
+
+--- Error at 2026-01-14T13:25:49.083029 ---
+Error: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+
+
+--- Error at 2026-01-14T13:25:51.503312 ---
+Error: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1837, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 149, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+
+
+--- Error at 2026-01-14T15:23:41.249379 ---
+Error: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1756, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 95, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+
+
+--- Error at 2026-01-14T15:23:41.705753 ---
+Error: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1756, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 95, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+
+
+--- Error at 2026-01-14T15:23:42.189963 ---
+Error: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1756, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 95, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+
+
+--- Error at 2026-01-14T18:43:48.422813 ---
+Error: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1756, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 95, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+
+
+--- Error at 2026-01-14T18:43:48.903839 ---
+Error: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1756, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 95, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+
+
+--- Error at 2026-01-14T18:43:49.258729 ---
+Error: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1756, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 95, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+
+
+--- Error at 2026-01-14T20:35:53.914744 ---
+Error: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1756, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 95, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+
+
+--- Error at 2026-01-14T20:35:55.631410 ---
+Error: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1756, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 95, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+
+
+--- Error at 2026-01-14T20:35:59.590006 ---
+Error: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1756, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 95, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+
+
+--- Error at 2026-01-14T22:02:10.390060 ---
+Error: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1756, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 95, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+
+
+--- Error at 2026-01-14T22:02:10.725804 ---
+Error: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1756, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 95, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+
+
+--- Error at 2026-01-14T22:02:11.086775 ---
+Error: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1756, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 95, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+
+
+--- Error at 2026-01-14T23:31:59.696860 ---
+Error: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1756, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 95, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+
+
+--- Error at 2026-01-14T23:32:00.141518 ---
+Error: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1756, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 95, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+
+
+--- Error at 2026-01-14T23:32:01.883083 ---
+Error: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1756, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 95, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+
+
+--- Error at 2026-01-14T23:34:52.476312 ---
+Error: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1756, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 95, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+
+
+--- Error at 2026-01-14T23:34:52.850385 ---
+Error: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1756, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 95, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+
+
+--- Error at 2026-01-14T23:34:53.216426 ---
+Error: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1756, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 95, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+
+
+--- Error at 2026-01-14T23:36:32.177001 ---
+Error: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1756, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 95, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+
+
+--- Error at 2026-01-14T23:36:32.531935 ---
+Error: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1756, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 95, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+
+
+--- Error at 2026-01-14T23:36:32.875614 ---
+Error: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}
+Traceback (most recent call last):
+  File "D:\adobe-hackathon-finale-main\backend\app\main.py", line 1756, in chat_endpoint
+    session_id = await chat_mgr.create_session(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "D:\adobe-hackathon-finale-main\backend\app\chat_history.py", line 95, in create_session
+    }).execute()
+       ~~~~~~~^^
+  File "C:\Users\SAI\AppData\Roaming\Python\Python313\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'insert or update on table "chat_sessions" violates foreign key constraint "chat_sessions_user_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (user_id)=(00000000-0000-0000-0000-000000000000) is not present in table "users".'}

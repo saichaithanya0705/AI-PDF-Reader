@@ -24,9 +24,14 @@ supabase-auth==2.24.0
 supabase-functions==2.24.0
 
 # LLM and AI services
-google-generativeai==0.3.2
+google-generativeai>=0.8.0
 google-ai-generativelanguage==0.4.0
 openai==1.109.1
+langchain>=0.2.14
+langchain-core
+langchain-google-genai
+langchain-anthropic
+langchain-openai
 
 # Security and authentication
 python-jose==3.5.0

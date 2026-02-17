@@ -1,0 +1,399 @@
+
+--- Request at 2025-11-22T20:49:40.840541 ---
+User ID: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Message: What documents do I have?
+Context Type: library
+Library Context Stats: {'total_documents': 0, 'error': "SupabaseDatabase.get_all_documents() got an unexpected keyword argument 'client_id'"}
+Doc Summaries: 0
+
+--- Request at 2025-11-22T20:52:32.093655 ---
+User ID: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Message: What documents do I have?
+Context Type: library
+Library Context Stats: {'total_documents': 0, 'error': "SupabaseDatabase.get_all_documents() got an unexpected keyword argument 'client_id'"}
+Doc Summaries: 0
+
+--- Request at 2025-11-22T20:54:07.504596 ---
+User ID: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Message: What documents do I have?
+Context Type: library
+Library Context Stats: {'total_documents': 0, 'error': "can't compare offset-naive and offset-aware datetimes"}
+Doc Summaries: 0
+
+--- Request at 2025-11-22T20:56:12.560743 ---
+User ID: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Message: What documents do I have?
+Context Type: library
+Library Context Stats: {'total_documents': 0, 'error': "can't compare offset-naive and offset-aware datetimes"}
+Doc Summaries: 0
+
+--- Request at 2025-11-22T20:58:01.567738 ---
+User ID: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Message: What documents do I have?
+Context Type: library
+Building library context for user_id: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Retrieved 2 documents
+Doc: 8b153c96-771a-482e-a1c0-63746ea44390 - grok_report.pdf - uploaded
+Doc: c53126de-71a0-451a-a580-fe47fe72d6ca - RenderCV_sb2nov_Theme__2_.pdf - uploaded
+Library Context Stats: {'total_documents': 2, 'status_counts': {'uploaded': 2}, 'document_types': {'pdf': 2}, 'total_size_mb': 10.22, 'recent_uploads_count': 2}
+Doc Summaries: 2
+
+--- Request at 2025-11-22T21:32:58.604028 ---
+User ID: anonymous
+Message: test
+Context Type: library
+
+--- Request at 2025-11-23T10:49:56.033221 ---
+User ID: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Message: what does this pdf contain.
+Context Type: pdf_viewer
+
+--- Request at 2025-11-23T10:57:38.833943 ---
+User ID: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Message: what does this pdf contain
+Context Type: pdf_viewer
+
+--- Request at 2025-11-23T11:01:28.885778 ---
+User ID: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Message: what does this pdf contain
+Context Type: pdf_viewer
+
+--- Request at 2025-11-23T11:05:57.073563 ---
+User ID: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Message: what does this pdf contain
+Context Type: pdf_viewer
+
+--- Request at 2025-11-23T11:08:57.591592 ---
+User ID: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Message: what does this pdf contain
+Context Type: pdf_viewer
+
+--- Request at 2025-11-23T11:39:57.902213 ---
+User ID: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Message: what does this pdf contain
+Context Type: pdf_viewer
+
+--- Request at 2026-01-14T11:21:35.070237 ---
+User ID: anonymous
+Message: Hi, my name is Tester.
+Context Type: library
+
+--- Request at 2026-01-14T11:23:07.145250 ---
+User ID: anonymous
+Message: Hi, my name is Tester.
+Context Type: library
+
+--- Request at 2026-01-14T11:24:18.368866 ---
+User ID: anonymous
+Message: Hi, my name is Tester.
+Context Type: library
+
+--- Request at 2026-01-14T11:26:05.283350 ---
+User ID: anonymous
+Message: Hi, my name is Tester.
+Context Type: library
+
+--- Request at 2026-01-14T11:27:53.048171 ---
+User ID: anonymous
+Message: Hi, my name is Tester.
+Context Type: library
+
+--- Request at 2026-01-14T11:29:21.895838 ---
+User ID: anonymous
+Message: Hi, my name is Tester.
+Context Type: library
+
+--- Request at 2026-01-14T11:46:06.432823 ---
+User ID: anonymous
+Message: Tell me about the documents you can see.
+Context Type: library
+
+--- Request at 2026-01-14T11:55:29.824366 ---
+User ID: anonymous
+Message: What documents do you have in the library?
+Context Type: library
+
+--- Request at 2026-01-14T12:13:55.575488 ---
+User ID: anonymous
+Message: Do you see Varshitha_Resume.pdf?
+Context Type: library
+
+--- Request at 2026-01-14T12:21:44.014854 ---
+User ID: anonymous
+Message: HelloHello
+Context Type: library
+
+--- Request at 2026-01-14T12:25:59.940409 ---
+User ID: anonymous
+Message: Test
+Context Type: library
+
+--- Request at 2026-01-14T12:40:47.962789 ---
+User ID: anonymous
+Message: Hello, my name is Antigravity.
+Context Type: library
+
+--- Request at 2026-01-14T12:42:25.555307 ---
+User ID: anonymous
+Message: What is this document about?
+Context Type: library
+
+--- Request at 2026-01-14T12:50:25.480913 ---
+User ID: anonymous
+Message: Hello, my secret code is 9988.
+Context Type: library
+
+--- Request at 2026-01-14T12:50:29.499680 ---
+User ID: anonymous
+Message: What is the secret code I just told you?
+Context Type: library
+
+--- Request at 2026-01-14T12:50:54.542129 ---
+User ID: anonymous
+Message: Hello, my secret code is 9988.
+Context Type: library
+
+--- Request at 2026-01-14T12:50:57.800841 ---
+User ID: anonymous
+Message: What is the secret code I just told you?
+Context Type: library
+
+--- Request at 2026-01-14T12:51:00.437169 ---
+User ID: anonymous
+Message: Summarize the documents in the library.
+Context Type: library
+
+--- Request at 2026-01-14T13:13:26.183103 ---
+User ID: anonymous
+Message: Hello, my secret code is 9988.
+Context Type: library
+
+--- Request at 2026-01-14T13:13:29.917930 ---
+User ID: anonymous
+Message: What is the secret code I just told you?
+Context Type: library
+
+--- Request at 2026-01-14T13:13:32.351891 ---
+User ID: anonymous
+Message: Summarize the documents in the library.
+Context Type: library
+
+--- Request at 2026-01-14T13:15:34.914867 ---
+User ID: anonymous
+Message: Hello, my secret code is 9988.
+Context Type: library
+
+--- Request at 2026-01-14T13:15:39.766550 ---
+User ID: anonymous
+Message: What is the secret code I just told you?
+Context Type: library
+
+--- Request at 2026-01-14T13:15:42.768825 ---
+User ID: anonymous
+Message: Summarize the documents in the library.
+Context Type: library
+
+--- Request at 2026-01-14T13:19:01.440945 ---
+User ID: 00000000-0000-0000-0000-000000000000
+Message: Hello, my secret code is 9988.
+Context Type: library
+
+--- Request at 2026-01-14T13:19:06.242717 ---
+User ID: 00000000-0000-0000-0000-000000000000
+Message: What is the secret code I just told you?
+Context Type: library
+
+--- Request at 2026-01-14T13:19:08.747790 ---
+User ID: 00000000-0000-0000-0000-000000000000
+Message: Summarize the documents in the library.
+Context Type: library
+
+--- Request at 2026-01-14T13:21:44.740555 ---
+User ID: 00000000-0000-0000-0000-000000000000
+Message: Hello, my secret code is 9988.
+Context Type: library
+
+--- Request at 2026-01-14T13:21:48.770217 ---
+User ID: 00000000-0000-0000-0000-000000000000
+Message: What is the secret code I just told you?
+Context Type: library
+
+--- Request at 2026-01-14T13:21:51.228310 ---
+User ID: 00000000-0000-0000-0000-000000000000
+Message: Summarize the documents in the library.
+Context Type: library
+
+--- Request at 2026-01-14T13:25:15.205627 ---
+User ID: 00000000-0000-0000-0000-000000000000
+Message: Hello, my secret code is 9988.
+Context Type: library
+
+--- Request at 2026-01-14T13:25:19.970889 ---
+User ID: 00000000-0000-0000-0000-000000000000
+Message: What is the secret code I just told you?
+Context Type: library
+
+--- Request at 2026-01-14T13:25:22.436039 ---
+User ID: 00000000-0000-0000-0000-000000000000
+Message: Summarize the documents in the library.
+Context Type: library
+
+--- Request at 2026-01-14T13:25:45.615611 ---
+User ID: 00000000-0000-0000-0000-000000000000
+Message: Hello, my secret code is 9988.
+Context Type: library
+
+--- Request at 2026-01-14T13:25:48.614674 ---
+User ID: 00000000-0000-0000-0000-000000000000
+Message: What is the secret code I just told you?
+Context Type: library
+
+--- Request at 2026-01-14T13:25:51.123916 ---
+User ID: 00000000-0000-0000-0000-000000000000
+Message: Summarize the documents in the library.
+Context Type: library
+
+--- Request at 2026-01-14T13:28:05.080596 ---
+User ID: 00000000-0000-0000-0000-000000000000
+Message: Hello, my secret code is 9988.
+Context Type: library
+Building library context for user_id: 00000000-0000-0000-0000-000000000000
+Library Context Stats: {'total_documents': 0, 'error': 'datatype mismatch'}
+Doc Summaries: 0
+
+--- Request at 2026-01-14T13:28:16.254378 ---
+User ID: 00000000-0000-0000-0000-000000000000
+Message: What is the secret code I just told you?
+Context Type: library
+Building library context for user_id: 00000000-0000-0000-0000-000000000000
+Library Context Stats: {'total_documents': 0, 'error': 'datatype mismatch'}
+Doc Summaries: 0
+
+--- Request at 2026-01-14T13:28:20.181439 ---
+User ID: 00000000-0000-0000-0000-000000000000
+Message: Summarize the documents in the library.
+Context Type: library
+Building library context for user_id: 00000000-0000-0000-0000-000000000000
+Library Context Stats: {'total_documents': 0, 'error': 'datatype mismatch'}
+Doc Summaries: 0
+
+--- Request at 2026-01-14T13:57:21.009667 ---
+User ID: 00000000-0000-0000-0000-000000000000
+Message: Hello, my secret code is 9988.
+Context Type: library
+Building library context for user_id: 00000000-0000-0000-0000-000000000000
+Library Context Stats: {'total_documents': 0, 'error': 'datatype mismatch'}
+Doc Summaries: 0
+
+--- Request at 2026-01-14T13:57:29.082193 ---
+User ID: 00000000-0000-0000-0000-000000000000
+Message: What is the secret code I just told you?
+Context Type: library
+Building library context for user_id: 00000000-0000-0000-0000-000000000000
+Library Context Stats: {'total_documents': 0, 'error': 'datatype mismatch'}
+Doc Summaries: 0
+
+--- Request at 2026-01-14T15:23:38.419882 ---
+User ID: 00000000-0000-0000-0000-000000000000
+Message: Hello, my secret code is 9988.
+Context Type: library
+
+--- Request at 2026-01-14T15:23:41.254978 ---
+User ID: 00000000-0000-0000-0000-000000000000
+Message: What is the secret code I just told you?
+Context Type: library
+
+--- Request at 2026-01-14T15:23:41.711292 ---
+User ID: 00000000-0000-0000-0000-000000000000
+Message: Summarize the documents in the library.
+Context Type: library
+
+--- Request at 2026-01-14T18:43:45.820905 ---
+User ID: 00000000-0000-0000-0000-000000000000
+Message: Hello, my secret code is 9988.
+Context Type: library
+
+--- Request at 2026-01-14T18:43:48.428658 ---
+User ID: 00000000-0000-0000-0000-000000000000
+Message: What is the secret code I just told you?
+Context Type: library
+
+--- Request at 2026-01-14T18:43:48.916633 ---
+User ID: 00000000-0000-0000-0000-000000000000
+Message: Summarize the documents in the library.
+Context Type: library
+
+--- Request at 2026-01-14T20:35:48.250200 ---
+User ID: 00000000-0000-0000-0000-000000000000
+Message: Hello, my secret code is 9988.
+Context Type: library
+
+--- Request at 2026-01-14T20:35:53.921050 ---
+User ID: 00000000-0000-0000-0000-000000000000
+Message: What is the secret code I just told you?
+Context Type: library
+
+--- Request at 2026-01-14T20:35:55.637377 ---
+User ID: 00000000-0000-0000-0000-000000000000
+Message: Summarize the documents in the library.
+Context Type: library
+
+--- Request at 2026-01-14T22:02:08.108045 ---
+User ID: 00000000-0000-0000-0000-000000000000
+Message: Hello, my secret code is 9988.
+Context Type: library
+
+--- Request at 2026-01-14T22:02:10.396379 ---
+User ID: 00000000-0000-0000-0000-000000000000
+Message: What is the secret code I just told you?
+Context Type: library
+
+--- Request at 2026-01-14T22:02:10.731519 ---
+User ID: 00000000-0000-0000-0000-000000000000
+Message: Summarize the documents in the library.
+Context Type: library
+
+--- Request at 2026-01-14T23:31:57.458621 ---
+User ID: 00000000-0000-0000-0000-000000000000
+Message: Hello, my secret code is 9988.
+Context Type: library
+
+--- Request at 2026-01-14T23:31:59.704537 ---
+User ID: 00000000-0000-0000-0000-000000000000
+Message: What is the secret code I just told you?
+Context Type: library
+
+--- Request at 2026-01-14T23:32:00.147438 ---
+User ID: 00000000-0000-0000-0000-000000000000
+Message: Summarize the documents in the library.
+Context Type: library
+
+--- Request at 2026-01-14T23:34:51.276755 ---
+User ID: 00000000-0000-0000-0000-000000000000
+Message: Hello, my secret code is 9988.
+Context Type: library
+
+--- Request at 2026-01-14T23:34:52.482021 ---
+User ID: 00000000-0000-0000-0000-000000000000
+Message: What is the secret code I just told you?
+Context Type: library
+
+--- Request at 2026-01-14T23:34:52.858361 ---
+User ID: 00000000-0000-0000-0000-000000000000
+Message: Summarize the documents in the library.
+Context Type: library
+
+--- Request at 2026-01-14T23:36:30.569194 ---
+User ID: 00000000-0000-0000-0000-000000000000
+Message: Hello, my secret code is 9988.
+Context Type: library
+
+--- Request at 2026-01-14T23:36:32.182672 ---
+User ID: 00000000-0000-0000-0000-000000000000
+Message: What is the secret code I just told you?
+Context Type: library
+
+--- Request at 2026-01-14T23:36:32.537046 ---
+User ID: 00000000-0000-0000-0000-000000000000
+Message: Summarize the documents in the library.
+Context Type: library

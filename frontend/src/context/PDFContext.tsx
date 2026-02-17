@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { API_URL } from '../config';
+import { getAuthHeaders } from '../lib/api';
 
 export interface PDFDocument {
   id: string;
@@ -122,8 +123,17 @@ export const PDFProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (persona) formData.append('persona', persona);
       if (job) formData.append('job', job);
 
+      let headers = {};
+      try {
+        const authHeaders = await getAuthHeaders();
+        headers = { ...authHeaders };
+      } catch (e) {
+        console.warn('Not authenticated, uploading without auth headers');
+      }
+
       const response = await fetch(`${BACKEND_URL}/upload/active_file?client_id=${client_id}`, {
         method: 'POST',
+        headers: headers,
         body: formData,
       });
 
@@ -163,8 +173,17 @@ export const PDFProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (job) formData.append('job', job);
       if (considerPrevious !== undefined) formData.append('consider_previous', considerPrevious.toString());
 
+      let headers = {};
+      try {
+        const authHeaders = await getAuthHeaders();
+        headers = { ...authHeaders };
+      } catch (e) {
+        console.warn('Not authenticated, uploading without auth headers');
+      }
+
       const response = await fetch(`${BACKEND_URL}/upload/context_files?client_id=${client_id}`, {
         method: 'POST',
+        headers: headers,
         body: formData,
       });
 
@@ -206,17 +225,27 @@ export const PDFProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // Get persona and job from localStorage for intelligent recommendations
       const persona = localStorage.getItem('lastPersona') || 'Student';
       const job = localStorage.getItem('lastJob') || 'Learning and Research';
-      
+
       const queryParams = new URLSearchParams({
         page: currentPage.toString(),
         include_cross_document: 'true'
       });
-      
+
       // Always include persona and job (with defaults)
       queryParams.append('persona', persona);
       queryParams.append('job', job);
-      
-      const response = await fetch(`${BACKEND_URL}/api/recommendations/${documentId}?${queryParams}`);
+
+      let headers = {};
+      try {
+        const authHeaders = await getAuthHeaders();
+        headers = { ...authHeaders };
+      } catch (e) {
+        console.warn('Not authenticated, fetching recommendations without auth headers');
+      }
+
+      const response = await fetch(`${BACKEND_URL}/api/recommendations/${documentId}?${queryParams}`, {
+        headers: headers
+      });
       if (!response.ok) {
         throw new Error(`Failed to fetch recommendations: ${response.statusText}`);
       }
@@ -233,7 +262,7 @@ export const PDFProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       setRelatedSections(sections);
       setCrossDocumentSections(crossDocSections);
-      
+
       return sections;
     } catch (error) {
       console.error('Error fetching related sections:', error);
@@ -286,8 +315,18 @@ export const PDFProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
 
       console.log('🧠 Fetching comprehensive AI insights for document:', documentId, 'page:', currentPage);
-      
-      const response = await fetch(`${BACKEND_URL}/api/insights/${documentId}?${queryParams}`);
+
+      let headers = {};
+      try {
+        const authHeaders = await getAuthHeaders();
+        headers = { ...authHeaders };
+      } catch (e) {
+        console.warn('Not authenticated, fetching insights without auth headers');
+      }
+
+      const response = await fetch(`${BACKEND_URL}/api/insights/${documentId}?${queryParams}`, {
+        headers: headers
+      });
       if (!response.ok) {
         throw new Error(`Failed to fetch insights: ${response.statusText}`);
       }
@@ -338,11 +377,19 @@ export const PDFProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     try {
+      let headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+      try {
+        const authHeaders = await getAuthHeaders();
+        headers = { ...headers, ...authHeaders };
+      } catch (e) {
+        console.warn('Not authenticated, asking GPT without auth headers');
+      }
+
       const response = await fetch(`${BACKEND_URL}/api/ask-gpt`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: headers,
         body: JSON.stringify({
           selected_text: selectedText,
           context: context
@@ -376,8 +423,17 @@ export const PDFProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return;
       }
 
+      let headers = {};
+      try {
+        const authHeaders = await getAuthHeaders();
+        headers = { ...authHeaders };
+      } catch (e) {
+        console.warn('Not authenticated, fetching sorted documents without auth headers');
+      }
+
       const response = await fetch(
-        `${BACKEND_URL}/api/documents/sorted/${sortBy}?sort_order=${sortOrder}&client_id=${encodeURIComponent(clientId)}`
+        `${BACKEND_URL}/api/documents/sorted/${sortBy}?sort_order=${sortOrder}&client_id=${encodeURIComponent(clientId)}`,
+        { headers: headers }
       );
 
       if (response.ok) {
@@ -466,7 +522,17 @@ export const PDFProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return;
       }
 
-      const response = await fetch(`${BACKEND_URL}/api/documents?client_id=${encodeURIComponent(clientId)}`);
+      let headers = {};
+      try {
+        const authHeaders = await getAuthHeaders();
+        headers = { ...authHeaders };
+      } catch (e) {
+        console.warn('Not authenticated, fetching documents without auth headers');
+      }
+
+      const response = await fetch(`${BACKEND_URL}/api/documents?client_id=${encodeURIComponent(clientId)}`, {
+        headers: headers
+      });
       console.log('📚 Response status:', response.status);
       console.log('📚 Response headers:', Object.fromEntries(response.headers.entries()));
 
@@ -571,7 +637,7 @@ export const PDFProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // Try emergency API as fallback
       try {
         console.log('🚨 Trying emergency API fallback...');
-        const emergencyResponse = await fetch('http://localhost:8081/emergency/documents');
+        const emergencyResponse = await fetch(`${BACKEND_URL}/emergency/documents`);
 
         if (emergencyResponse.ok) {
           const emergencyData = await emergencyResponse.json();
@@ -626,8 +692,17 @@ export const PDFProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           ? `${BACKEND_URL}/api/documents/${documentId}?client_id=${encodeURIComponent(clientId)}`
           : `${BACKEND_URL}/api/documents/${documentId}`;
 
+        let headers = {};
+        try {
+          const authHeaders = await getAuthHeaders();
+          headers = { ...authHeaders };
+        } catch (e) {
+          console.warn('Not authenticated, deleting without auth headers');
+        }
+
         const response = await fetch(url, {
-          method: 'DELETE'
+          method: 'DELETE',
+          headers: headers
         });
 
         // Check if the response is HTML (404 page) instead of JSON
@@ -673,8 +748,17 @@ export const PDFProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           query.append('client_id', clientId);
         }
 
+        let headers = {};
+        try {
+          const authHeaders = await getAuthHeaders();
+          headers = { ...authHeaders };
+        } catch (e) {
+          console.warn('Not authenticated, deleting all without auth headers');
+        }
+
         const response = await fetch(`${BACKEND_URL}/api/documents?${query.toString()}`, {
-          method: 'DELETE'
+          method: 'DELETE',
+          headers: headers
         });
 
         if (!response.ok) {
@@ -727,8 +811,17 @@ export const PDFProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           params.append('client_id', clientId);
         }
 
+        let headers = {};
+        try {
+          const authHeaders = await getAuthHeaders();
+          headers = { ...authHeaders };
+        } catch (e) {
+          console.warn('Not authenticated, renaming without auth headers');
+        }
+
         const response = await fetch(`${BACKEND_URL}/api/documents/${documentId}/rename?${params.toString()}`, {
-          method: 'PUT'
+          method: 'PUT',
+          headers: headers
         });
 
         if (!response.ok) {
@@ -758,12 +851,12 @@ export const PDFProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       } catch (fetchError) {
         console.error('🗑️ Backend rename failed, reverting local state:', fetchError);
-        
+
         // Revert the optimistic update
         setDocuments(prev => prev.map(doc =>
           doc.id === documentId ? { ...doc, name: oldName } : doc
         ));
-        
+
         throw fetchError;
       }
 
@@ -776,11 +869,19 @@ export const PDFProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const classifyUserIntent = async (userInput: string) => {
     try {
+      let headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+      try {
+        const authHeaders = await getAuthHeaders();
+        headers = { ...headers, ...authHeaders };
+      } catch (e) {
+        console.warn('Not authenticated, classifying intent without auth headers');
+      }
+
       const response = await fetch(`${BACKEND_URL}/api/classify-intent`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: headers,
         body: JSON.stringify({
           user_input: userInput,
           include_suggestions: true
@@ -802,11 +903,19 @@ export const PDFProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const getPersonaJobSuggestions = async (userInput: string, topK: number = 3) => {
     try {
+      let headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+      try {
+        const authHeaders = await getAuthHeaders();
+        headers = { ...headers, ...authHeaders };
+      } catch (e) {
+        console.warn('Not authenticated, getting suggestions without auth headers');
+      }
+
       const response = await fetch(`${BACKEND_URL}/api/persona-job-suggestions`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: headers,
         body: JSON.stringify({
           user_input: userInput,
           top_k: topK

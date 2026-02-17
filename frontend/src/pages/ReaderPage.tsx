@@ -7,13 +7,19 @@ import FloatingInsightsPanel from '../components/FloatingInsightsPanel';
 import InsightsNotification from '../components/InsightsNotification';
 import PodcastModal from '../components/PodcastModal';
 import SimpleChatbot from '../components/SimpleChatbot';
+import RelatedDocumentsSidebar from '../components/RelatedDocumentsSidebar';
 
 const ReaderPage: React.FC = () => {
   const { pdfId } = useParams<{ pdfId: string }>();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { documents, currentDocument, setCurrentDocument, getRelatedSections, getInsights, insights, isOnline } = usePDF();
-  const [currentPage, setCurrentPage] = useState(1);
+
+  // Initialize page from URL or default to 1
+  const pageParam = searchParams.get('page');
+  const initialPage = pageParam ? parseInt(pageParam, 10) : 1;
+  const [currentPage, setCurrentPage] = useState(initialPage);
+
   const [showFloatingInsights, setShowFloatingInsights] = useState(false);
   const [showPodcast, setShowPodcast] = useState(false);
   const [showInsightsNotification, setShowInsightsNotification] = useState(false);
@@ -74,6 +80,13 @@ const ReaderPage: React.FC = () => {
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
+
+    // Update URL without reloading
+    setSearchParams(prev => {
+      prev.set('page', page.toString());
+      return prev;
+    }, { replace: true });
+
     if (currentDocument) {
       getRelatedSections(currentDocument.id, page);
       if (isOnline) {
@@ -137,14 +150,13 @@ const ReaderPage: React.FC = () => {
               <p className="text-sm text-slate-400">Page {currentPage}</p>
             </div>
           </div>
-          
+
           <div className="flex items-center gap-3">
             {/* Online/Offline Indicator */}
-            <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium ${
-              isOnline 
-                ? 'bg-green-400/10 text-green-400 border border-green-400/20' 
-                : 'bg-orange-400/10 text-orange-400 border border-orange-400/20'
-            }`}>
+            <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium ${isOnline
+              ? 'bg-green-400/10 text-green-400 border border-green-400/20'
+              : 'bg-orange-400/10 text-orange-400 border border-orange-400/20'
+              }`}>
               {isOnline ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
               {isOnline ? 'Online' : 'Offline'}
             </div>
@@ -155,25 +167,24 @@ const ReaderPage: React.FC = () => {
       </header>
 
       {/* Main Content - Integrated PDF Viewer with Built-in Recommendations */}
-      <div className="flex-1 h-[calc(100vh-80px)] p-6">
-        <SmartPDFViewer
-          document={currentDocument}
-          onPageChange={handlePageChange}
-          onTextSelection={(text, page) => {
-            console.log(`📝 Text selected on page ${page}:`, text.substring(0, 100) + '...');
-            // SimplePDFViewer now handles the floating menu internally
-            // This callback can be used to trigger additional actions if needed
-            // For example: send to AI, save to notes, etc.
-          }}
-          onAskLLM={(text, page) => {
-            console.log(`🤖 Ask LLM clicked on page ${page} with text:`, text.substring(0, 100) + '...');
-            // Open chatbot and pre-fill with selected text
-            setInitialChatMessage(`Regarding the text on page ${page}: "${text}"\n\nQuestion: `);
-            setShowChatbot(true);
-          }}
-          onOpenInsights={() => setShowFloatingInsights(true)}
-          onOpenPodcast={() => setShowPodcast(true)}
-        />
+      <div className="flex flex-1 h-[calc(100vh-80px)] overflow-hidden">
+        <div className="flex-1 p-6 overflow-hidden h-full">
+          <SmartPDFViewer
+            document={currentDocument}
+            initialPage={initialPage}
+            onPageChange={handlePageChange}
+            onTextSelection={(text, page) => {
+              console.log(`📝 Text selected on page ${page}:`, text.substring(0, 100) + '...');
+            }}
+            onAskLLM={(text, page) => {
+              console.log(`🤖 Ask LLM clicked on page ${page} with text:`, text.substring(0, 100) + '...');
+              // Open chatbot and pre-fill with selected text
+              setInitialChatMessage(`Regarding the text on page ${page}: "${text}"\n\nQuestion: `);
+              setShowChatbot(true);
+            }}
+          />
+        </div>
+        <RelatedDocumentsSidebar />
       </div>
 
 
@@ -219,8 +230,10 @@ const ReaderPage: React.FC = () => {
           }
         }}
         initialMessage={initialChatMessage}
+        viewType="pdf_viewer"
+        currentPage={currentPage}
       />
-    </div>
+    </div >
   );
 };
 

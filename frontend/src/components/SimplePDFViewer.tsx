@@ -15,6 +15,7 @@ interface SimplePDFViewerProps {
   onPageChange: (page: number) => void;
   onTextSelection?: (text: string, page: number) => void;
   onAskLLM?: (text: string, page: number) => void;
+  initialPage?: number;
 }
 
 interface SelectionMenuPosition {
@@ -22,9 +23,15 @@ interface SelectionMenuPosition {
   y: number;
 }
 
-const SimplePDFViewer: React.FC<SimplePDFViewerProps> = ({ document: pdfDocument, onPageChange, onTextSelection, onAskLLM }) => {
+const SimplePDFViewer: React.FC<SimplePDFViewerProps> = ({
+  document: pdfDocument,
+  onPageChange,
+  onTextSelection,
+  onAskLLM,
+  initialPage = 1
+}) => {
   const [numPages, setNumPages] = useState<number>(0);
-  const [pageNumber, setPageNumber] = useState<number>(1);
+  const [pageNumber, setPageNumber] = useState<number>(initialPage);
   const [scale, setScale] = useState<number>(1.2);
   const [selectedText, setSelectedText] = useState<string>('');
   const [menuPosition, setMenuPosition] = useState<SelectionMenuPosition | null>(null);
@@ -94,14 +101,14 @@ const SimplePDFViewer: React.FC<SimplePDFViewerProps> = ({ document: pdfDocument
     const handleSelection = () => {
       const selection = window.getSelection();
       const text = selection?.toString().trim();
-      
+
       if (text && text.length > 0) {
         setSelectedText(text);
-        
+
         // Get selection position for floating menu
         const range = selection?.getRangeAt(0);
         const rect = range?.getBoundingClientRect();
-        
+
         if (rect) {
           setMenuPosition({
             x: rect.left + rect.width / 2,
@@ -235,16 +242,16 @@ const SimplePDFViewer: React.FC<SimplePDFViewerProps> = ({ document: pdfDocument
 
       {/* PDF Content Area */}
       <div className="flex-1 overflow-auto bg-slate-950 flex justify-center p-4 relative">
-        <Document 
-          file={pdfUrl} 
-          onLoadSuccess={onDocumentLoadSuccess} 
+        <Document
+          file={pdfUrl}
+          onLoadSuccess={onDocumentLoadSuccess}
           loading={<Loader2 className="w-8 h-8 animate-spin text-cyan-400" />}
         >
-          <Page 
-            pageNumber={pageNumber} 
-            scale={scale} 
-            renderTextLayer={true} 
-            renderAnnotationLayer={true} 
+          <Page
+            pageNumber={pageNumber}
+            scale={scale}
+            renderTextLayer={true}
+            renderAnnotationLayer={true}
             onLoadSuccess={handlePageLoadSuccess}
             className="shadow-2xl"
           />

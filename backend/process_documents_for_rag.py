@@ -9,7 +9,21 @@ from pathlib import Path
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from app.database import db
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
+# Determine which database to use
+USE_SUPABASE = os.getenv("USE_SUPABASE", "false").lower() == "true"
+if USE_SUPABASE:
+    print("🚀 Using Supabase Database")
+    from app.supabase_database import get_supabase_db
+    db = get_supabase_db()
+else:
+    print("📂 Using Local SQLite Database")
+    from app.database import db
+
 from app.rag_service import get_rag_service
 
 
@@ -52,19 +66,22 @@ async def process_all_documents():
         # Check if already processed
         existing_chunks = db.get_chunk_count(document.id)
         if existing_chunks > 0:
-            print(f"  ℹ️ Document already has {existing_chunks} chunks. Skipping...")
-            results.append({
-                'document_id': document.id,
-                'success': True,
-                'chunks_created': existing_chunks,
-                'skipped': True
-            })
-            continue
+            print(f"  ℹ️ Document already has {existing_chunks} chunks. Force re-processing...")
+            # results.append({
+            #     'document_id': document.id,
+            #     'success': True,
+            #     'chunks_created': existing_chunks,
+            #     'skipped': True
+            # })
+            # continue
         
         # Process document
+        # Process document
+        user_id = getattr(document, 'user_id', None)
         result = await rag_service.process_document(
             document_id=document.id,
             pdf_path=str(file_path),
+            user_id=user_id,
             batch_size=32
         )
         

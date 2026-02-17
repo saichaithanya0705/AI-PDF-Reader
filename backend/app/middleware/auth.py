@@ -46,11 +46,23 @@ def verify_jwt_token(credentials: HTTPAuthorizationCredentials = Depends(securit
     token = credentials.credentials
     
     try:
+        # Decode/Parse Secret (Support for HS256 String or ES256 JWK Dict)
+        import json
+        jwt_secret = SUPABASE_JWT_SECRET
+        jwt_algorithms = [JWT_ALGORITHM]
+        
+        if jwt_secret and jwt_secret.strip().startswith("{"):
+            try:
+                jwt_secret = json.loads(jwt_secret)
+                jwt_algorithms = ["ES256"]
+            except json.JSONDecodeError:
+                print("SUPABASE_JWT_SECRET started with { but wasn't valid JSON. Falling back to string/HS256.")
+
         # Decode and validate JWT
         payload = jwt.decode(
             token,
-            SUPABASE_JWT_SECRET,
-            algorithms=[JWT_ALGORITHM],
+            jwt_secret,
+            algorithms=jwt_algorithms,
             options={
                 "verify_signature": True,
                 "verify_exp": True,

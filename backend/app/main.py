@@ -1,6 +1,8 @@
-# app/main.py
-import sys
+import sys # trigger reload 2
 import traceback
+
+with open("main_heartbeat.txt", "w") as f:
+    f.write("main_loaded")
 
 print("🚀 Starting application import...")
 sys.stdout.flush()
@@ -31,11 +33,6 @@ except Exception as e:
     raise
 
 # Suppress NetworkX backend warnings
-warnings.filterwarnings("ignore", message="networkx backend defined more than once")
-warnings.filterwarnings("ignore", category=RuntimeWarning, module="networkx")
-
-# Suppress Vertex AI deprecation warnings
-warnings.filterwarnings("ignore", message="This feature is deprecated as of June 24, 2025")
 warnings.filterwarnings("ignore", category=UserWarning, module="vertexai")
 
 # Load environment variables from .env file
@@ -44,7 +41,7 @@ try:
     # Load from project root
     env_path = Path(__file__).parent.parent.parent / '.env'
     if env_path.exists():
-        load_dotenv(env_path)
+        load_dotenv(env_path, override=True)
         print(f"✅ Loaded environment variables from {env_path}")
     else:
         print(f"⚠️ No .env file found at {env_path}")
@@ -70,34 +67,21 @@ print("✅ Websocket and models loaded")
 sys.stdout.flush()
 
 # Database selection: Use Supabase if configured, otherwise SQLite
-USE_SUPABASE = os.getenv("USE_SUPABASE", "false").lower() == "true"
-print(f"🗄️ Database mode: {'Supabase' if USE_SUPABASE else 'SQLite'}")
+# Database selection: Supabase Only
+USE_SUPABASE = True
+print("🗄️ Database mode: Supabase Only")
 sys.stdout.flush()
 
-if USE_SUPABASE:
-    try:
-        from .supabase_database import get_supabase_db
-        db = get_supabase_db()
-        from .api_routes_supabase import router as api_router
-        from .auth_middleware import get_current_user, get_optional_user
-        print("✅ Using Supabase database with authentication")
-    except Exception as e:
-        print(f"⚠️ Failed to initialize Supabase, falling back to SQLite: {e}")
-        from .database import db
-        from .api_routes import router as api_router
-        # Mock auth for SQLite mode
-        from fastapi import Depends
-        def get_current_user(): return {"sub": "local-user", "email": "local@example.com"}
-        def get_optional_user(): return None
-        USE_SUPABASE = False
-else:
-    from .database import db
-    from .api_routes import router as api_router
-    # Mock auth for SQLite mode
-    from fastapi import Depends
-    def get_current_user(): return {"sub": "local-user", "email": "local@example.com"}
-    def get_optional_user(): return None
-    print("✅ Using SQLite database (legacy mode)")
+try:
+    from .supabase_database import get_supabase_db
+    db = get_supabase_db()
+    from .api_routes_supabase import router as api_router
+    from .auth_middleware import get_current_user, get_optional_user
+    print("✅ Using Supabase database with authentication")
+except Exception as e:
+    print(f"❌ FATAL: Failed to initialize Supabase: {e}")
+    sys.stdout.flush()
+    raise
 
 print("📦 Loading services...")
 sys.stdout.flush()
@@ -118,27 +102,11 @@ from app.utils.intelligent_pdf_brain import IntelligentPDFBrain  # 1B relevance/
 print("✅ PDF processors loaded")
 sys.stdout.flush()
 
-print("📦 Loading ML libraries (faiss, sentence-transformers)...")
+print("📦 Loading RAG Service...")
 sys.stdout.flush()
-import faiss
-from sentence_transformers import SentenceTransformer
-import numpy as np
-print("✅ ML libraries loaded")
+from .rag_service import get_rag_service
+print("✅ RAG Service loaded")
 sys.stdout.flush()
-
-# Global FAISS index and metadata (for simplicity; use persistent in production)
-index = faiss.IndexFlatL2(384)  # Dimension for all-MiniLM-L6-v2
-metadata = []  # List of dicts: {'id': sec_id, 'doc_id': doc_id, 'page': page, 'heading': heading, 'text': text}
-model = None  # Lazy load to avoid blocking startup
-
-def get_sentence_transformer():
-    """Lazy load sentence transformer model"""
-    global model
-    if model is None:
-        print("📥 Loading SentenceTransformer model...")
-        model = SentenceTransformer('all-MiniLM-L6-v2')
-        print("✅ SentenceTransformer model loaded")
-    return model
 
 # Create necessary directories - use consistent paths
 print("📁 Setting up directories...")
@@ -199,18 +167,23 @@ else:
 
 # Include API routes AFTER static files
 app.include_router(api_router)
-
 # Initialize services
 llm_provider = None
-enhanced_llm_service = None
-tts_service = None
-highlighter = SectionHighlighter()
-
 try:
+    import importlib
+    import app.llm_providers as app_llm_providers
+    importlib.reload(app_llm_providers)
+    print("🔄 Reloaded llm_providers module")
+    
+    from .llm_providers import get_llm_provider
     llm_provider = get_llm_provider()
     print(f"✅ LLM Provider initialized: {type(llm_provider).__name__}")
 except Exception as e:
-    print(f"⚠️ LLM Provider initialization failed: {e}")
+    import traceback
+    error_msg = f"LLM Provider initialization failed: {e}\n\nFull traceback:\n{traceback.format_exc()}"
+    print(f"⚠️ {error_msg}")
+    with open("init_error.txt", "w") as f:
+        f.write(error_msg)
 
 try:
     enhanced_llm_service = EnhancedLLMService()
@@ -227,61 +200,7 @@ except Exception as e:
 print(f"✅ Section Highlighter initialized")
 
 # Initialize smart upload handler
-try:
-    smart_upload_handler = SmartUploadHandler(DOCS_DIR, db.db_path)
-    print(f"✅ Smart Upload Handler initialized")
-except Exception as e:
-    print(f"⚠️ Smart Upload Handler initialization failed: {e}")
-
-# Fix database file paths before cleanup
-try:
-    print("🔧 Fixing database file paths...")
-    import sqlite3
-    from pathlib import Path
-
-    # Get current working directory and docs directory
-    current_dir = Path.cwd()
-    docs_dir = current_dir / "backend" / "data" / "docs"
-
-    conn = sqlite3.connect(db.db_path)
-    cursor = conn.cursor()
-
-    # Get all documents with their current file paths
-    cursor.execute("SELECT id, filename, file_path FROM documents WHERE status != 'deleted'")
-    documents = cursor.fetchall()
-
-    fixed_count = 0
-    for doc_id, filename, current_path in documents:
-        # Check if current path is incorrect (contains old paths)
-        if "D:\\" in current_path or "backend\\data\\backend" in current_path:
-            # Create correct path
-            correct_path = docs_dir / filename
-            if correct_path.exists():
-                cursor.execute("UPDATE documents SET file_path = ? WHERE id = ?", (str(correct_path), doc_id))
-                fixed_count += 1
-                print(f"  ✅ Fixed path for: {filename}")
-
-    conn.commit()
-    conn.close()
-
-    if fixed_count > 0:
-        print(f"🔧 Fixed {fixed_count} file paths in database")
-    else:
-        print("✅ All file paths are correct")
-
-except Exception as e:
-    print(f"⚠️ File path fix failed: {e}")
-
-# Run duplicate PDF cleanup on startup (with safety checks)
-try:
-    print("🧹 Running duplicate PDF cleanup...")
-    cleanup_stats = run_duplicate_cleanup(db, DOCS_DIR)
-    if cleanup_stats['files_removed'] > 0:
-        print(f"🎉 Removed {cleanup_stats['files_removed']} duplicate PDFs")
-    else:
-        print("✅ No duplicate PDFs found")
-except Exception as e:
-    print(f"⚠️ Duplicate cleanup failed: {e}")
+# SQLite maintenance tasks removed
 
 # Enhanced PDF processing function with better integration
 async def process_pdf(job_id: str, client_id: str, file_path: str, pdf_type: str, persona: str = None, job: str = None):
@@ -307,6 +226,11 @@ async def process_pdf(job_id: str, client_id: str, file_path: str, pdf_type: str
         }, client_id)
 
         # Enhanced embedding and FAISS indexing
+        from .vector_store import get_vector_store
+        from .embedding_service import get_embedding_service
+        vector_store = get_vector_store()
+        embedding_service = get_embedding_service()
+
         sections_added = 0
         for sec in outline:
             try:
@@ -315,22 +239,40 @@ async def process_pdf(job_id: str, client_id: str, file_path: str, pdf_type: str
                 section_text = f"{sec.get('heading', '')} {sec.get('text', '')}"
 
                 if section_text.strip():  # Only process non-empty sections
-                    embedding = get_sentence_transformer().encode(section_text)
-                    index.add(np.array([embedding]).astype('float32'))
-
-                    metadata.append({
+                    embedding = embedding_service.generate_embedding(section_text)
+                    vector_store.index.add(np.array([embedding]).astype('float32'))
+                    # Also store metadata
+                    vector_store.metadata.append({
                         'id': sec_id,
                         'doc_id': job_id,
+                        'heading': sec.get('heading', ''),
+                        'text': sec.get('text', ''),
                         'page': sec.get('page', 1),
-                        'heading': sec.get('heading', 'Untitled Section'),
-                        'text': section_text,
-                        'level': sec.get('level', 'unknown'),
-                        'file_path': file_path
+                        'user_id': client_id
                     })
+
+                    # Store in Supabase if enabled
+                    try:
+                        db.store_chunk(
+                            user_id=client_id,
+                            document_id=job_id,
+                            chunk_text=section_text,
+                            chunk_index=sections_added,
+                            page_number=sec.get('page', 1),
+                            embedding=embedding.tolist(),
+                            char_count=len(section_text),
+                            word_count=len(section_text.split())
+                        )
+                    except Exception as e:
+                        print(f"⚠️ Failed to store chunk in Supabase: {e}")
+
                     sections_added += 1
             except Exception as e:
                 print(f"Error processing section: {e}")
                 continue
+
+        # Save the FAISS index after processing
+        vector_store.save()
 
         await manager.send_message({
             "type": "progress",
@@ -410,72 +352,77 @@ async def process_pdf(job_id: str, client_id: str, file_path: str, pdf_type: str
 @app.post("/upload/context_files")
 async def upload_context_files(
     background_tasks: BackgroundTasks,
-    persona: str = None,  # Optional
-    job: str = None,      # Optional
-    consider_previous: bool = False,  # Consider previously opened PDFs for recommendations
     files: List[UploadFile] = File(...),
-    current_user: dict = Depends(get_current_user),
+    persona: str = None,
+    job: str = None,
+    current_user: Optional[dict] = Depends(get_optional_user),
     client_id: Optional[str] = Query(None, description="User identifier for multi-tenant uploads")
 ):
     """
-    Accepts multiple "past" PDFs to build the knowledge base.
+    Accepts multiple PDF files to add to the knowledge base (Supabase or SQLite).
     """
-    user_id = client_id or current_user.get("sub", "local-user")
-    job_ids = []
-    file_urls = []
+    uploaded_files_info = []
+    user_id = client_id or (current_user.get("sub") if current_user else "local-user")
+    
+    print(f"📚 Uploading {len(files)} context files for user {user_id}")
+    sys.stdout.flush()
 
     for file in files:
-        temp_file_path = DOCS_DIR / f"temp_{uuid.uuid4()}_{file.filename}"
-
-        # Save the uploaded file temporarily
-        file_content = await file.read()
-        with open(temp_file_path, "wb") as buffer:
-            buffer.write(file_content)
-
-        # Use smart upload handler for duplicate detection and processing
         try:
-            print(f"📚 Processing bulk upload with smart handler: {file.filename}")
-
-            upload_result = smart_upload_handler.handle_upload(
-                temp_file_path, file.filename, user_id, persona, job
+            job_id = str(uuid.uuid4())
+            filename_with_id = f"{job_id}_{file.filename}"
+            file_path = DOCS_DIR / filename_with_id
+            
+            # Save file
+            content = await file.read()
+            with open(file_path, "wb") as f:
+                f.write(content)
+                
+            # Create DB Record
+            # Create DB Record
+            doc = db.create_document(
+                user_id=user_id,
+                filename=filename_with_id,
+                original_name=file.filename,
+                file_size=len(content),
+                file_path=str(file_path),
+                persona=persona,
+                job_role=job
             )
-
-            if upload_result['is_duplicate']:
-                print(f"🔄 Duplicate detected in bulk upload: {file.filename}")
-                existing_doc = upload_result['existing_document']
-                job_ids.append(existing_doc['id'])
-                file_urls.append(f"/api/files/{existing_doc['filename']}")
-            else:
-                print(f"✅ New file processed in bulk upload: {file.filename}")
-                job_id = upload_result['document_id']
-                filename_with_id = upload_result['filename']
-                job_ids.append(job_id)
-                file_urls.append(f"/api/files/{filename_with_id}")
-
-                # Start background processing for new files
-                actual_file_path = DOCS_DIR / filename_with_id
-                background_tasks.add_task(process_pdf, job_id, user_id, str(actual_file_path), 'context', persona, job)
-
-            # Clean up temporary file
-            if temp_file_path.exists():
-                temp_file_path.unlink()
-
+            job_id = doc.id
+            
+            # Add to background tasks
+            # Use 'library' context for bulk uploads
+            background_tasks.add_task(process_pdf, job_id, user_id, str(file_path), 'library', persona, job)
+            
+            uploaded_files_info.append({
+                "job_id": job_id,
+                "filename": file.filename,
+                "status": "uploading"
+            })
+            print(f"✅ Queued file for processing: {file.filename} (ID: {job_id})")
+            
         except Exception as e:
-            print(f"⚠️ Failed to process bulk document {file.filename}: {e}")
-            # Clean up temporary file on error
-            if temp_file_path.exists():
-                temp_file_path.unlink()
-            # Continue with next file even if one fails
+            print(f"❌ Failed to upload {file.filename}: {e}")
+            uploaded_files_info.append({
+                "filename": file.filename,
+                "error": str(e),
+                "status": "failed"
+            })
+            # Cleanup
+            try:
+                if 'file_path' in locals() and file_path.exists():
+                    file_path.unlink()
+            except:
+                pass
 
     return JSONResponse(
-        status_code=202, # 202 Accepted: The request has been accepted for processing
+        status_code=202,
         content={
-            "job_ids": job_ids,
-            "file_urls": file_urls,
-            "detail": f"Accepted {len(files)} files for processing."
+            "detail": f"Processing {len(files)} files",
+            "files": uploaded_files_info
         }
     )
-
 # NEW: Endpoint for CURRENT PDF (for viewing)
 @app.post("/upload/active_file")
 async def upload_active_file(
@@ -483,13 +430,13 @@ async def upload_active_file(
     persona: str = None,
     job: str = None,
     file: UploadFile = File(...),
-    current_user: dict = Depends(get_current_user),
+    current_user: Optional[dict] = Depends(get_optional_user),
     client_id: Optional[str] = Query(None, description="User identifier for multi-tenant uploads")
 ):
     """
     Accepts a single "current" PDF for immediate viewing and analysis.
     """
-    user_id = client_id or current_user.get("sub", "local-user")
+    user_id = client_id or (current_user.get("sub") if current_user else "local-user")
     job_id = str(uuid.uuid4())
     filename_with_id = f"{job_id}_{file.filename}"
     file_path = DOCS_DIR / filename_with_id
@@ -500,48 +447,93 @@ async def upload_active_file(
         buffer.write(file_content)
 
     # Use smart upload handler for duplicate detection and processing
-    try:
-        print(f"📚 Processing upload with smart handler: {file.filename}")
+    if 'smart_upload_handler' in globals() and smart_upload_handler:
+        try:
+            print(f"📚 Processing upload with smart handler: {file.filename}")
 
-        upload_result = smart_upload_handler.handle_upload(
-            file_path, file.filename, user_id, persona, job
-        )
-
-        if upload_result['is_duplicate']:
-            print(f"🔄 Duplicate detected: {file.filename}")
-            existing_doc = upload_result['existing_document']
-
-            # Remove temporary file since we're using existing one
-            if file_path.exists():
-                file_path.unlink()
-
-            # Return existing document info
-            return JSONResponse(
-                status_code=200,
-                content={
-                    "job_id": existing_doc['id'],
-                    "filename": file.filename,
-                    "detail": f"File already exists. Updated access time for existing document.",
-                    "file_url": f"/api/files/{existing_doc['filename']}",
-                    "is_duplicate": True,
-                    "original_upload_date": existing_doc['upload_date']
-                }
+            upload_result = smart_upload_handler.handle_upload(
+                file_path, file.filename, user_id, persona, job
             )
-        else:
-            print(f"✅ New file processed: {file.filename}")
-            job_id = upload_result['document_id']
-            filename_with_id = upload_result['filename']
 
-            # Remove temporary file since smart handler already processed it
+            if upload_result['is_duplicate']:
+                print(f"🔄 Duplicate detected: {file.filename}")
+                existing_doc = upload_result['existing_document']
+
+                # Remove temporary file since we're using existing one
+                if file_path.exists():
+                    file_path.unlink()
+
+                # Return existing document info
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "job_id": existing_doc['id'],
+                        "filename": file.filename,
+                        "detail": f"File already exists. Updated access time for existing document.",
+                        "file_url": f"/api/files/{existing_doc['filename']}",
+                        "is_duplicate": True,
+                        "original_upload_date": existing_doc['upload_date']
+                    }
+                )
+            else:
+                print(f"✅ New file processed: {file.filename}")
+                job_id = upload_result['document_id']
+                filename_with_id = upload_result['filename']
+
+                # Remove temporary file since smart handler already processed it
+                if file_path.exists():
+                    file_path.unlink()
+                    print(f"🗑️ Removed temporary file: {file_path.name}")
+
+                print(f"✅ New document processed successfully: {filename_with_id}")
+
+                # Verify it was stored
+                if USE_SUPABASE:
+                    # For Supabase, we might need to check differently or trust it worked
+                    pass
+                else:
+                    all_docs = db.get_all_documents(client_id=user_id)
+                    print(f"📊 Total documents in database after upload: {len(all_docs)}")
+
+        except Exception as e:
+            print(f"⚠️ Smart upload handler failed: {e}")
+            raise e
+    else:
+        # Fallback: Direct upload without smart handler (for Supabase or when handler missing)
+        print(f"ℹ️ Smart upload handler not available, processing directly: {file.filename}")
+        
+        try:
+            # Create document record in DB
+            if USE_SUPABASE:
+                doc = db.create_document(
+                    user_id=user_id,
+                    filename=filename_with_id,
+                    original_name=file.filename,
+                    file_size=len(file_content),
+                    file_path=str(file_path),
+                    persona=persona,
+                    job_role=job
+                )
+                job_id = doc.id
+            else:
+                doc = db.create_document(
+                    filename=filename_with_id,
+                    original_name=file.filename,
+                    file_size=len(file_content),
+                    file_path=str(file_path),
+                    client_id=user_id,
+                    persona=persona,
+                    job_role=job
+                )
+                job_id = doc.id
+                
+            print(f"✅ New document created directly: {job_id}")
+            
+        except Exception as e:
+            print(f"❌ Failed to create document record: {e}")
             if file_path.exists():
                 file_path.unlink()
-                print(f"🗑️ Removed temporary file: {file_path.name}")
-
-            print(f"✅ New document processed successfully: {filename_with_id}")
-
-            # Verify it was stored
-            all_docs = db.get_all_documents(client_id=user_id)
-            print(f"📊 Total documents in database after upload: {len(all_docs)}")
+            raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
         # Start the background processing task for this file
         actual_file_path = DOCS_DIR / filename_with_id
@@ -557,17 +549,6 @@ async def upload_active_file(
             }
         )
 
-    except Exception as e:
-        print(f"❌ Failed to process document: {e}")
-        import traceback
-        traceback.print_exc()
-
-        # Clean up temporary file on error
-        if file_path.exists():
-            file_path.unlink()
-
-        raise HTTPException(status_code=500, detail=f"Upload processing failed: {str(e)}")
-
 
 @app.websocket("/ws/{client_id}")
 async def websocket_endpoint(websocket: WebSocket, client_id: str):
@@ -579,7 +560,6 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
     except WebSocketDisconnect:
         manager.disconnect(client_id)
         print(f"Client #{client_id} disconnected")
-
 
 # --- Frontend Serving ---
 @app.get("/")
@@ -626,40 +606,61 @@ async def get_recommendations(
 ):
     """Get related sections for a specific document and page with intelligent cross-document connections"""
     try:
+        # Import vector store and embedding service
+        import numpy as np
+        from .vector_store import get_vector_store
+        from .embedding_service import get_embedding_service
+
+        vector_store = get_vector_store()
+        embedding_service = get_embedding_service()
+
         # Query FAISS index for similar sections
-        if len(metadata) == 0:
+        if vector_store.index.ntotal == 0:
             return {"recommendations": [], "cross_document_sections": []}
+
+        # Build a cache of document names from database
+        doc_name_cache = {}
+        try:
+            all_docs = db.get_all_documents()
+            for doc in all_docs:
+                doc_name_cache[doc.id] = doc.original_name or doc.filename or f"Document {doc.id[:8]}"
+        except Exception as e:
+            print(f"⚠️ Could not fetch document names: {e}")
 
         # Get current page content (simplified - in production, extract actual page content)
         current_content = f"Page {page} content for document {document_id}"
-        
+
         # Enhanced query with persona and job context
         if persona and job:
             current_content += f" Context: {persona} working on {job}"
 
         # Encode query
-        query_embedding = get_sentence_transformer().encode(current_content)
+        query_embedding = embedding_service.generate_embedding(current_content)
 
         # Search FAISS index for semantic similarity
-        k = min(10, len(metadata))  # Get top 10 candidates
-        distances, indices = index.search(np.array([query_embedding]).astype('float32'), k)
+        k = min(10, vector_store.index.ntotal)  # Get top 10 candidates
+        distances, indices = vector_store.index.search(np.array([query_embedding]).astype('float32'), k)
 
         # Separate same-document and cross-document recommendations
         same_document_recommendations = []
         cross_document_recommendations = []
-        
+
         # Track unique documents for cross-document intelligence
         document_texts = {}
-        
+
         for i, idx in enumerate(indices[0]):
-            if idx < len(metadata):
-                meta = metadata[idx]
+            if idx < len(vector_store.metadata):
+                meta = vector_store.metadata[idx]
                 relevance = float(1.0 - distances[0][i])
-                
+
                 # Skip very low relevance matches
                 if relevance < 0.3:
                     continue
-                
+
+                # Get actual document name from cache or fallback
+                doc_id = meta['doc_id']
+                doc_name = doc_name_cache.get(doc_id, meta.get('filename', f"Document {doc_id[:8]}..."))
+
                 recommendation = {
                     "id": meta['id'],
                     "title": meta['heading'],
@@ -667,7 +668,7 @@ async def get_recommendations(
                     "page": meta['page'],
                     "relevance": relevance,
                     "documentId": meta['doc_id'],
-                    "documentName": f"Document {meta['doc_id']}",
+                    "documentName": doc_name,
                     "bbox": None,  # Will be populated by highlighting system
                     "file_path": meta.get('file_path', '')
                 }
@@ -793,6 +794,11 @@ async def get_insights(
         # Extract FULL PDF content for comprehensive AI analysis
         page_content = ""
         full_pdf_content = ""
+
+        # Import vector store for fallback content retrieval
+        from .vector_store import get_vector_store
+        vector_store = get_vector_store()
+
         try:
             import fitz  # PyMuPDF
 
@@ -842,7 +848,7 @@ COMPLETE DOCUMENT CONTENT:
             else:
                 print(f"⚠️ PDF file not found: {pdf_path}")
                 # Fallback: try to get content from FAISS metadata
-                matching_sections = [meta for meta in metadata if meta.get('doc_id') == document_id]
+                matching_sections = [meta for meta in vector_store.metadata if meta.get('doc_id') == document_id]
                 if matching_sections:
                     page_content = "\n".join([meta.get('text', '') for meta in matching_sections if meta.get('page') == page])
                     full_content = f"Page {page} Content:\n{page_content}"
@@ -1120,7 +1126,7 @@ class AskGPTRequest(BaseModel):
     job: str = None
 
 @app.post("/api/ask-gpt")
-async def ask_gpt(request: AskGPTRequest):
+async def ask_gpt(request: AskGPTRequest, current_user: dict = Depends(get_current_user)):
     """Get GPT response for selected text - Enhanced with new LLM service"""
     try:
         if not enhanced_llm_service:
@@ -1165,7 +1171,7 @@ class TextSelectionAnalysisRequest(BaseModel):
     include_cross_document: bool = True
 
 @app.post("/api/text-selection-analysis")
-async def analyze_text_selection(request: TextSelectionAnalysisRequest):
+async def analyze_text_selection(request: TextSelectionAnalysisRequest, current_user: dict = Depends(get_current_user)):
     """
     Core Hackathon Feature: Analyze selected text and find related sections across documents
     This is the main endpoint for the text selection → cross-document search flow
@@ -1174,8 +1180,16 @@ async def analyze_text_selection(request: TextSelectionAnalysisRequest):
         if not enhanced_llm_service:
             raise HTTPException(status_code=503, detail="Enhanced LLM service not available")
 
+        user_id = current_user["sub"]
+        
         # Get current document context
-        current_doc = db.get_document_by_id(request.document_id)
+        # Pass user_id if using Supabase
+        if USE_SUPABASE:
+             current_doc = db.get_document_by_id(request.document_id, user_id)
+        else:
+             # Should not happen in Supabase only mode
+             current_doc = None
+            
         if not current_doc:
             raise HTTPException(status_code=404, detail="Document not found")
 
@@ -1190,54 +1204,53 @@ async def analyze_text_selection(request: TextSelectionAnalysisRequest):
         cross_document_sections = []
 
         if request.include_cross_document:
-            # Get all indexed sections for cross-document search
-            all_sections = []
+            try:
+                # Use RAG Service for search
+                rag_service = get_rag_service()
+                
+                # Search for similar chunks
+                search_results = await rag_service.search_documents(
+                    query=request.selected_text,
+                    top_k=20,  # Get more candidates for LLM filtering
+                    user_id=user_id
+                )
+                
+                # Prepare sections for LLM analysis
+                candidate_sections = []
+                for i, res in enumerate(search_results):
+                    # Fetch document name if missing (SearchResult might not have it if not in metadata)
+                    doc_name = "Unknown Document"
+                    if res.metadata and 'document_name' in res.metadata:
+                        doc_name = res.metadata['document_name']
+                    elif res.document_id == request.document_id:
+                        doc_name = current_doc.original_name
+                    
+                    candidate_sections.append({
+                        "section_id": i,
+                        "document_id": res.document_id,
+                        "document_name": doc_name,
+                        "title": res.metadata.get("section_title", "Untitled") if res.metadata else "Untitled",
+                        "content": res.chunk_text,
+                        "page": res.page_number,
+                        "faiss_score": res.similarity_score
+                    })
 
-            # Query FAISS index for similar sections
-            if len(metadata) > 0:
-                try:
-                    # Use existing FAISS search logic but enhance with LLM
-                    import numpy as np
-                    from sentence_transformers import SentenceTransformer
+                # Use LLM to find truly related sections
+                related_sections = await enhanced_llm_service.find_related_sections(
+                    request.selected_text, candidate_sections, request.persona, request.job, max_results=5
+                )
 
-                    # Get embedding for selected text
-                    query_embedding = get_sentence_transformer().encode([selected_text])
+                # Separate current document vs cross-document sections
+                for section in related_sections:
+                    if section.get("document_id") == request.document_id:
+                        # Same document - add to related sections
+                        pass  # Could add same-document sections here
+                    else:
+                        # Different document - add to cross-document sections
+                        cross_document_sections.append(section)
 
-                    # Search FAISS index
-                    k = min(20, len(metadata))  # Get more candidates for LLM filtering
-                    distances, indices = index.search(query_embedding.astype('float32'), k)
-
-                    # Prepare sections for LLM analysis
-                    candidate_sections = []
-                    for i, idx in enumerate(indices[0]):
-                        if idx < len(metadata):
-                            section_data = metadata[idx]
-                            candidate_sections.append({
-                                "section_id": i,
-                                "document_id": section_data.get("document_id"),
-                                "document_name": section_data.get("document_name"),
-                                "title": section_data.get("section_title", "Untitled"),
-                                "content": section_data.get("text", ""),
-                                "page": section_data.get("page", 1),
-                                "faiss_score": float(1.0 / (1.0 + distances[0][i]))  # Convert distance to similarity
-                            })
-
-                    # Use LLM to find truly related sections
-                    related_sections = await enhanced_llm_service.find_related_sections(
-                        request.selected_text, candidate_sections, request.persona, request.job, max_results=5
-                    )
-
-                    # Separate current document vs cross-document sections
-                    for section in related_sections:
-                        if section.get("document_id") == request.document_id:
-                            # Same document - add to related sections
-                            pass  # Could add same-document sections here
-                        else:
-                            # Different document - add to cross-document sections
-                            cross_document_sections.append(section)
-
-                except Exception as e:
-                    print(f"Error in cross-document search: {e}")
+            except Exception as e:
+                print(f"Error in cross-document search: {e}")
 
         # Generate insights bulb content
         insights_bulb = await enhanced_llm_service.generate_insights_bulb(
@@ -1266,19 +1279,26 @@ async def analyze_text_selection(request: TextSelectionAnalysisRequest):
 
 
 @app.post("/api/ask-gemini-selection")
-async def ask_gemini_selection(request: dict):
+async def ask_gemini_selection(request: dict, current_user: dict = Depends(get_current_user)):
     """Ask Gemini to explain selected text with context"""
     try:
         document_id = request.get('document_id')
         selected_text = request.get('selected_text', '')
         page = request.get('page', 1)
         context_chars = request.get('context_chars', 500)
+        
+        user_id = current_user["sub"]
 
         if not document_id or not selected_text:
             return {"error": "Missing document_id or selected_text"}
 
         # Get document
-        document = db.get_document_by_id(document_id)
+        if USE_SUPABASE:
+            document = db.get_document_by_id(document_id, user_id)
+        else:
+             # Should not happen
+            document = None
+            
         if not document:
             return {"error": "Document not found"}
 
@@ -1367,24 +1387,29 @@ async def generate_podcast(
 
         # Get related sections if requested
         related_sections = []
-        if include_related and len(metadata) > 0:
+        if include_related:
             try:
                 import numpy as np
-                from sentence_transformers import SentenceTransformer
+                from .vector_store import get_vector_store
+                from .embedding_service import get_embedding_service
 
-                query_embedding = get_sentence_transformer().encode([content[:500]])  # Use first 500 chars
+                vector_store = get_vector_store()
+                embedding_service = get_embedding_service()
 
-                k = min(5, len(metadata))
-                distances, indices = index.search(query_embedding.astype('float32'), k)
+                if vector_store.index.ntotal > 0:
+                    query_embedding = embedding_service.generate_embedding(content[:500])  # Use first 500 chars
 
-                for i, idx in enumerate(indices[0]):
-                    if idx < len(metadata):
-                        section_data = metadata[idx]
-                        related_sections.append({
-                            "title": section_data.get("section_title", "Section"),
-                            "content": section_data.get("text", "")[:200],
-                            "document_name": section_data.get("document_name", "Document")
-                        })
+                    k = min(5, vector_store.index.ntotal)
+                    distances, indices = vector_store.index.search(np.array([query_embedding]).astype('float32'), k)
+
+                    for i, idx in enumerate(indices[0]):
+                        if idx < len(vector_store.metadata):
+                            section_data = vector_store.metadata[idx]
+                            related_sections.append({
+                                "title": section_data.get("section_title", section_data.get("heading", "Section")),
+                                "content": section_data.get("text", "")[:200],
+                                "document_name": section_data.get("document_name", "Document")
+                            })
             except Exception as e:
                 print(f"Error getting related sections for podcast: {e}")
 
@@ -1694,103 +1719,259 @@ async def merge_documents(request: Request):
         raise HTTPException(status_code=500, detail=f"Failed to merge documents: {str(e)}")
 
 
+# Library Statistics Endpoint for Chatbot Context
+@app.get("/api/library/statistics")
+async def get_library_statistics(current_user: dict = Depends(get_optional_user)):
+    """
+    Get library statistics for chatbot context
+    Returns document counts, types, and recent activity
+    """
+    try:
+        user_id = current_user.get("sub") if current_user else "anonymous"
+        
+        # Import context builder
+        from .context_builder import build_library_context
+        
+        # Build library context
+        context = await build_library_context(db=db, user_id=user_id)
+        
+        return {
+            "success": True,
+            **context,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting library statistics: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get library statistics: {str(e)}")
+
+
 # Chat endpoint for AI assistant
 class ChatRequest(BaseModel):
     message: str
     document_id: Optional[str] = None
-    document_context: Optional[str] = None
+    current_page: Optional[int] = None  # NEW: Current page number in PDF viewer
+    context_type: str = "library"  # NEW: "library" or "pdf_viewer"
     conversation_history: Optional[List[Dict[str, str]]] = []
+    session_id: Optional[str] = None  # NEW: Chat session ID for history tracking
 
 @app.post("/api/chat")
-async def chat_endpoint(request: ChatRequest):
+async def chat_endpoint(
+    request: ChatRequest,
+    current_user: dict = Depends(get_optional_user)
+):
     """
-    Handle chat messages with AI assistant using RAG
-    Supports document-aware conversations with semantic search
+    Handle chat messages with AI assistant using context-aware RAG
+    Supports library and PDF viewer contexts with semantic search
     """
     try:
         if not llm_provider:
             raise HTTPException(status_code=503, detail="LLM service not available")
 
-        # Import RAG service
+        # Get user ID (optional for unauthenticated access)
+        user_id = current_user.get("sub") if current_user else "00000000-0000-0000-0000-000000000000"
+        
+        # DEBUG LOGGING
+        with open("backend_debug.log", "a", encoding="utf-8") as f:
+            f.write(f"\n--- Request at {datetime.now().isoformat()} ---\n")
+            f.write(f"User ID: {user_id}\n")
+            f.write(f"Message: {request.message}\n")
+            f.write(f"Context Type: {request.context_type}\n")
+
+        print(f"👤 User ID: {user_id}")
+        
+        # Import context builder and RAG service  
+        from .context_builder import build_library_context, build_pdf_context, build_enriched_messages, search_library_documents
         from .rag_service import get_rag_service
-        rag_service = get_rag_service()
+        from .chat_history import get_chat_history_manager
         
-        # Check if RAG should be used (if document_id is provided or question needs context)
-        use_rag = request.document_id is not None
+        # Initialize chat history manager
+        chat_mgr = get_chat_history_manager()
         
-        if use_rag:
-            print(f"🔍 Using RAG for question: {request.message[:100]}...")
+        # Create or get session
+        session_id = request.session_id
+        if not session_id:
+            print("🆕 Creating new chat session...")
+            session_id = await chat_mgr.create_session(
+                user_id=user_id,
+                title=request.message[:50] + "..." if len(request.message) > 50 else request.message,
+                context_type=request.context_type
+            )
+            print(f"✅ Session created: {session_id}")
+        
+        # Save user message
+        print("💾 Saving user message...")
+        await chat_mgr.save_message(
+            user_id=user_id,
+            session_id=session_id,
+            role="user",
+            content=request.message
+        )
+        print("✅ User message saved")
+        
+        # Build context based on context_type
+        print(f"📍 Context type: {request.context_type}")
+        
+        if request.context_type == "pdf_viewer" and request.document_id:
+            # PDF viewer context
+            print(f"📄 Building PDF context for document: {request.document_id}, page: {request.current_page}")
+            context = await build_pdf_context(
+                db=db,
+                user_id=user_id,
+                document_id=request.document_id,
+                current_page=request.current_page
+            )
             
-            # Use RAG to generate response
+            # Use RAG for PDF-specific questions
+            rag_service = get_rag_service()
             rag_result = await rag_service.generate_rag_response(
                 query=request.message,
                 llm_provider=llm_provider,
                 document_id=request.document_id,
+                user_id=user_id,
                 top_k=5,
-                max_tokens=500
+                max_tokens=500,
+                conversation_history=request.conversation_history
+            )
+            
+            response_text = rag_result['response']
+            sources = rag_result.get('sources', [])
+
+            # Fetch cross-document suggestions for the "Related in Library" feature
+            cross_doc_suggestions = []
+            try:
+                # Search for related content in OTHER documents
+                cross_results = await rag_service.search_documents(
+                    query=request.message,
+                    top_k=3,
+                    document_id=None,  # Search all documents
+                    user_id=user_id,
+                    llm_provider=None,
+                    use_advanced_rag=False
+                )
+
+                # Filter out results from current document and format
+                doc_name_cache = {}
+                try:
+                    all_docs = db.get_all_documents(user_id)
+                    for doc in all_docs:
+                        doc_name_cache[doc.id] = doc.original_name or doc.filename or f"Document"
+                except:
+                    pass
+
+                for result in cross_results:
+                    if result.document_id != request.document_id:
+                        cross_doc_suggestions.append({
+                            'document_id': result.document_id,
+                            'document_name': doc_name_cache.get(result.document_id, 'Document'),
+                            'page_number': result.page_number or 1,
+                            'text': result.chunk_text[:150] + '...' if len(result.chunk_text) > 150 else result.chunk_text,
+                            'similarity': round(result.similarity_score, 3) if result.similarity_score else 0.5
+                        })
+            except Exception as e:
+                print(f"⚠️ Could not fetch cross-document suggestions: {e}")
+
+            # Save assistant message to history
+            await chat_mgr.save_message(
+                user_id=user_id,
+                session_id=session_id,
+                role="assistant",
+                content=response_text,
+                metadata={'sources': sources, 'context_type': 'pdf_viewer'}
             )
             
             return {
-                "response": rag_result['response'],
-                "sources": rag_result.get('sources', []),
-                "has_context": rag_result.get('has_context', False),
-                "num_sources": rag_result.get('num_sources', 0),
+                "response": response_text,
+                "sources": sources,
+                "context": context,
+                "has_context": True,
                 "success": True,
-                "timestamp": datetime.now().isoformat()
+                "session_id": session_id,
+                "timestamp": datetime.now().isoformat(),
+                "related_documents": cross_doc_suggestions  # Cross-document related content
             }
-        
+            
         else:
-            # Fallback to regular chat without RAG
-            print(f"💬 Regular chat (no RAG): {request.message[:100]}...")
+            # Library context
+            print(f"📚 Building library context for user: {user_id}")
+            context = await build_library_context(db=db, user_id=user_id)
+            print("✅ Library context built")
             
-            # Build context from document if provided
-            context = ""
-            if request.document_context:
-                context += f"\nDocument Context: {request.document_context}\n"
-
-            # Build conversation messages for LLM
-            messages = []
+            # DEBUG LOGGING
+            with open("backend_debug.log", "a", encoding="utf-8") as f:
+                f.write(f"Library Context Stats: {context.get('statistics')}\n")
+                f.write(f"Doc Summaries: {len(context.get('document_summaries', []))}\n")
             
-            # System message
-            system_msg = "You are a helpful AI assistant. "
-            if context:
-                system_msg += f"Context: {context}"
-            system_msg += "Provide clear, concise, and helpful responses."
+            # NEW: Perform library-wide search for relevant content
+            print("🔍 Searching library documents...")
+            search_results = await search_library_documents(
+                query_text=request.message,
+                user_id=user_id,
+                top_k=5
+            )
+            print(f"✅ Search completed. Found {len(search_results)} results")
             
-            messages.append({"role": "system", "content": system_msg})
+            # Add search results to context
+            if search_results:
+                context['search_results'] = search_results
             
-            # Add conversation history (last 5 messages to keep context manageable)
-            if request.conversation_history:
-                for msg in request.conversation_history[-5:]:
-                    messages.append({
-                        "role": msg.get("role", "user"),
-                        "content": msg.get("content", "")
-                    })
+            # Build enriched messages with library context
+            enriched_messages = build_enriched_messages(
+                user_message=request.message,
+                context=context,
+                conversation_history=request.conversation_history or []
+            )
             
-            # Add current user message
-            messages.append({"role": "user", "content": request.message})
-
-            # Get response from LLM using the chat_with_llm module
-            from .chat_with_llm import get_llm_response
-            response_text = get_llm_response(messages)
-
+            # Get LLM response
+            print("🤖 Calling LLM (via LangChain Provider)...")
+            # Uses the globally initialized llm_provider which has LangChain + Fallback
+            response_text = await llm_provider.generate_chat_response(enriched_messages)
+            print("✅ LLM response received")
+            
+            # Save assistant message to history
+            await chat_mgr.save_message(
+                user_id=user_id,
+                session_id=session_id,
+                role="assistant",
+                content=response_text,
+                metadata={'search_results': search_results, 'context_type': 'library'}
+            )
+            
             return {
                 "response": response_text,
-                "sources": [],
-                "has_context": False,
+                "context": context,
+                "has_context": True,
                 "success": True,
+                "session_id": session_id,
                 "timestamp": datetime.now().isoformat()
             }
-
+    
     except Exception as e:
-        print(f"❌ Chat error: {e}")
+        print(f"❌ Chat endpoint error: {e}")
         import traceback
         traceback.print_exc()
-        # Return a fallback response instead of raising error
+        
+        # Log to file for debugging
+        with open("backend_error.log", "a", encoding="utf-8") as f:
+            f.write(f"\n\n--- Error at {datetime.now().isoformat()} ---\n")
+            f.write(f"Error: {str(e)}\n")
+            f.write(traceback.format_exc())
+        
+        # Fallback response
+        # Fallback response with specific error if safe
+        error_msg = str(e)
+        user_msg = "I apologize, but I encountered an error processing your request."
+        
+        # Check for known safe error messages to show to user
+        safe_errors = ["quota", "429", "resourceexhausted", "invalidargument", "context window", "api key"]
+        if any(err in error_msg.lower() for err in safe_errors):
+             user_msg = f"Service Error: {error_msg}"
+        
         return {
-            "response": "I apologize, but I'm having trouble processing your request right now. Please try again or rephrase your question.",
+            "response": user_msg,
+            "error": error_msg,
             "success": False,
-            "error": str(e)
+            "timestamp": datetime.now().isoformat()
         }
 
 
@@ -1800,57 +1981,6 @@ async def process_document_for_rag(document_id: str):
     """
     Process a single document for RAG
     Chunks, embeds, and stores in vector database
-    """
-    try:
-        from .rag_service import get_rag_service
-        rag_service = get_rag_service()
-        
-        # Get document
-        document = db.get_document_by_id(document_id)
-        if not document:
-            raise HTTPException(status_code=404, detail="Document not found")
-        
-        # Check if file exists
-        file_path = Path(document.file_path)
-        if not file_path.exists():
-            raise HTTPException(status_code=404, detail="PDF file not found")
-        
-        # Process document
-        result = await rag_service.process_document(
-            document_id=document_id,
-            pdf_path=str(file_path),
-            batch_size=32
-        )
-        
-        return result
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"❌ Error processing document for RAG: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/api/rag/stats")
-async def get_rag_stats():
-    """Get RAG system statistics"""
-    try:
-        from .rag_service import get_rag_service
-        rag_service = get_rag_service()
-        
-        stats = rag_service.get_stats()
-        return stats
-        
-    except Exception as e:
-        print(f"❌ Error getting RAG stats: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/api/rag/process-all")
-async def process_all_documents_for_rag():
-    """
-    Process all documents in database for RAG
-    Warning: This can take a while for large document collections
     """
     try:
         from .rag_service import get_rag_service

@@ -10,12 +10,8 @@ from pathlib import Path
 from typing import Dict, Optional, Tuple
 from datetime import datetime
 import logging
-try:
-    from .duplicate_cleanup_system import DuplicateCleanupSystem
-    from .database import db
-except ImportError:
-    from duplicate_cleanup_system import DuplicateCleanupSystem
-    from database import db
+from .duplicate_cleanup_system import DuplicateCleanupSystem
+from .database import db
 
 logger = logging.getLogger(__name__)
 

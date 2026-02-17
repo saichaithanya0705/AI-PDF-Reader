@@ -11,12 +11,14 @@ from typing import Dict, List, Optional, Any
 import openai
 import requests
 from pydantic import BaseModel
-from .chat_with_llm import get_llm_response
+from langchain.chat_models import init_chat_model
+from langchain_core.messages import HumanMessage, SystemMessage
 
-# Lazy imports for google.generativeai to avoid version conflicts
+# Lazy imports for optional providers
 genai = None
 vertexai = None
 GenerativeModel = None
+anthropic = None
 
 
 class LLMResponse(BaseModel):
@@ -46,85 +48,126 @@ class LLMProvider(ABC):
         """Find semantically related sections across documents"""
         pass
 
+    @abstractmethod
+    async def generate_chat_response(self, messages: List[Dict[str, str]]) -> str:
+        """Generate a chat response from a list of messages (role, content)"""
+        pass
+
+    
+    # Removed separate AnthropicProvider class as it's now handled by LangChain fallback logic above
+
+
 
 class GeminiProvider(LLMProvider):
     def __init__(self):
-        # Import genai here to avoid module-level import errors
-        global genai, vertexai, GenerativeModel
+        # Initialize primary model (Gemini) via LangChain with explicit API key
+        self.model_name = os.getenv('GEMINI_MODEL', 'gemini-2.5-flash')
+        self.api_key = os.getenv('GOOGLE_API_KEY')
+
+        try:
+            if self.api_key:
+                # Use ChatGoogleGenerativeAI directly with API key
+                from langchain_google_genai import ChatGoogleGenerativeAI
+                self.model = ChatGoogleGenerativeAI(
+                    model=self.model_name,
+                    google_api_key=self.api_key,
+                    temperature=0.7
+                )
+                print(f"✅ Gemini initialized via LangChain: {self.model_name}")
+            else:
+                print("⚠️ GOOGLE_API_KEY not set, Gemini will not be available")
+                self.model = None
+        except Exception as e:
+            print(f"⚠️ Gemini initialization failed: {e}")
+            self.model = None
+
+        # Initialize fallback provider (Anthropic) via LangChain
+        self.fallback_model = None
+        if os.getenv('ANTHROPIC_API_KEY'):
+            try:
+                fallback_name = os.getenv('ANTHROPIC_MODEL', 'claude-3-haiku-20240307')
+                self.fallback_model = init_chat_model(fallback_name, model_provider="anthropic")
+                print(f"✅ Fallback provider (Anthropic) initialized: {fallback_name}")
+            except Exception as e:
+                print(f"⚠️ Failed to initialize fallback provider: {e}")
+
+        # Keep raw imports for PDF-specific multimodal features if needed
+        # (Legacy support for generate_insights_from_pdf)
+        global genai
         try:
             import google.generativeai as genai
-        except ImportError:
-            print("⚠️ google-generativeai not available")
-            genai = None
-        
-        try:
-            import vertexai as vertex_module
-            from vertexai.generative_models import GenerativeModel as GenModel
-            vertexai = vertex_module
-            GenerativeModel = GenModel
-        except (ImportError, Exception) as e:
-            print(f"⚠️ vertexai not available: {e}")
-            vertexai = None
-            GenerativeModel = None
-        
-        # Configure Gemini using Vertex AI
-        credentials_path = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
-        project_id = os.getenv('GOOGLE_CLOUD_PROJECT', 'your-project-id')
-        location = os.getenv('GOOGLE_CLOUD_LOCATION', 'us-central1')
-        
-        try:
-            if credentials_path and vertexai:
-                # Set credentials environment variable
-                os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = credentials_path
-                
-                # Initialize Vertex AI
-                vertexai.init(project=project_id, location=location)
-                
-                self.model_name = os.getenv('GEMINI_MODEL', 'gemini-2.0-flash')
-                self.model = GenerativeModel(self.model_name)
-                print(f"✅ Vertex AI Gemini initialized: {self.model_name}")
-            else:
-                raise Exception("Vertex AI not available, using fallback")
-            
-        except Exception as e:
-            print(f"⚠️ Vertex AI initialization failed, falling back to genai: {e}")
-            # Fallback to direct genai configuration
-            if credentials_path:
-                with open(credentials_path, 'r') as f:
-                    credentials = json.load(f)
-                genai.configure(api_key=credentials.get('api_key'))
-            
-            self.model_name = os.getenv('GEMINI_MODEL', 'gemini-1.5-flash')
-            self.model = genai.GenerativeModel(self.model_name)
-            self.use_vertex = False
-        else:
-            self.use_vertex = True
-    
+            self.raw_genai = genai
+            # Use GOOGLE_API_KEY directly instead of credentials file
+            if self.api_key:
+                genai.configure(api_key=self.api_key)
+        except:
+            self.raw_genai = None
+
     async def generate_text(self, prompt: str, max_tokens: int = 1000) -> LLMResponse:
         try:
-            if hasattr(self, 'use_vertex') and self.use_vertex:
-                # Use Vertex AI
-                response = await asyncio.to_thread(
-                    self.model.generate_content,
-                    prompt
-                )
+            # Try primary model
+            if self.model:
+                response = await self.model.ainvoke(prompt)
                 return LLMResponse(
-                    content=response.text,
+                    content=str(response.content),
                     model=self.model_name
                 )
             else:
-                # Use genai fallback with simple config
-                response = await asyncio.to_thread(
-                    self.model.generate_content,
-                    prompt
-                )
-                return LLMResponse(
-                    content=response.text,
-                    model=self.model_name
-                )
+                raise Exception("Gemini model not initialized")
         except Exception as e:
-            raise Exception(f"Gemini API error: {str(e)}")
-    
+            # Try fallback
+            if self.fallback_model:
+                print(f"❌ Gemini error: {e}. 🔄 Trying fallback to Anthropic...")
+                response = await self.fallback_model.ainvoke(prompt)
+                return LLMResponse(
+                    content=str(response.content),
+                    model=os.getenv('ANTHROPIC_MODEL', 'claude-3-haiku')
+                )
+            
+            print(f"❌ LLM API error: {e}")
+            raise Exception(f"All LLM providers failed: {str(e)}")
+
+    async def generate_chat_response(self, messages: List[Dict[str, str]]) -> str:
+        """Generate response handling either list of dicts or LangChain messages"""
+        try:
+            # Convert dict messages to LangChain messages if needed
+            langchain_messages = []
+            for msg in messages:
+                if isinstance(msg, dict):
+                    if msg.get("role") == "user":
+                        langchain_messages.append(HumanMessage(content=msg.get("content", "")))
+                    elif msg.get("role") == "system":
+                        langchain_messages.append(SystemMessage(content=msg.get("content", "")))
+                    elif msg.get("role") == "assistant":
+                        # LangChain doesn't have a simple "AssistantMessage" alias in core but AIMessage exists
+                        from langchain_core.messages import AIMessage
+                        langchain_messages.append(AIMessage(content=msg.get("content", "")))
+                else:
+                    # Assume it's already a LangChain message/object
+                    langchain_messages.append(msg)
+
+            # Try primary model
+            if self.model:
+                response = await self.model.ainvoke(langchain_messages)
+                return str(response.content)
+            else:
+                raise Exception("Gemini model not initialized")
+                
+        except Exception as e:
+            # Try fallback
+            if self.fallback_model:
+                print(f"❌ Gemini chat error: {e}. 🔄 Trying fallback to Anthropic...")
+                # Fallback needs string or messages. Anthropic via LangChain supports messages.
+                try:
+                    response = await self.fallback_model.ainvoke(langchain_messages)
+                    return str(response.content)
+                except Exception as fallback_error:
+                    print(f"❌ Fallback failed: {fallback_error}")
+                    raise fallback_error
+            
+            print(f"❌ LLM API error: {e}")
+            raise Exception(f"All LLM providers failed: {str(e)}")
+
     async def generate_insights_from_pdf(self, pdf_path: str, page: int, persona: str, job: str) -> List[Dict[str, Any]]:
         """Generate insights by sending the actual PDF file to Gemini (multimodal)"""
         try:
@@ -302,6 +345,7 @@ class GeminiProvider(LLMProvider):
         except:
             return [{"type": "key-insight", "title": "Content Analysis", "content": response.content[:200], "relevance": 0.8}]
     
+
     async def generate_insights(self, content: str, persona: str, job: str) -> List[Dict[str, Any]]:
         # Use more content for comprehensive analysis (up to 10k characters for better context)
         content_limit = min(len(content), 10000)
@@ -331,13 +375,19 @@ class GeminiProvider(LLMProvider):
         [{{"type": "key-insight", "title": "Document-Wide Insight", "content": "Insight based on complete analysis", "relevance": 0.95}}, ...]
         """
         
-        response = await self.generate_text(prompt, 1200)
         try:
-            insights_data = json.loads(response.content)
-            # Ensure we have exactly 4 insights as per Adobe requirements
-            return insights_data[:4] if len(insights_data) >= 4 else insights_data
-        except:
-            return [{"type": "key-insight", "title": "Analysis", "content": response.content, "relevance": 0.8}]
+            response = await self.generate_text(prompt, 1200)
+            try:
+                insights_data = json.loads(response.content)
+                # Ensure we have exactly 4 insights as per Adobe requirements
+                return insights_data[:4] if len(insights_data) >= 4 else insights_data
+            except:
+                return [{"type": "key-insight", "title": "Analysis", "content": response.content, "relevance": 0.8}]
+        except Exception as e:
+            if self.fallback_provider:
+                print(f"❌ Gemini error: {e}. 🔄 Trying fallback to Anthropic...")
+                return await self.fallback_provider.generate_insights(content, persona, job)
+            raise e
 
     async def generate_snippets(self, selected_text: str, related_sections: List[Dict], persona: str, job: str) -> List[Dict[str, Any]]:
         """Generate 2-4 sentence snippets from related sections"""

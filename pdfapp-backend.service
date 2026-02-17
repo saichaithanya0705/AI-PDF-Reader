@@ -1,0 +1,18 @@
+[Unit]
+Description=PDF Intelligence Backend Service
+After=network.target
+
+[Service]
+Type=simple
+User=pdfapp
+Group=pdfapp
+WorkingDirectory=/var/www/pdfapp
+Environment="PATH=/var/www/pdfapp/venv/bin:/usr/bin"
+ExecStart=/var/www/pdfapp/venv/bin/python /var/www/pdfapp/run_app.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

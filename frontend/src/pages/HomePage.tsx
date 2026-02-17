@@ -74,7 +74,7 @@ const HomePage: React.FC = () => {
 
   const [clientId, setClientId] = useState<string>('');
   const [wsStatus, setWsStatus] = useState<'connecting' | 'connected' | 'disconnected' | 'error'>('disconnected');
-  const [uploadProgress, setUploadProgress] = useState<{[key: string]: {percent: number, message: string}}>({});
+  const [uploadProgress, setUploadProgress] = useState<{ [key: string]: { percent: number, message: string } }>({});
 
   // Generate clientId on mount and load saved persona/job
   useEffect(() => {
@@ -130,7 +130,7 @@ const HomePage: React.FC = () => {
       if (!isComponentMounted) return;
 
       try {
-  const BACKEND_WS_URL = WS_URL;
+        const BACKEND_WS_URL = WS_URL;
         console.log(`📡 Connecting WebSocket for client: ${clientId}`);
         setWsStatus('connecting');
 
@@ -294,7 +294,7 @@ const HomePage: React.FC = () => {
     if (docExists) {
       try {
         // Track document open in backend
-  await fetch(`${API_URL}/api/documents/${documentId}/open`, {
+        await fetch(`${API_URL}/api/documents/${documentId}/open`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -327,7 +327,7 @@ const HomePage: React.FC = () => {
   const [splitDocumentName, setSplitDocumentName] = useState<string>('');
   const [splitDocumentPages, setSplitDocumentPages] = useState<number>(0);
   const [numSplits, setNumSplits] = useState<number>(2);
-  const [splitRanges, setSplitRanges] = useState<Array<{name: string, startPage: number, endPage: number}>>([]);
+  const [splitRanges, setSplitRanges] = useState<Array<{ name: string, startPage: number, endPage: number }>>([]);
   const [isSplitting, setIsSplitting] = useState(false);
   const quickActionsRef = useRef<HTMLDivElement | null>(null);
 
@@ -340,23 +340,23 @@ const HomePage: React.FC = () => {
   const clearDocuments = async () => {
     try {
       console.log('🗑️ Clearing all documents');
-      
+
       // Ask for confirmation
       const confirmed = window.confirm(
         `Are you sure you want to delete all documents?\n\n` +
         `This will delete ${documents.length} document(s).\n\n` +
         `This action cannot be undone.`
       );
-      
+
       if (!confirmed) return;
 
       // Use the backend API to delete all documents
       await deleteAllDocuments(false); // false = soft delete
-      
+
       // Clear select mode state
       setSelectedDocuments([]);
       setIsSelectMode(false);
-      
+
       console.log('✅ All documents cleared successfully');
     } catch (error) {
       console.error('❌ Failed to clear all documents:', error);
@@ -665,7 +665,7 @@ const HomePage: React.FC = () => {
   const safeGetTime = (dateField: Date | string | null | undefined): number => {
     try {
       if (!dateField) return 0;
-      
+
       let date: Date;
       if (dateField instanceof Date) {
         date = dateField;
@@ -674,7 +674,7 @@ const HomePage: React.FC = () => {
       } else {
         return 0;
       }
-      
+
       return isNaN(date.getTime()) ? 0 : date.getTime();
     } catch (error) {
       console.warn('Error parsing date:', dateField, error);
@@ -832,10 +832,10 @@ const HomePage: React.FC = () => {
     if (newName && newName.trim() && newName.trim() !== document.name) {
       try {
         console.log('✏️ Renaming document:', id, 'to:', newName.trim());
-        
+
         // Use the backend API
         await renameDocument(id, newName.trim());
-        
+
         console.log('✅ Document renamed successfully');
       } catch (error) {
         console.error('❌ Failed to rename document:', error);
@@ -904,17 +904,16 @@ const HomePage: React.FC = () => {
 
               {/* WebSocket Status Indicator */}
               <div className="flex items-center gap-2 bg-slate-800/50 backdrop-blur rounded-full px-3 py-1 border border-slate-600">
-                <div className={`w-2 h-2 rounded-full ${
-                  wsStatus === 'connected' ? 'bg-green-400 animate-pulse' :
-                  wsStatus === 'connecting' ? 'bg-yellow-400 animate-pulse' :
-                  wsStatus === 'error' ? 'bg-red-400' :
-                  'bg-slate-500'
-                }`}></div>
+                <div className={`w-2 h-2 rounded-full ${wsStatus === 'connected' ? 'bg-green-400 animate-pulse' :
+                    wsStatus === 'connecting' ? 'bg-yellow-400 animate-pulse' :
+                      wsStatus === 'error' ? 'bg-red-400' :
+                        'bg-slate-500'
+                  }`}></div>
                 <span className="text-xs text-slate-400">
                   {wsStatus === 'connected' ? 'Live' :
-                   wsStatus === 'connecting' ? 'Connecting...' :
-                   wsStatus === 'error' ? 'Error' :
-                   'Offline'}
+                    wsStatus === 'connecting' ? 'Connecting...' :
+                      wsStatus === 'error' ? 'Error' :
+                        'Offline'}
                 </span>
               </div>
             </div>
@@ -965,7 +964,7 @@ const HomePage: React.FC = () => {
                 </button>
               </div>
             )}
-            
+
             {/* Feature Pills */}
             <div className="flex flex-wrap justify-center gap-4 mb-8">
               {[
@@ -1044,7 +1043,7 @@ const HomePage: React.FC = () => {
                 </button>
                 {showBulkUpload && (
                   <div className="mt-6">
-                    <UploadZone 
+                    <UploadZone
                       onFileSelect={handleMultipleUpload}
                       multiple={true}
                       className="border-2 border-dashed border-purple-400/30 hover:border-purple-400/60 transition-colors"
@@ -1234,9 +1233,8 @@ const HomePage: React.FC = () => {
 
                   <button
                     onClick={() => { setSortType('recentlyUploaded'); setShowSortMenu(false); }}
-                    className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-700 transition-colors flex items-center gap-3 ${
-                      sortType === 'recentlyUploaded' ? 'text-blue-400 bg-slate-700' : 'text-slate-300'
-                    }`}
+                    className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-700 transition-colors flex items-center gap-3 ${sortType === 'recentlyUploaded' ? 'text-blue-400 bg-slate-700' : 'text-slate-300'
+                      }`}
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
@@ -1247,9 +1245,8 @@ const HomePage: React.FC = () => {
 
                   <button
                     onClick={() => { setSortType('recentlyOpened'); setShowSortMenu(false); }}
-                    className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-700 transition-colors flex items-center gap-3 ${
-                      sortType === 'recentlyOpened' ? 'text-blue-400 bg-slate-700' : 'text-slate-300'
-                    }`}
+                    className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-700 transition-colors flex items-center gap-3 ${sortType === 'recentlyOpened' ? 'text-blue-400 bg-slate-700' : 'text-slate-300'
+                      }`}
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -1261,9 +1258,8 @@ const HomePage: React.FC = () => {
 
                   <button
                     onClick={() => { setSortType('nameAZ'); setShowSortMenu(false); }}
-                    className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-700 transition-colors flex items-center gap-3 ${
-                      sortType === 'nameAZ' ? 'text-blue-400 bg-slate-700' : 'text-slate-300'
-                    }`}
+                    className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-700 transition-colors flex items-center gap-3 ${sortType === 'nameAZ' ? 'text-blue-400 bg-slate-700' : 'text-slate-300'
+                      }`}
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
@@ -1274,9 +1270,8 @@ const HomePage: React.FC = () => {
 
                   <button
                     onClick={() => { setSortType('size'); setShowSortMenu(false); }}
-                    className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-700 transition-colors flex items-center gap-3 ${
-                      sortType === 'size' ? 'text-blue-400 bg-slate-700' : 'text-slate-300'
-                    }`}
+                    className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-700 transition-colors flex items-center gap-3 ${sortType === 'size' ? 'text-blue-400 bg-slate-700' : 'text-slate-300'
+                      }`}
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
@@ -1288,7 +1283,7 @@ const HomePage: React.FC = () => {
               )}
             </div>
           </div>
-          
+
           {isLoadingDocuments ? (
             <div className="text-center py-12 bg-slate-800 rounded-lg border border-slate-700">
               <div className="animate-spin w-8 h-8 border-2 border-cyan-400 border-t-transparent rounded-full mx-auto mb-4"></div>
@@ -1545,6 +1540,7 @@ const HomePage: React.FC = () => {
       <SimpleChatbot
         isMinimized={!showChatbot}
         onToggleMinimize={() => setShowChatbot(!showChatbot)}
+        viewType="library"
       />
     </div>
   );

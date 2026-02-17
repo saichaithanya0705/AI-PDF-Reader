@@ -80,6 +80,7 @@ def get_llm_response(messages):
         # Use direct google-generativeai library instead of langchain
         try:
             import google.generativeai as genai
+            from google.api_core import exceptions as google_exceptions
         except ImportError:
             raise RuntimeError("google-generativeai not available. Please install it: pip install google-generativeai")
 
@@ -87,35 +88,72 @@ def get_llm_response(messages):
         if not api_key:
             raise ValueError("GOOGLE_API_KEY environment variable must be set for Gemini")
 
-        print("🔑 Using GOOGLE_API_KEY for Gemini authentication")
-        
         # Configure the API
         genai.configure(api_key=api_key)
         
-        # Use gemini-2.0-flash model (fast and widely available)
-        model = genai.GenerativeModel('gemini-2.0-flash')
-        
-        # Convert messages to Gemini format
-        # Gemini expects a simple prompt string or conversation history
+        # Prepare system instruction and chat history
+        system_instruction = None
+        chat_history = []
+        user_message_part = ""
+
         if isinstance(messages, list):
-            # Extract the last user message as the prompt
-            user_messages = [msg for msg in messages if msg.get("role") == "user"]
-            if user_messages:
-                prompt = user_messages[-1].get("content", "")
-            else:
-                prompt = str(messages)
+            for msg in messages:
+                role = msg.get("role")
+                content = msg.get("content", "")
+                
+                if role == "system":
+                    # Accumulate system instructions
+                    if system_instruction is None:
+                        system_instruction = content
+                    else:
+                        system_instruction += f"\n\n{content}"
+                elif role == "user":
+                    chat_history.append({"role": "user", "parts": [content]})
+                    user_message_part = content # Track last user message for fallback/logging
+                elif role == "assistant":
+                    chat_history.append({"role": "model", "parts": [content]})
         else:
-            prompt = str(messages)
-        
+            # Handle string input (simple prompt)
+            user_message_part = str(messages)
+            chat_history.append({"role": "user", "parts": [user_message_part]})
+
+        # Initialize model with system instruction if present
+        model_name = os.getenv("GEMINI_MODEL", 'gemini-2.0-flash')
         try:
-            response = model.generate_content(prompt)
-            return response.text
+            if system_instruction:
+                model = genai.GenerativeModel(model_name, system_instruction=system_instruction)
+            else:
+                model = genai.GenerativeModel(model_name)
         except Exception as e:
-            # Check for quota exceeded errors
+            print(f"⚠️ Error initializing Gemini model with system instruction: {e}")
+            # Fallback without system instruction (should satisfy older SDKs/models)
+            model = genai.GenerativeModel(model_name)
+            if system_instruction:
+                 # Prepend to first user message if possible, or just add as user message
+                 chat_history.insert(0, {"role": "user", "parts": [f"System Instruction: {system_instruction}"]})
+                 chat_history.insert(1, {"role": "model", "parts": ["Understood."]})
+
+        try:
+            # Start chat with history (excluding the very last message which is the new prompt)
+            # Actually, start_chat logic is stateful. 
+            # Better approach for stateless API usage: generate_content with full list?
+            # genai.GenerativeModel.generate_content accepts list of Content objects.
+            
+            # Use generate_content with the full history as specificied in docs for 'multi-turn' stateless
+            response = model.generate_content(chat_history)
+            return response.text
+            
+        except google_exceptions.ResourceExhausted:
+            print("⚠️ Gemini API quota exceeded (ResourceExhausted)")
+            return "I apologize, but the AI service is currently at capacity (Quota Exceeded). Please try again later."
+        except google_exceptions.InvalidArgument as e:
+            print(f"❌ Gemini API InvalidArgument: {e}")
+            return f"I encountered an issue with the request format. (Error: InvalidArgument)"
+        except Exception as e:
             error_str = str(e).lower()
             if "quota" in error_str or "429" in error_str or "resourceexhausted" in error_str:
                 print("⚠️ Gemini API quota exceeded - using fallback response")
-                return "I apologize, but the AI service is currently at capacity. Please try again later or contact support for assistance."
+                return "I apologize, but the AI service is currently at capacity. Please try again later."
             print(f"❌ Gemini API error: {e}")
             raise RuntimeError(f"Gemini call failed: {e}")
 

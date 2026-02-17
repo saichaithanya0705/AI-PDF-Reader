@@ -1,0 +1,346 @@
+
+--- Request at 2025-12-25T15:09:34.944286 ---
+User ID: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Message: What is this project about?
+Context Type: pdf_viewer
+
+--- Request at 2025-12-25T15:28:39.062181 ---
+User ID: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Message: What documents do I have in my library and what are they about?
+Context Type: library
+Building library context for user_id: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Retrieved 2 documents
+Doc: 9b09ca10-64c2-4a8d-bce7-9a44740c45fa - Varshitha_Resume.pdf - uploaded
+Doc: 016b5ce2-14ab-412e-a6c0-335e2e34bae2 - RenderCV_sb2nov_Theme__2_.pdf - uploaded
+Library Context Stats: {'total_documents': 2, 'status_counts': {'uploaded': 2}, 'document_types': {'pdf': 2}, 'total_size_mb': 0.3, 'recent_uploads_count': 1}
+Doc Summaries: 2
+
+--- Request at 2025-12-25T15:31:31.925235 ---
+User ID: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Message: What documents do I have in my library and what are they about?
+Context Type: library
+Building library context for user_id: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Retrieved 2 documents
+Doc: 9b09ca10-64c2-4a8d-bce7-9a44740c45fa - Varshitha_Resume.pdf - uploaded
+Doc: 016b5ce2-14ab-412e-a6c0-335e2e34bae2 - RenderCV_sb2nov_Theme__2_.pdf - uploaded
+Library Context Stats: {'total_documents': 2, 'status_counts': {'uploaded': 2}, 'document_types': {'pdf': 2}, 'total_size_mb': 0.3, 'recent_uploads_count': 1}
+Doc Summaries: 2
+
+--- Request at 2025-12-25T15:51:29.898020 ---
+User ID: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Message: Who are you?
+Context Type: library
+Building library context for user_id: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Retrieved 2 documents
+Doc: 9b09ca10-64c2-4a8d-bce7-9a44740c45fa - Varshitha_Resume.pdf - uploaded
+Doc: 016b5ce2-14ab-412e-a6c0-335e2e34bae2 - RenderCV_sb2nov_Theme__2_.pdf - uploaded
+Library Context Stats: {'total_documents': 2, 'status_counts': {'uploaded': 2}, 'document_types': {'pdf': 2}, 'total_size_mb': 0.3, 'recent_uploads_count': 1}
+Doc Summaries: 2
+
+--- Request at 2025-12-25T15:58:08.475221 ---
+User ID: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Message: Who are you?
+Context Type: library
+Building library context for user_id: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Retrieved 2 documents
+Doc: 9b09ca10-64c2-4a8d-bce7-9a44740c45fa - Varshitha_Resume.pdf - uploaded
+Doc: 016b5ce2-14ab-412e-a6c0-335e2e34bae2 - RenderCV_sb2nov_Theme__2_.pdf - uploaded
+Library Context Stats: {'total_documents': 2, 'status_counts': {'uploaded': 2}, 'document_types': {'pdf': 2}, 'total_size_mb': 0.3, 'recent_uploads_count': 1}
+Doc Summaries: 2
+
+--- Request at 2025-12-25T16:04:01.946601 ---
+User ID: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Message: Who are you?
+Context Type: library
+Building library context for user_id: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Retrieved 2 documents
+Doc: 9b09ca10-64c2-4a8d-bce7-9a44740c45fa - Varshitha_Resume.pdf - uploaded
+Doc: 016b5ce2-14ab-412e-a6c0-335e2e34bae2 - RenderCV_sb2nov_Theme__2_.pdf - uploaded
+Library Context Stats: {'total_documents': 2, 'status_counts': {'uploaded': 2}, 'document_types': {'pdf': 2}, 'total_size_mb': 0.3, 'recent_uploads_count': 1}
+Doc Summaries: 2
+
+--- Request at 2025-12-25T16:08:03.795645 ---
+User ID: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Message: Who are you?
+Context Type: library
+Building library context for user_id: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Retrieved 2 documents
+Doc: 9b09ca10-64c2-4a8d-bce7-9a44740c45fa - Varshitha_Resume.pdf - uploaded
+Doc: 016b5ce2-14ab-412e-a6c0-335e2e34bae2 - RenderCV_sb2nov_Theme__2_.pdf - uploaded
+Library Context Stats: {'total_documents': 2, 'status_counts': {'uploaded': 2}, 'document_types': {'pdf': 2}, 'total_size_mb': 0.3, 'recent_uploads_count': 1}
+Doc Summaries: 2
+
+--- Request at 2025-12-25T16:13:23.844303 ---
+User ID: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Message: Who are you?
+Context Type: library
+Building library context for user_id: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Retrieved 2 documents
+Doc: 9b09ca10-64c2-4a8d-bce7-9a44740c45fa - Varshitha_Resume.pdf - uploaded
+Doc: 016b5ce2-14ab-412e-a6c0-335e2e34bae2 - RenderCV_sb2nov_Theme__2_.pdf - uploaded
+Library Context Stats: {'total_documents': 2, 'status_counts': {'uploaded': 2}, 'document_types': {'pdf': 2}, 'total_size_mb': 0.3, 'recent_uploads_count': 1}
+Doc Summaries: 2
+
+--- Request at 2025-12-25T16:38:43.106695 ---
+User ID: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Message: Who are you?
+Context Type: library
+Building library context for user_id: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Retrieved 2 documents
+Doc: 9b09ca10-64c2-4a8d-bce7-9a44740c45fa - Varshitha_Resume.pdf - uploaded
+Doc: 016b5ce2-14ab-412e-a6c0-335e2e34bae2 - RenderCV_sb2nov_Theme__2_.pdf - uploaded
+Library Context Stats: {'total_documents': 2, 'status_counts': {'uploaded': 2}, 'document_types': {'pdf': 2}, 'total_size_mb': 0.3, 'recent_uploads_count': 1}
+Doc Summaries: 2
+
+--- Request at 2025-12-25T16:45:48.315466 ---
+User ID: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Message: Who are you?
+Context Type: library
+Building library context for user_id: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Retrieved 2 documents
+Doc: 9b09ca10-64c2-4a8d-bce7-9a44740c45fa - Varshitha_Resume.pdf - uploaded
+Doc: 016b5ce2-14ab-412e-a6c0-335e2e34bae2 - RenderCV_sb2nov_Theme__2_.pdf - uploaded
+Library Context Stats: {'total_documents': 2, 'status_counts': {'uploaded': 2}, 'document_types': {'pdf': 2}, 'total_size_mb': 0.3, 'recent_uploads_count': 1}
+Doc Summaries: 2
+
+--- Request at 2025-12-25T16:55:16.200133 ---
+User ID: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Message: Who are you?
+Context Type: library
+Building library context for user_id: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Retrieved 2 documents
+Doc: 9b09ca10-64c2-4a8d-bce7-9a44740c45fa - Varshitha_Resume.pdf - uploaded
+Doc: 016b5ce2-14ab-412e-a6c0-335e2e34bae2 - RenderCV_sb2nov_Theme__2_.pdf - uploaded
+Library Context Stats: {'total_documents': 2, 'status_counts': {'uploaded': 2}, 'document_types': {'pdf': 2}, 'total_size_mb': 0.3, 'recent_uploads_count': 1}
+Doc Summaries: 2
+
+--- Request at 2025-12-25T16:56:12.579446 ---
+User ID: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Message: Who are you?
+Context Type: library
+Building library context for user_id: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Retrieved 2 documents
+Doc: 9b09ca10-64c2-4a8d-bce7-9a44740c45fa - Varshitha_Resume.pdf - uploaded
+Doc: 016b5ce2-14ab-412e-a6c0-335e2e34bae2 - RenderCV_sb2nov_Theme__2_.pdf - uploaded
+Library Context Stats: {'total_documents': 2, 'status_counts': {'uploaded': 2}, 'document_types': {'pdf': 2}, 'total_size_mb': 0.3, 'recent_uploads_count': 1}
+Doc Summaries: 2
+
+--- Request at 2025-12-25T18:30:10.297830 ---
+User ID: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Message: Who are you?
+Context Type: library
+Building library context for user_id: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Retrieved 2 documents
+Doc: 9b09ca10-64c2-4a8d-bce7-9a44740c45fa - Varshitha_Resume.pdf - uploaded
+Doc: 016b5ce2-14ab-412e-a6c0-335e2e34bae2 - RenderCV_sb2nov_Theme__2_.pdf - uploaded
+Library Context Stats: {'total_documents': 2, 'status_counts': {'uploaded': 2}, 'document_types': {'pdf': 2}, 'total_size_mb': 0.3, 'recent_uploads_count': 1}
+Doc Summaries: 2
+
+--- Request at 2025-12-25T18:41:04.214679 ---
+User ID: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Message: Who are you?
+Context Type: library
+Building library context for user_id: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Retrieved 2 documents
+Doc: 9b09ca10-64c2-4a8d-bce7-9a44740c45fa - Varshitha_Resume.pdf - uploaded
+Doc: 016b5ce2-14ab-412e-a6c0-335e2e34bae2 - RenderCV_sb2nov_Theme__2_.pdf - uploaded
+Library Context Stats: {'total_documents': 2, 'status_counts': {'uploaded': 2}, 'document_types': {'pdf': 2}, 'total_size_mb': 0.3, 'recent_uploads_count': 1}
+Doc Summaries: 2
+
+--- Request at 2025-12-25T18:53:09.426811 ---
+User ID: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Message: what does the library contain?
+Context Type: library
+Building library context for user_id: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Retrieved 2 documents
+Doc: 9b09ca10-64c2-4a8d-bce7-9a44740c45fa - Varshitha_Resume.pdf - uploaded
+Doc: 016b5ce2-14ab-412e-a6c0-335e2e34bae2 - RenderCV_sb2nov_Theme__2_.pdf - uploaded
+Library Context Stats: {'total_documents': 2, 'status_counts': {'uploaded': 2}, 'document_types': {'pdf': 2}, 'total_size_mb': 0.3, 'recent_uploads_count': 1}
+Doc Summaries: 2
+
+--- Request at 2025-12-25T18:57:48.785033 ---
+User ID: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Message: Who are you?
+Context Type: library
+Building library context for user_id: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Retrieved 2 documents
+Doc: 9b09ca10-64c2-4a8d-bce7-9a44740c45fa - Varshitha_Resume.pdf - uploaded
+Doc: 016b5ce2-14ab-412e-a6c0-335e2e34bae2 - RenderCV_sb2nov_Theme__2_.pdf - uploaded
+Library Context Stats: {'total_documents': 2, 'status_counts': {'uploaded': 2}, 'document_types': {'pdf': 2}, 'total_size_mb': 0.3, 'recent_uploads_count': 1}
+Doc Summaries: 2
+
+--- Request at 2025-12-25T19:00:48.097639 ---
+User ID: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Message: Summarize the documents in my library.
+Context Type: library
+Building library context for user_id: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Retrieved 2 documents
+Doc: 9b09ca10-64c2-4a8d-bce7-9a44740c45fa - Varshitha_Resume.pdf - uploaded
+Doc: 016b5ce2-14ab-412e-a6c0-335e2e34bae2 - RenderCV_sb2nov_Theme__2_.pdf - uploaded
+Library Context Stats: {'total_documents': 2, 'status_counts': {'uploaded': 2}, 'document_types': {'pdf': 2}, 'total_size_mb': 0.3, 'recent_uploads_count': 1}
+Doc Summaries: 2
+
+--- Request at 2025-12-25T19:03:01.260198 ---
+User ID: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Message: What is this specific document about?
+Context Type: pdf_viewer
+
+--- Request at 2025-12-25T19:08:38.657110 ---
+User ID: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Message: Summarize the documents in my library.
+Context Type: library
+Building library context for user_id: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Retrieved 2 documents
+Doc: 9b09ca10-64c2-4a8d-bce7-9a44740c45fa - Varshitha_Resume.pdf - uploaded
+Doc: 016b5ce2-14ab-412e-a6c0-335e2e34bae2 - RenderCV_sb2nov_Theme__2_.pdf - uploaded
+Library Context Stats: {'total_documents': 2, 'status_counts': {'uploaded': 2}, 'document_types': {'pdf': 2}, 'total_size_mb': 0.3, 'recent_uploads_count': 1}
+Doc Summaries: 2
+
+--- Request at 2025-12-25T19:10:50.891238 ---
+User ID: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Message: What is Varshitha's work experience?
+Context Type: pdf_viewer
+
+--- Request at 2025-12-25T19:41:44.437340 ---
+User ID: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Message: What projects are listed in the resume?
+Context Type: pdf_viewer
+
+--- Request at 2025-12-26T17:58:24.966399 ---
+User ID: anonymous
+Message: What does my library contain
+Context Type: library
+
+--- Request at 2025-12-26T17:59:52.404633 ---
+User ID: anonymous
+Message: What does my library contain
+Context Type: library
+
+--- Request at 2025-12-26T18:02:41.131191 ---
+User ID: anonymous
+Message: What does my library contain
+Context Type: library
+
+--- Request at 2025-12-26T18:03:19.434189 ---
+User ID: anonymous
+Message: What does my library contain
+Context Type: library
+
+--- Request at 2025-12-26T18:04:46.058694 ---
+User ID: anonymous
+Message: What does my library contain
+Context Type: library
+
+--- Request at 2025-12-26T18:24:06.023934 ---
+User ID: anonymous
+Message: What does my library contain
+Context Type: library
+
+--- Request at 2025-12-26T18:28:07.144520 ---
+User ID: anonymous
+Message: What does my library contain
+Context Type: library
+
+--- Request at 2025-12-26T18:30:57.789743 ---
+User ID: anonymous
+Message: What does my library contain
+Context Type: library
+
+--- Request at 2025-12-26T18:42:33.916147 ---
+User ID: anonymous
+Message: What does my library contain
+Context Type: library
+
+--- Request at 2025-12-26T18:51:33.741502 ---
+User ID: anonymous
+Message: What does my library contain
+Context Type: library
+
+--- Request at 2025-12-26T19:05:39.219570 ---
+User ID: anonymous
+Message: What does my library contain
+Context Type: library
+
+--- Request at 2025-12-26T19:22:08.210602 ---
+User ID: anonymous
+Message: What does my library contain
+Context Type: library
+
+--- Request at 2025-12-26T20:00:55.830547 ---
+User ID: anonymous
+Message: What does my library contain
+Context Type: library
+
+--- Request at 2025-12-26T20:34:38.914428 ---
+User ID: anonymous
+Message: What does my library contain
+Context Type: library
+
+--- Request at 2025-12-26T22:20:07.291376 ---
+User ID: anonymous
+Message: What does my library contain
+Context Type: library
+
+--- Request at 2025-12-26T22:21:23.533898 ---
+User ID: anonymous
+Message: What does my library contain
+Context Type: library
+
+--- Request at 2025-12-26T22:48:25.781486 ---
+User ID: anonymous
+Message: What does my library contain
+Context Type: library
+
+--- Request at 2025-12-26T22:55:02.059346 ---
+User ID: anonymous
+Message: What does my library contain
+Context Type: library
+
+--- Request at 2025-12-26T23:36:19.108777 ---
+User ID: anonymous
+Message: What does my library contain
+Context Type: library
+
+--- Request at 2026-01-15T00:11:15.256569 ---
+User ID: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Message: What files are in my library?
+Context Type: library
+Building library context for user_id: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Retrieved 3 documents
+Doc: ba293147-fd93-47e9-afa5-8f3779ffc170 - Varshitha_Resume.pdf - uploaded
+Doc: 9b09ca10-64c2-4a8d-bce7-9a44740c45fa - Varshitha_Resume.pdf - uploaded
+Doc: 016b5ce2-14ab-412e-a6c0-335e2e34bae2 - RenderCV_sb2nov_Theme__2_.pdf - uploaded
+Library Context Stats: {'total_documents': 3, 'status_counts': {'uploaded': 3}, 'document_types': {'pdf': 3}, 'total_size_mb': 0.4, 'recent_uploads_count': 0}
+Doc Summaries: 3
+
+--- Request at 2026-01-15T00:13:18.130615 ---
+User ID: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Message: What skills does this person have?
+Context Type: pdf_viewer
+
+--- Request at 2026-01-15T00:21:24.292040 ---
+User ID: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Message: What skills does this person have?
+Context Type: pdf_viewer
+
+--- Request at 2026-01-15T00:33:30.090795 ---
+User ID: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Message: What skills does this person have?
+Context Type: pdf_viewer
+
+--- Request at 2026-01-15T00:36:57.348269 ---
+User ID: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Message: What skills does this person have?
+Context Type: pdf_viewer
+
+--- Request at 2026-01-15T00:38:26.730952 ---
+User ID: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Message: How many documents do I have and what are they about?
+Context Type: library
+Building library context for user_id: b9bf7f97-40c3-41cf-8977-5c4e1875a7b8
+Retrieved 3 documents
+Doc: ba293147-fd93-47e9-afa5-8f3779ffc170 - Varshitha_Resume.pdf - uploaded
+Doc: 9b09ca10-64c2-4a8d-bce7-9a44740c45fa - Varshitha_Resume.pdf - uploaded
+Doc: 016b5ce2-14ab-412e-a6c0-335e2e34bae2 - RenderCV_sb2nov_Theme__2_.pdf - uploaded
+Library Context Stats: {'total_documents': 3, 'status_counts': {'uploaded': 3}, 'document_types': {'pdf': 3}, 'total_size_mb': 0.4, 'recent_uploads_count': 0}
+Doc Summaries: 3

@@ -10,6 +10,7 @@ interface SmartPDFViewerProps {
   onAskLLM?: (text: string, page: number) => void;
   onOpenInsights?: () => void;
   onOpenPodcast?: () => void;
+  initialPage?: number;
 }
 
 const SmartPDFViewer: React.FC<SmartPDFViewerProps> = ({
@@ -17,8 +18,7 @@ const SmartPDFViewer: React.FC<SmartPDFViewerProps> = ({
   onPageChange,
   onTextSelection,
   onAskLLM,
-  onOpenInsights,
-  onOpenPodcast
+  initialPage
 }) => {
   const [viewerMode, setViewerMode] = useState<'ready' | 'loading'>('loading');
 
@@ -55,6 +55,7 @@ const SmartPDFViewer: React.FC<SmartPDFViewerProps> = ({
         onPageChange={onPageChange}
         onTextSelection={onTextSelection}
         onAskLLM={onAskLLM}
+        initialPage={initialPage}
       />
     </div>
   );

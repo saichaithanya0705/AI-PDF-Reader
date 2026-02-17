@@ -9,12 +9,8 @@ import logging
 from pathlib import Path
 from typing import List, Dict, Optional
 from datetime import datetime
-try:
-    from .pdf_duplicate_detector import PDFDuplicateDetector
-    from .database import db
-except ImportError:
-    from pdf_duplicate_detector import PDFDuplicateDetector
-    from database import db
+from .pdf_duplicate_detector import PDFDuplicateDetector
+from .database import db
 
 logger = logging.getLogger(__name__)
 

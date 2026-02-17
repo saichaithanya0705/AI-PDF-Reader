@@ -1,0 +1,11 @@
+venv_new\
+node_modules\
+.git\
+__pycache__\
+*.pyc
+.pytest_cache\
+.vscode\
+.env
+dist\
+build\
+.DS_Store
