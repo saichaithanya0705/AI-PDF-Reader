@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import { API_URL, WS_URL } from '../config';
+import { useAuth } from '../context/useAuth';
+import { WS_URL } from '../config';
 import {
   Upload,
   FileText,
@@ -10,7 +10,6 @@ import {
   Sparkles,
   Plus,
   FolderOpen,
-  Clock,
   Settings,
   Pointer,
   GitMerge,
@@ -21,14 +20,72 @@ import {
   UserCircle,
   Home,
 } from 'lucide-react';
-import { usePDF } from '../context/PDFContext';
+import { usePDF } from '../context/usePDF';
 import DocumentCard from '../components/DocumentCard';
 import UploadZone from '../components/UploadZone';
-import PersonaJobForm from '../components/PersonaJobForm';
 import AIPersonaJobForm from '../components/AIPersonaJobForm';
 import SimpleChatbot from '../components/SimpleChatbot';
-import { formatDistanceToNow } from 'date-fns';
-import { PDFValidator, PDFValidationResult } from '../utils/pdfValidator';
+import { PDFValidationResult } from '../utils/pdfValidator';
+import { mergeDocuments, splitDocument } from '../lib/api';
+
+type FileWithValidation = File & {
+  validationResult?: PDFValidationResult;
+};
+
+type StoredDocument = {
+  uploadDate?: string | Date;
+  lastOpened?: string | Date | null;
+  lastUploaded?: string | Date | null;
+  name?: string;
+};
+
+interface MergeResult {
+  merged_document?: {
+    source_documents?: number;
+    name?: string;
+  };
+}
+
+interface SplitResult {
+  original_document?: {
+    name?: string;
+  };
+  split_documents?: unknown[];
+}
+
+const getErrorMessage = (error: unknown, fallback = 'Unexpected error') => (
+  error instanceof Error ? error.message : fallback
+);
+
+const getStoredPageCount = (metadata: unknown, fallback = 10): number => {
+  if (!metadata || typeof metadata !== 'object') {
+    return fallback;
+  }
+
+  const pageCount = (metadata as { page_count?: unknown; pageCount?: unknown }).page_count
+    ?? (metadata as { pageCount?: unknown }).pageCount;
+  if (typeof pageCount === 'number' && Number.isFinite(pageCount) && pageCount > 0) {
+    return pageCount;
+  }
+  if (typeof pageCount === 'string') {
+    const parsed = Number(pageCount);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+  }
+
+  return fallback;
+};
+
+const safeGetTime = (dateField: Date | string | null | undefined): number => {
+  try {
+    if (!dateField) return 0;
+
+    const date = dateField instanceof Date ? dateField : new Date(dateField);
+    return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+  } catch (error) {
+    console.warn('Error parsing date:', dateField, error);
+    return 0;
+  }
+};
 
 const HomePage: React.FC = () => {
   console.log('🏠 HomePage component rendering...');
@@ -40,6 +97,7 @@ const HomePage: React.FC = () => {
     uploadBulkDocuments,
     updateDocuments,
     fetchAllDocuments,
+    loadDocument,
     deleteDocument,
     deleteAllDocuments,
     renameDocument,
@@ -74,7 +132,6 @@ const HomePage: React.FC = () => {
 
   const [clientId, setClientId] = useState<string>('');
   const [wsStatus, setWsStatus] = useState<'connecting' | 'connected' | 'disconnected' | 'error'>('disconnected');
-  const [uploadProgress, setUploadProgress] = useState<{ [key: string]: { percent: number, message: string } }>({});
 
   // Generate clientId on mount and load saved persona/job
   useEffect(() => {
@@ -109,7 +166,7 @@ const HomePage: React.FC = () => {
   useEffect(() => {
     if (!clientId) return;
     fetchAllDocuments();
-  }, [clientId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [clientId, fetchAllDocuments]);
 
   // Debug: Log current documents when they change
   useEffect(() => {
@@ -121,9 +178,6 @@ const HomePage: React.FC = () => {
     if (!clientId) return;
 
     let ws: WebSocket | null = null;
-    let reconnectAttempts = 0;
-    const maxReconnectAttempts = 3;
-    let reconnectTimeout: number | null = null;
     let isComponentMounted = true;
 
     const connectWebSocket = () => {
@@ -140,7 +194,6 @@ const HomePage: React.FC = () => {
           if (!isComponentMounted) return;
           console.log('✅ WebSocket connected successfully');
           setWsStatus('connected');
-          reconnectAttempts = 0;
         };
 
         ws.onmessage = (event) => {
@@ -187,7 +240,7 @@ const HomePage: React.FC = () => {
   const handleSingleUpload = async (files: File | File[]) => {
     if (files instanceof File) {
       // Check validation if available
-      const fileWithValidation = files as any;
+      const fileWithValidation = files as FileWithValidation;
       if (fileWithValidation.validationResult) {
         const validation = fileWithValidation.validationResult as PDFValidationResult;
         console.log('📋 File validation result:', validation);
@@ -225,7 +278,7 @@ const HomePage: React.FC = () => {
   const handleMultipleUpload = async (files: File | File[], considerPrevious: boolean = false) => {
     if (Array.isArray(files)) {
       // Check validation for all files
-      const filesWithValidation = files as any[];
+      const filesWithValidation = files as FileWithValidation[];
       const invalidFiles = filesWithValidation.filter(f =>
         f.validationResult && !f.validationResult.isValid
       );
@@ -244,7 +297,7 @@ const HomePage: React.FC = () => {
         }
         // Filter out invalid files
         files = files.filter(f => {
-          const validation = (f as any).validationResult;
+          const validation = (f as FileWithValidation).validationResult;
           return !validation || validation.isValid;
         });
       }
@@ -293,15 +346,8 @@ const HomePage: React.FC = () => {
     const docExists = documents.some(doc => doc.id === documentId);
     if (docExists) {
       try {
-        // Track document open in backend
-        await fetch(`${API_URL}/api/documents/${documentId}/open`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        });
-
-        console.log(`📖 Marked document as opened in backend: ${documentId}`);
+        await loadDocument(documentId);
+        console.log(`📖 Marked document as opened in backend via document fetch: ${documentId}`);
       } catch (error) {
         console.warn('⚠️ Failed to track document open in backend:', error);
         // Continue anyway - don't block navigation
@@ -385,28 +431,12 @@ const HomePage: React.FC = () => {
       console.log('🔗 Merging documents:', selectedDocuments);
       console.log('📝 Output name:', mergeFileName || '(auto-generate)');
 
-      const response = await fetch('/api/merge-documents', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          document_ids: selectedDocuments,
-          output_name: mergeFileName.trim()
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to merge documents');
-      }
-
-      const result = await response.json();
+      const result = await mergeDocuments(selectedDocuments, mergeFileName.trim()) as MergeResult;
 
       console.log('✅ Documents merged successfully:', result);
 
       // Show success message
-      alert(`Successfully merged ${result.merged_document.source_documents} documents into "${result.merged_document.name}"`);
+      alert(`Successfully merged ${result.merged_document?.source_documents || selectedDocuments.length} documents into "${result.merged_document?.name || mergeFileName || 'merged PDF'}"`);
 
       // Reset state
       setSelectedDocuments([]);
@@ -414,12 +444,11 @@ const HomePage: React.FC = () => {
       setShowMergeDialog(false);
       setMergeFileName('');
 
-      // Refresh document list to show the new merged document
-      window.location.reload();
+      await fetchAllDocuments();
 
     } catch (error) {
       console.error('❌ Failed to merge documents:', error);
-      alert(`Failed to merge documents: ${error.message}`);
+      alert(`Failed to merge documents: ${getErrorMessage(error)}`);
     } finally {
       setIsMerging(false);
     }
@@ -500,28 +529,12 @@ const HomePage: React.FC = () => {
         end_page: range.endPage
       }));
 
-      const response = await fetch('/api/split-document', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          document_id: splitDocumentId,
-          splits: splits
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to split document');
-      }
-
-      const result = await response.json();
+      const result = await splitDocument(splitDocumentId, splits) as SplitResult;
 
       console.log('✅ Document split successfully:', result);
 
       // Show success message
-      alert(`Successfully split "${result.original_document.name}" into ${result.split_documents.length} documents`);
+      alert(`Successfully split "${result.original_document?.name || splitDocumentName}" into ${result.split_documents?.length || splits.length} documents`);
 
       // Reset state
       setShowSplitDialog(false);
@@ -531,12 +544,11 @@ const HomePage: React.FC = () => {
       setNumSplits(2);
       setSplitRanges([]);
 
-      // Refresh document list to show the new split documents
-      window.location.reload();
+      await fetchAllDocuments();
 
     } catch (error) {
       console.error('❌ Failed to split document:', error);
-      alert(`Failed to split document: ${error.message}`);
+      alert(`Failed to split document: ${getErrorMessage(error)}`);
     } finally {
       setIsSplitting(false);
     }
@@ -589,7 +601,9 @@ const HomePage: React.FC = () => {
         const stored = localStorage.getItem('documents');
         if (stored) {
           try {
-            const parsedDocs = JSON.parse(stored).map((d: any) => {
+            const storedValue = JSON.parse(stored);
+            const storedDocuments: StoredDocument[] = Array.isArray(storedValue) ? storedValue : [];
+            const parsedDocs = storedDocuments.map((d) => {
               // Safe date parsing
               let uploadDate: Date;
               let lastOpened: Date | null = null;
@@ -661,32 +675,11 @@ const HomePage: React.FC = () => {
     }
   }, [documents]);
 
-  // Helper function to safely get time from a date field
-  const safeGetTime = (dateField: Date | string | null | undefined): number => {
-    try {
-      if (!dateField) return 0;
-
-      let date: Date;
-      if (dateField instanceof Date) {
-        date = dateField;
-      } else if (typeof dateField === 'string') {
-        date = new Date(dateField);
-      } else {
-        return 0;
-      }
-
-      return isNaN(date.getTime()) ? 0 : date.getTime();
-    } catch (error) {
-      console.warn('Error parsing date:', dateField, error);
-      return 0;
-    }
-  };
-
   // Sorted documents with comprehensive sorting logic
-  const sortedDocuments = [...documents].sort((a, b) => {
+  const sortedDocuments = useMemo(() => [...documents].sort((a, b) => {
     try {
       switch (sortType) {
-        case 'recentlyOpened':
+        case 'recentlyOpened': {
           // Sort by last opened time, putting never-opened documents at the end
           const aLastOpened = safeGetTime(a.lastOpened);
           const bLastOpened = safeGetTime(b.lastOpened);
@@ -704,20 +697,23 @@ const HomePage: React.FC = () => {
 
           // Both have been opened, sort by last opened time
           return bLastOpened - aLastOpened;
+        }
 
-        case 'recentlyUploaded':
+        case 'recentlyUploaded': {
           // Sort by most recent upload/re-upload time
           const aUploadTime = safeGetTime(a.lastUploaded) || safeGetTime(a.uploadDate);
           const bUploadTime = safeGetTime(b.lastUploaded) || safeGetTime(b.uploadDate);
           return bUploadTime - aUploadTime;
+        }
 
-        case 'nameAZ':
+        case 'nameAZ': {
           // Alphabetical sorting (case-insensitive)
           const aName = (a.name || '').toLowerCase().trim();
           const bName = (b.name || '').toLowerCase().trim();
           return aName.localeCompare(bName);
+        }
 
-        case 'size':
+        case 'size': {
           // Sort by file size (largest first)
           const aSize = a.size || 0;
           const bSize = b.size || 0;
@@ -730,12 +726,14 @@ const HomePage: React.FC = () => {
           }
 
           return bSize - aSize;
+        }
 
-        default:
+        default: {
           // Default to recently uploaded
           const defaultAUpload = safeGetTime(a.lastUploaded) || safeGetTime(a.uploadDate);
           const defaultBUpload = safeGetTime(b.lastUploaded) || safeGetTime(b.uploadDate);
           return defaultBUpload - defaultAUpload;
+        }
       }
     } catch (error) {
       console.error('Error sorting documents:', error);
@@ -744,7 +742,7 @@ const HomePage: React.FC = () => {
       const fallbackB = safeGetTime(b.lastUploaded) || safeGetTime(b.uploadDate);
       return fallbackB - fallbackA;
     }
-  });
+  }), [documents, sortType]);
 
   // Debug log for sorting
   useEffect(() => {
@@ -757,7 +755,7 @@ const HomePage: React.FC = () => {
         lastOpened: d.lastOpened
       })));
     }
-  }, [sortType, sortedDocuments]);
+  }, [documents.length, sortType, sortedDocuments]);
 
   // Handle opening a document
   const handleOpen = (id: string) => {
@@ -772,23 +770,18 @@ const HomePage: React.FC = () => {
     if (document) {
       // Get document page count
       try {
-        const response = await fetch(`/api/documents/${id}`);
-        if (response.ok) {
-          const data = await response.json();
-          // For now, we'll estimate pages or you can add page count to your document model
-          // Let's assume we can get page count from metadata or set a default
-          const pageCount = data.document.metadata?.page_count || 10; // Default fallback
+        const loadedDocument = await loadDocument(id);
+        const pageCount = getStoredPageCount(loadedDocument?.metadata || document.metadata);
 
-          setSplitDocumentId(id);
-          setSplitDocumentName(document.name);
-          setSplitDocumentPages(pageCount);
-          setNumSplits(2);
-          setSplitRanges([
-            { name: '', startPage: 1, endPage: Math.floor(pageCount / 2) },
-            { name: '', startPage: Math.floor(pageCount / 2) + 1, endPage: pageCount }
-          ]);
-          setShowSplitDialog(true);
-        }
+        setSplitDocumentId(id);
+        setSplitDocumentName(document.name);
+        setSplitDocumentPages(pageCount);
+        setNumSplits(2);
+        setSplitRanges([
+          { name: '', startPage: 1, endPage: Math.floor(pageCount / 2) },
+          { name: '', startPage: Math.floor(pageCount / 2) + 1, endPage: pageCount }
+        ]);
+        setShowSplitDialog(true);
       } catch (error) {
         console.error('Failed to get document info:', error);
         // Fallback: show dialog with default values

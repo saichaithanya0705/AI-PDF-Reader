@@ -31,7 +31,7 @@ const SmartPDFViewer: React.FC<SmartPDFViewerProps> = ({
   // Reset viewer when document changes
   useEffect(() => {
     console.log('📄 Document changed:', document.name);
-  }, [document.id]);
+  }, [document.id, document.name]);
 
   if (viewerMode === 'loading') {
     return (

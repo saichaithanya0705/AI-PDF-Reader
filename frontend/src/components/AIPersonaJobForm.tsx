@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User, Target, Save, X, Sparkles, Loader2, Brain, Lightbulb, CheckCircle, AlertTriangle } from 'lucide-react';
-import { usePDF } from '../context/PDFContext';
+import { usePDF } from '../context/usePDF';
 
 interface AIPersonaJobFormProps {
   onSubmit: (persona: string, job: string) => void;

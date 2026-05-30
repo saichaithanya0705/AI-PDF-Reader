@@ -1,111 +1,44 @@
 /**
- * Comprehensive PDF.js Initialization Utility
- * Handles multiple fallback strategies for PDF.js worker loading
+ * PDF.js Initialization Utility
+ * Uses bundled PDF.js code and local worker assets only.
  */
 
-// PDF.js loading strategies with comprehensive fallbacks
 export const PDF_LOADING_STRATEGIES = [
   {
-    name: 'CDN Latest',
-    workerUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js',
-    libUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
-    priority: 1
-  },
-  {
-    name: 'CDN Stable',
-    workerUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.10.111/pdf.worker.min.js',
-    libUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.10.111/pdf.min.js',
-    priority: 2
-  },
-  {
-    name: 'JSDelivr',
-    workerUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js',
-    libUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js',
-    priority: 3
-  },
-  {
-    name: 'UNPKG',
-    workerUrl: 'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js',
-    libUrl: 'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.min.js',
-    priority: 4
-  },
-  {
-    name: 'Local Fallback',
+    name: 'Bundled PDF.js',
     workerUrl: '/pdf.worker.min.js',
-    libUrl: '/pdf.min.js',
-    priority: 5
-  },
-  {
-    name: 'Custom Fallback',
-    workerUrl: '/pdf-worker-fallback.js',
     libUrl: null,
-    priority: 6
-  },
-  {
-    name: 'Embedded Worker',
-    workerUrl: 'data:application/javascript;base64,c2VsZi5vbm1lc3NhZ2U9ZnVuY3Rpb24oZSl7dHJ5e3NlbGYucG9zdE1lc3NhZ2Uoe2FjdGlvbjplLmRhdGEuYWN0aW9uLGRhdGE6bnVsbCxlcnJvcjpudWxsfSl9Y2F0Y2goZSl7c2VsZi5wb3N0TWVzc2FnZSh7YWN0aW9uOiJlcnJvciIsZGF0YTpudWxsLGVycm9yOmUubWVzc2FnZX0pfX0=',
-    libUrl: null,
-    priority: 7
+    priority: 1
   }
 ];
+
+interface PDFLoadingTask {
+  promise: Promise<unknown>;
+  destroy?: () => void;
+}
+
+interface PDFJSLibrary {
+  GlobalWorkerOptions: {
+    workerSrc: string;
+  };
+  getDocument: (config: unknown) => PDFLoadingTask;
+}
 
 export interface PDFJSInitResult {
   success: boolean;
   strategy: string;
-  pdfjsLib: any;
+  pdfjsLib: PDFJSLibrary | null;
   error?: string;
 }
 
 /**
- * Test if a URL is accessible
+ * Load PDF.js from the bundled dependency.
  */
-async function testUrlAccessibility(url: string, timeout: number = 5000): Promise<boolean> {
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeout);
-    
-    const response = await fetch(url, { 
-      method: 'HEAD',
-      signal: controller.signal,
-      cache: 'no-cache'
-    });
-    
-    clearTimeout(timeoutId);
-    return response.ok;
-  } catch (error) {
-    return false;
+async function loadPDFJSLibrary(libUrl: string | null): Promise<PDFJSLibrary> {
+  if (libUrl) {
+    throw new Error('Remote PDF.js library loading is disabled');
   }
-}
-
-/**
- * Load PDF.js library dynamically
- */
-async function loadPDFJSLibrary(libUrl: string | null): Promise<any> {
-  if (!libUrl) {
-    // Use bundled version
-    return await import('pdfjs-dist/build/pdf');
-  }
-
-  return new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src = libUrl;
-    script.onload = () => {
-      const pdfjsLib = (window as any).pdfjsLib;
-      if (pdfjsLib) {
-        resolve(pdfjsLib);
-      } else {
-        reject(new Error('PDF.js library not found on window'));
-      }
-    };
-    script.onerror = () => reject(new Error(`Failed to load PDF.js from ${libUrl}`));
-    
-    document.head.appendChild(script);
-    
-    // Timeout after 10 seconds
-    setTimeout(() => {
-      reject(new Error('PDF.js library load timeout'));
-    }, 10000);
-  });
+  return await import('pdfjs-dist/build/pdf') as PDFJSLibrary;
 }
 
 /**
@@ -128,15 +61,6 @@ export async function initializePDFJS(
     try {
       onProgress?.(strategy.name, 'Testing accessibility...');
       
-      // Test worker URL accessibility (skip for embedded workers)
-      if (!strategy.workerUrl.startsWith('data:') && !strategy.workerUrl.startsWith('/')) {
-        const isAccessible = await testUrlAccessibility(strategy.workerUrl, 3000);
-        if (!isAccessible) {
-          onProgress?.(strategy.name, 'Not accessible, trying next...');
-          continue;
-        }
-      }
-
       onProgress?.(strategy.name, 'Loading PDF.js library...');
       
       // Load PDF.js library
@@ -160,12 +84,12 @@ export async function initializePDFJS(
         setTimeout(() => {
           try {
             testDoc.destroy?.();
-          } catch (e) {
+          } catch {
             // Ignore cleanup errors
           }
         }, 100);
         
-      } catch (testError) {
+      } catch {
         // If basic test fails, try next strategy
         onProgress?.(strategy.name, 'Functionality test failed, trying next...');
         continue;
@@ -204,23 +128,12 @@ export function getBestPDFJSConfig(): {
   standardFontDataUrl: string;
   verbosity: number;
 } {
-  const isOnline = navigator.onLine;
-  
-  if (isOnline) {
-    return {
-      cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/',
-      cMapPacked: true,
-      standardFontDataUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/standard_fonts/',
-      verbosity: 1
-    };
-  } else {
-    return {
-      cMapUrl: '/cmaps/',
-      cMapPacked: true,
-      standardFontDataUrl: '/standard_fonts/',
-      verbosity: 0
-    };
-  }
+  return {
+    cMapUrl: '/cmaps/',
+    cMapPacked: true,
+    standardFontDataUrl: '/standard_fonts/',
+    verbosity: 0
+  };
 }
 
 /**
@@ -228,10 +141,10 @@ export function getBestPDFJSConfig(): {
  */
 export async function loadPDFDocument(
   url: string,
-  pdfjsLib: any,
-  options: any = {},
+  pdfjsLib: PDFJSLibrary,
+  options: Record<string, unknown> = {},
   maxRetries: number = 3
-): Promise<any> {
+): Promise<unknown> {
   const config = {
     url,
     ...getBestPDFJSConfig(),
@@ -266,15 +179,16 @@ export async function loadPDFDocument(
 /**
  * Check if PDF.js is properly initialized
  */
-export function isPDFJSReady(pdfjsLib: any): boolean {
+export function isPDFJSReady(pdfjsLib: unknown): boolean {
   try {
+    const candidate = pdfjsLib as Partial<PDFJSLibrary> | null;
     return !!(
-      pdfjsLib &&
-      pdfjsLib.getDocument &&
-      pdfjsLib.GlobalWorkerOptions &&
-      pdfjsLib.GlobalWorkerOptions.workerSrc
+      candidate &&
+      candidate.getDocument &&
+      candidate.GlobalWorkerOptions &&
+      candidate.GlobalWorkerOptions.workerSrc
     );
-  } catch (error) {
+  } catch {
     return false;
   }
 }

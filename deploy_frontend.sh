@@ -7,7 +7,7 @@ cd /var/www/pdfapp/frontend
 
 # Install Node dependencies
 echo "📦 Installing Node dependencies..."
-npm install
+npm ci
 
 # Build for production
 echo "🔨 Building frontend..."

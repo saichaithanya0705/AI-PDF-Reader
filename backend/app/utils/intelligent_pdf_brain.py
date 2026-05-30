@@ -72,7 +72,11 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.cluster import KMeans
 import networkx as nx
-import spacy
+
+try:
+    import spacy
+except ImportError:  # pragma: no cover - depends on optional runtime package
+    spacy = None
 
 
 # Assuming models.py is in the parent directory 'app'
@@ -366,13 +370,19 @@ class IntelligentPDFBrain:
     
     def _initialize_nlp(self):
         """Initialize lightweight NLP model for semantic understanding"""
+        if spacy is None:
+            logger.warning("spaCy is not installed; semantic entity extraction is disabled")
+            self.nlp = None
+            return
+
         try:
             self.nlp = spacy.load("en_core_web_sm")
         except OSError:
-            logger.warning("spaCy model not found. Installing...")
-            import subprocess
-            subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])
-            self.nlp = spacy.load("en_core_web_sm")
+            logger.warning("spaCy model en_core_web_sm not found; semantic entity extraction is disabled")
+            self.nlp = None
+        except Exception as exc:
+            logger.warning("spaCy initialization failed; semantic entity extraction is disabled: %s", exc)
+            self.nlp = None
 
     def _detect_universal_constraints(self, task: str) -> Dict[str, Dict[str, bool]]:
         """Automatically detect all constraints from task description"""

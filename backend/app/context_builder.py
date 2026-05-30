@@ -9,6 +9,7 @@ This module builds contextual information for the chatbot based on the current v
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -25,19 +26,17 @@ async def build_library_context(db, user_id: str) -> Dict[str, Any]:
         Dictionary containing library statistics and context
     """
     try:
-        # DEBUG LOGGING
-        with open("backend_debug.log", "a", encoding="utf-8") as f:
-            f.write(f"Building library context for user_id: {user_id}\n")
+        debug_logging = os.getenv("DEBUG_CHAT_LOGGING", "false").lower() == "true"
+        if debug_logging:
+            with open("backend_debug.log", "a", encoding="utf-8") as f:
+                f.write(f"Building library context for user_id: {user_id}\n")
 
-        # Get all documents for user
-        # Reverting to positional argument to match SupabaseDatabase signature
-        documents = db.get_all_documents(user_id)
+        # Get all documents for this authenticated user from SQLite.
+        documents = db.get_all_documents(client_id=user_id)
         
-        # DEBUG LOGGING
-        with open("backend_debug.log", "a", encoding="utf-8") as f:
-            f.write(f"Retrieved {len(documents)} documents\n")
-            for doc in documents:
-                f.write(f"Doc: {doc.id} - {doc.original_name} - {doc.status}\n")
+        if debug_logging:
+            with open("backend_debug.log", "a", encoding="utf-8") as f:
+                f.write(f"Retrieved {len(documents)} documents\n")
         
         # Calculate statistics
         total_docs = len(documents)
@@ -253,7 +252,7 @@ async def build_pdf_context(
             
         # NEW: Add context from other documents (summaries only)
         try:
-            other_docs = db.get_all_documents(user_id)
+            other_docs = db.get_all_documents(client_id=user_id)
             if other_docs:
                 system_instruction += "\n\nContext from other documents in library:"
                 count = 0
@@ -317,37 +316,16 @@ async def search_library_documents(
         if not query_text or not query_text.strip():
             return []
 
-        from .embedding_service import get_embedding_service
-        from .vector_store import get_vector_store
-        
-        # Generate embedding for query text
-        embedding_service = get_embedding_service()
-        query_embedding = embedding_service.generate_embedding(query_text)
-        
-        # Search vectors using FAISS
-        vector_store = get_vector_store()
-        
-        # Filter by user_id only (search all user's documents)
-        filter_criteria = {'user_id': user_id}
-        
-        raw_results = vector_store.search(
-            query_embedding=query_embedding,
-            k=top_k,
-            filter_criteria=filter_criteria
+        from .rag_service import get_rag_service
+
+        rag_service = get_rag_service()
+        results = await rag_service.search_documents(
+            query=query_text,
+            top_k=top_k,
+            user_id=user_id,
+            use_advanced_rag=False,
         )
-        
-        # Format results
-        search_results = []
-        
-        for result in raw_results:
-            search_results.append({
-                "id": result.get('id', 'unknown'),
-                "document_id": result.get('document_id'),
-                "document_name": result.get('filename', 'Unknown Document'),
-                "page_number": result.get('page_number'),
-                "text": result.get('text', '')[:200] + "...",  # Snippet
-                "similarity": result.get('score', 0.0)
-            })
+        search_results = [_format_search_result(result) for result in results]
             
         logger.info(f"Library search found {len(search_results)} results for user {user_id}")
         return search_results
@@ -372,14 +350,11 @@ async def get_page_content(db, document_id: str, page_number: int) -> Optional[s
         Page text content or None
     """
     try:
-        # Query document_chunks table for this page
-        result = db.client.table('document_chunks').select('*').eq(
-            'document_id', document_id
-        ).eq('page_number', page_number).execute()
-        
-        if result.data and len(result.data) > 0:
-            # Combine all chunks from this page
-            page_text = ' '.join([chunk.get('text', '') for chunk in result.data])
+        chunks = db.get_chunks_by_document(document_id)
+        page_chunks = [chunk for chunk in chunks if chunk.get('page_number') == page_number]
+
+        if page_chunks:
+            page_text = ' '.join([chunk.get('chunk_text', '') for chunk in page_chunks])
             return page_text
         
         return None
@@ -413,40 +388,17 @@ async def search_related_documents(
         if not query_text or not query_text.strip():
             return []
 
-        from .embedding_service import get_embedding_service
-        from .vector_store import get_vector_store
-        
-        # Generate embedding for query text
-        embedding_service = get_embedding_service()
-        query_embedding = embedding_service.generate_embedding(query_text)
-        
-        # Search vectors using FAISS
-        vector_store = get_vector_store()
-        
-        # Filter criteria
-        filter_criteria = {
-            'user_id': user_id,
-            'exclude_doc_id': current_doc_id
-        }
-        
-        raw_results = vector_store.search(
-            query_embedding=query_embedding,
-            k=top_k,
-            filter_criteria=filter_criteria
+        from .rag_service import get_rag_service
+
+        rag_service = get_rag_service()
+        results = await rag_service.search_documents(
+            query=query_text,
+            top_k=top_k,
+            exclude_document_id=current_doc_id,
+            user_id=user_id,
+            use_advanced_rag=False,
         )
-        
-        # Format results
-        related_docs = []
-        
-        for result in raw_results:
-            related_docs.append({
-                "id": result.get('id', 'unknown'),
-                "document_id": result.get('document_id'),
-                "document_name": result.get('filename', 'Unknown Document'),
-                "page_number": result.get('page_number'),
-                "text": result.get('text', '')[:200] + "...", # Snippet
-                "similarity": result.get('score', 0.0)
-            })
+        related_docs = [_format_search_result(result) for result in results]
             
         logger.info(f"Found {len(related_docs)} related documents for user {user_id}")
         return related_docs
@@ -456,6 +408,12 @@ async def search_related_documents(
         import traceback
         traceback.print_exc()
         return []
+
+
+def _format_search_result(result) -> Dict[str, Any]:
+    from .rag_service import format_retrieval_result
+
+    return format_retrieval_result(result, snippet_chars=200)
 
 
 def build_enriched_messages(

@@ -2,6 +2,7 @@
 Script to process existing PDF documents for RAG
 Chunks, embeds, and stores all documents in the database
 """
+import argparse
 import asyncio
 import sys
 from pathlib import Path
@@ -27,17 +28,31 @@ else:
 from app.rag_service import get_rag_service
 
 
-async def process_all_documents():
+def _get_documents_for_scope(client_id=None, all_tenants=False):
+    if bool(client_id) == bool(all_tenants):
+        raise ValueError("Specify exactly one tenant scope: client_id or all_tenants=True")
+
+    if client_id:
+        return db.get_all_documents(client_id=client_id)
+
+    return db.get_all_documents()
+
+
+async def process_all_documents(client_id=None, all_tenants=False, batch_size=32, force=True):
     """Process all documents in the database for RAG"""
     print("=" * 60)
     print("📚 Processing Existing Documents for RAG")
+    if client_id:
+        print(f"🔒 Tenant scope: {client_id}")
+    elif all_tenants:
+        print("🌐 Tenant scope: all tenants")
     print("=" * 60)
     
     # Get RAG service
     rag_service = get_rag_service()
     
     # Get all documents
-    documents = db.get_all_documents()
+    documents = _get_documents_for_scope(client_id=client_id, all_tenants=all_tenants)
     
     if not documents:
         print("⚠️ No documents found in database")
@@ -51,6 +66,17 @@ async def process_all_documents():
         print(f"\n[{i}/{len(documents)}] Processing: {document.original_name}")
         print(f"  Document ID: {document.id}")
         print(f"  File path: {document.file_path}")
+        print(f"  Tenant: {getattr(document, 'client_id', None) or 'missing'}")
+
+        document_client_id = getattr(document, 'client_id', None)
+        if not document_client_id:
+            print("  ❌ Document has no client_id; refusing tenant-unsafe RAG backfill")
+            results.append({
+                'document_id': document.id,
+                'success': False,
+                'error': 'Document missing client_id'
+            })
+            continue
         
         # Check if file exists
         file_path = Path(document.file_path)
@@ -66,23 +92,24 @@ async def process_all_documents():
         # Check if already processed
         existing_chunks = db.get_chunk_count(document.id)
         if existing_chunks > 0:
-            print(f"  ℹ️ Document already has {existing_chunks} chunks. Force re-processing...")
-            # results.append({
-            #     'document_id': document.id,
-            #     'success': True,
-            #     'chunks_created': existing_chunks,
-            #     'skipped': True
-            # })
-            # continue
+            if force:
+                print(f"  ℹ️ Document already has {existing_chunks} chunks. Force re-processing...")
+            else:
+                print(f"  ⏭️ Document already has {existing_chunks} chunks. Skipping.")
+                results.append({
+                    'document_id': document.id,
+                    'success': True,
+                    'chunks_created': existing_chunks,
+                    'skipped': True
+                })
+                continue
         
         # Process document
-        # Process document
-        user_id = getattr(document, 'user_id', None)
         result = await rag_service.process_document(
             document_id=document.id,
             pdf_path=str(file_path),
-            user_id=user_id,
-            batch_size=32
+            user_id=document_client_id,
+            batch_size=batch_size
         )
         
         results.append(result)
@@ -128,6 +155,22 @@ async def process_all_documents():
     print("\n✅ Processing complete!")
 
 
+def _parse_args():
+    parser = argparse.ArgumentParser(description="Backfill existing PDF documents into RAG indexes")
+    scope = parser.add_mutually_exclusive_group(required=True)
+    scope.add_argument("--client-id", help="Backfill only documents owned by this tenant/client")
+    scope.add_argument("--all-tenants", action="store_true", help="Backfill documents for every tenant")
+    parser.add_argument("--batch-size", type=int, default=32, help="Embedding batch size")
+    parser.add_argument("--skip-existing", action="store_true", help="Skip documents that already have chunks")
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
+    args = _parse_args()
     print("Starting document processing...\n")
-    asyncio.run(process_all_documents())
+    asyncio.run(process_all_documents(
+        client_id=args.client_id,
+        all_tenants=args.all_tenants,
+        batch_size=args.batch_size,
+        force=not args.skip_existing,
+    ))

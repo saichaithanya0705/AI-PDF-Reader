@@ -2,23 +2,90 @@
 RAG (Retrieval-Augmented Generation) Service
 Coordinates chunking, embedding, vector search, and LLM generation
 """
-from typing import List, Dict, Any, Optional
-from pathlib import Path
-import time
+from collections import Counter
+from datetime import datetime
+import math
+import re
+from typing import List, Dict, Any, Optional, Tuple
 
-from .chunking_service import chunking_service, DocumentChunk
+from .database import db
 from .embedding_service import get_embedding_service
+from .ingestion_service import get_ingestion_service
+from .semantic_cache import SemanticCacheContext, get_semantic_search_cache
 from .vector_store import get_vector_store, SearchResult
 from sentence_transformers import CrossEncoder
-import os
 
-# Import appropriate database based on configuration
-USE_SUPABASE = os.getenv("USE_SUPABASE", "false").lower() == "true"
-if USE_SUPABASE:
-    from .supabase_database import get_supabase_db
-    db = get_supabase_db()
-else:
-    from .database import db
+
+def _optional_float(value: Any) -> Optional[float]:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _bounded_similarity(value: Any) -> float:
+    score = _optional_float(value)
+    if score is None:
+        return 0.0
+    return max(0.0, min(1.0, score))
+
+
+def retrieval_score_fields(result: SearchResult) -> Dict[str, Any]:
+    """Return explicit retrieval score fields for API responses."""
+    metadata = getattr(result, "metadata", None) or {}
+    vector_similarity = _bounded_similarity(
+        metadata.get("vector_similarity", getattr(result, "similarity_score", 0.0))
+    )
+
+    retrieval_score = _optional_float(metadata.get("retrieval_score"))
+    lexical_overlap = _optional_float(metadata.get("lexical_overlap"))
+    keyword_score = _optional_float(metadata.get("keyword_score"))
+    bm25_score = _optional_float(metadata.get("bm25_score"))
+    rerank_score = _optional_float(metadata.get("rerank_score"))
+    recency_score = _optional_float(metadata.get("recency_score"))
+
+    return {
+        "similarity": round(vector_similarity, 3),
+        "vector_similarity": round(vector_similarity, 3),
+        "retrieval_score": round(retrieval_score, 4) if retrieval_score is not None else None,
+        "lexical_overlap": round(lexical_overlap, 4) if lexical_overlap is not None else None,
+        "keyword_score": round(keyword_score, 4) if keyword_score is not None else None,
+        "bm25_score": round(bm25_score, 4) if bm25_score is not None else None,
+        "rerank_score": round(rerank_score, 4) if rerank_score is not None else None,
+        "recency_score": round(recency_score, 4) if recency_score is not None else None,
+        "recency_intent": metadata.get("recency_intent"),
+        "recency_source": metadata.get("recency_source"),
+        "recency_timestamp": metadata.get("recency_timestamp"),
+        "retrieval_cache_hit": metadata.get("retrieval_cache_hit", False),
+        "retrieval_cache_hit_type": metadata.get("retrieval_cache_hit_type"),
+        "retrieval_cache_similarity": metadata.get("retrieval_cache_similarity"),
+    }
+
+
+def format_retrieval_result(result: SearchResult, snippet_chars: int = 200) -> Dict[str, Any]:
+    """Format a vector search result without hiding score semantics."""
+    metadata = getattr(result, "metadata", None) or {}
+    chunk_text = getattr(result, "chunk_text", "") or ""
+    snippet = chunk_text[:snippet_chars] + ("..." if len(chunk_text) > snippet_chars else "")
+
+    formatted = {
+        "id": getattr(result, "chunk_id", None) or "unknown",
+        "document_id": getattr(result, "document_id", None),
+        "document_name": (
+            metadata.get("document_name")
+            or metadata.get("original_name")
+            or metadata.get("filename")
+            or "Unknown Document"
+        ),
+        "page_number": getattr(result, "page_number", None) or 1,
+        "section_title": metadata.get("section_title") or metadata.get("heading") or "Relevant section",
+        "text": snippet,
+        "file_path": metadata.get("file_path", ""),
+    }
+    formatted.update(retrieval_score_fields(result))
+    return formatted
 
 
 class RAGService:
@@ -28,7 +95,8 @@ class RAGService:
         """Initialize RAG service"""
         self.embedding_service = get_embedding_service()
         self.vector_store = get_vector_store()
-        self.chunking_service = chunking_service
+        self.ingestion_service = get_ingestion_service()
+        self.semantic_cache = get_semantic_search_cache()
         
         # Initialize Cross-Encoder for re-ranking
         try:
@@ -45,6 +113,7 @@ class RAGService:
         document_id: str,
         pdf_path: str,
         user_id: Optional[str] = None,
+        mode: str = "single",
         batch_size: int = 32
     ) -> Dict[str, Any]:
         """
@@ -53,131 +122,25 @@ class RAGService:
         Args:
             document_id: Document ID
             pdf_path: Path to PDF file
-            user_id: User ID (required for Supabase)
+            user_id: Authenticated user ID for tenant filtering
             batch_size: Batch size for embedding generation
             
         Returns:
             Dict with processing statistics
         """
-        start_time = time.time()
-        
-        try:
-            print(f"🔄 Processing document {document_id} for RAG...")
-            
-            # Step 1: Chunk the document
-            print("  1️⃣ Chunking document...")
-            chunks = self.chunking_service.chunk_document(pdf_path, document_id)
-            
-            if not chunks:
-                return {
-                    'success': False,
-                    'error': 'No chunks created from document',
-                    'chunks_created': 0
-                }
-            
-            print(f"  ✅ Created {len(chunks)} chunks")
-            
-            # Step 1.5: Extract Metadata (New)
-            if USE_SUPABASE and user_id:
-                try:
-                    print("  1️⃣.5️⃣ Extracting document metadata...")
-                    from .metadata_extractor import get_metadata_extractor
-                    metadata_extractor = get_metadata_extractor()
-                    
-                    # Reconstruct first part of text for analysis
-                    # Use first 3 chunks or up to 15k chars
-                    full_text = "\n".join([chunk.text for chunk in chunks[:5]])
-                    
-                    metadata = await metadata_extractor.extract_metadata(full_text)
-                    print(f"  ✅ Extracted metadata: {metadata.get('document_type', 'Unknown')}")
-                    
-                    # Update document in DB
-                    db.update_document(document_id, user_id, metadata=metadata)
-                    print("  ✅ Updated document metadata in DB")
-                    
-                except Exception as e:
-                    print(f"  ⚠️ Warning: Failed to extract metadata: {e}")
-            
-            # Step 2: Generate embeddings
-            print("  2️⃣ Generating embeddings...")
-            chunk_texts = [chunk.text for chunk in chunks]
-            embeddings = self.embedding_service.generate_embeddings_batch(
-                chunk_texts,
-                batch_size=batch_size,
-                show_progress=True
-            )
-            print(f"  ✅ Generated {len(embeddings)} embeddings")
-            
-            # Step 3: Store in database
-            print("  3️⃣ Storing chunks in database...")
-            chunk_ids = []
-            for chunk, embedding in zip(chunks, embeddings):
-                if USE_SUPABASE and user_id:
-                    chunk_id = db.store_chunk(
-                        user_id=user_id,
-                        document_id=chunk.document_id,
-                        chunk_text=chunk.text,
-                        chunk_index=chunk.chunk_index,
-                        page_number=chunk.page_number,
-                        embedding=embedding,
-                        char_count=chunk.metadata.get('char_count'),
-                        word_count=chunk.metadata.get('word_count')
-                    )
-                else:
-                    chunk_id = db.store_chunk(
-                        document_id=chunk.document_id,
-                        chunk_text=chunk.text,
-                        chunk_index=chunk.chunk_index,
-                        page_number=chunk.page_number,
-                        embedding=embedding,
-                        char_count=chunk.metadata.get('char_count'),
-                        word_count=chunk.metadata.get('word_count')
-                    )
-                chunk_ids.append(chunk_id)
-            print(f"  ✅ Stored {len(chunk_ids)} chunks in database")
-            
-            # Step 4: Add to vector store
-            # Only add to local vector store if NOT using Supabase (Supabase stores embeddings in DB)
-            if not USE_SUPABASE:
-                print("  4️⃣ Adding to vector store...")
-                chunk_metadata = [
-                    {
-                        'chunk_id': chunk_id,
-                        'document_id': chunk.document_id,
-                        'user_id': user_id,
-                        'chunk_text': chunk.text,
-                        'page_number': chunk.page_number,
-                        'chunk_index': chunk.chunk_index,
-                        'metadata': chunk.metadata
-                    }
-                    for chunk_id, chunk in zip(chunk_ids, chunks)
-                ]
-                
-                indices = self.vector_store.add_embeddings(embeddings, chunk_metadata)
-                print(f"  ✅ Added {len(indices)} vectors to store")
-            else:
-                print("  4️⃣ Skipped adding to local vector store (using Supabase pgvector)")
-                indices = []
-            
-            elapsed = time.time() - start_time
-            
-            return {
-                'success': True,
-                'document_id': document_id,
-                'chunks_created': len(chunks),
-                'embeddings_generated': len(embeddings),
-                'chunks_stored': len(chunk_ids),
-                'vectors_added': len(indices),
-                'elapsed_seconds': round(elapsed, 2)
-            }
-            
-        except Exception as e:
-            print(f"❌ Error processing document {document_id}: {str(e)}")
+        if not user_id:
             return {
                 'success': False,
-                'error': str(e),
-                'document_id': document_id
+                'error': 'user_id is required for document ingestion',
+                'document_id': document_id,
             }
+
+        return await self.ingestion_service.process_document(
+            document_id=document_id,
+            user_id=user_id,
+            mode=mode,
+            batch_size=batch_size,
+        )
     
     async def expand_query(self, query: str, llm_provider) -> str:
         """
@@ -229,12 +192,17 @@ class RAGService:
             
             # Attach scores to results
             for result, score in zip(results, scores):
-                # Cross-encoder scores are logits or raw scores, not necessarily 0-1
-                # We update the similarity score (or could add a separate rerank_score field)
-                result.similarity_score = float(score)
+                if getattr(result, "metadata", None) is None:
+                    result.metadata = {}
+                result.metadata["vector_similarity"] = result.similarity_score
+                result.metadata["rerank_score"] = float(score)
             
             # Sort by new score (descending)
-            reranked_results = sorted(results, key=lambda x: x.similarity_score, reverse=True)
+            reranked_results = sorted(
+                results,
+                key=lambda x: (x.metadata or {}).get("rerank_score", float("-inf")),
+                reverse=True
+            )
             
             return reranked_results[:top_k]
             
@@ -242,11 +210,320 @@ class RAGService:
             print(f"⚠️ Re-ranking failed: {e}")
             return results[:top_k]
 
+    def _candidate_count(self, top_k: int, use_advanced_rag: bool) -> int:
+        requested = max(1, min(int(top_k or 1), 50))
+        if not use_advanced_rag:
+            return requested
+        return min(max(requested * 8, requested + 10), 80)
+
+    def _tokenize_terms(self, text: str) -> List[str]:
+        stopwords = {
+            "the", "and", "for", "with", "that", "this", "from", "into", "are",
+            "was", "were", "you", "your", "about", "what", "when", "where",
+            "which", "who", "how", "why", "pdf", "document",
+        }
+        return [
+            term
+            for term in re.findall(r"[A-Za-z0-9]{3,}", (text or "").lower())
+            if term not in stopwords
+        ]
+
+    def _keyword_haystack(self, result: SearchResult) -> str:
+        metadata = getattr(result, "metadata", None) or {}
+        return " ".join(
+            str(part or "")
+            for part in [
+                getattr(result, "chunk_text", ""),
+                metadata.get("section_title"),
+                metadata.get("document_name"),
+                metadata.get("original_name"),
+                metadata.get("filename"),
+            ]
+        )
+
+    def _keyword_scores(self, query: str, results: List[SearchResult]) -> List[Dict[str, float]]:
+        query_terms = self._tokenize_terms(query)
+        if not query_terms or not results:
+            return [
+                {"lexical_overlap": 0.0, "bm25_score": 0.0, "keyword_score": 0.0}
+                for _ in results
+            ]
+
+        query_unique_terms = set(query_terms)
+        documents = [self._tokenize_terms(self._keyword_haystack(result)) for result in results]
+        document_count = len(documents)
+        avg_doc_length = sum(len(doc) for doc in documents) / max(document_count, 1)
+        document_frequency = Counter(
+            term
+            for term in query_unique_terms
+            for doc in documents
+            if term in set(doc)
+        )
+
+        raw_bm25_scores: List[float] = []
+        lexical_scores: List[float] = []
+        k1 = 1.5
+        b = 0.75
+
+        for doc_terms in documents:
+            term_counts = Counter(doc_terms)
+            doc_length = len(doc_terms) or 1
+            lexical_scores.append(
+                sum(1 for term in query_unique_terms if term in term_counts) / len(query_unique_terms)
+            )
+
+            score = 0.0
+            for term in query_terms:
+                term_frequency = term_counts.get(term, 0)
+                if term_frequency == 0:
+                    continue
+                df = document_frequency.get(term, 0)
+                idf = math.log(1 + ((document_count - df + 0.5) / (df + 0.5)))
+                denominator = term_frequency + k1 * (1 - b + b * (doc_length / max(avg_doc_length, 1)))
+                score += idf * ((term_frequency * (k1 + 1)) / denominator)
+            raw_bm25_scores.append(score)
+
+        max_bm25 = max(raw_bm25_scores) if raw_bm25_scores else 0.0
+        normalized_bm25 = [
+            (score / max_bm25) if max_bm25 > 0 else 0.0
+            for score in raw_bm25_scores
+        ]
+
+        return [
+            {
+                "lexical_overlap": round(lexical, 4),
+                "bm25_score": round(raw_bm25, 4),
+                "keyword_score": round(keyword, 4),
+            }
+            for lexical, raw_bm25, keyword in zip(lexical_scores, raw_bm25_scores, normalized_bm25)
+        ]
+
+    def _detect_recency_intent(self, query: str) -> Optional[str]:
+        normalized = (query or "").lower()
+        if re.search(r"\b(recently|last)\s+opened\b|\bopened\s+recently\b", normalized):
+            return "recently_opened"
+        if re.search(r"\b(oldest|earliest|first uploaded|least recent)\b", normalized):
+            return "oldest"
+        if re.search(r"\b(latest|newest|most recent|recent|recently uploaded|last uploaded)\b", normalized):
+            return "latest"
+        return None
+
+    def _timestamp_candidates(self, result: SearchResult, recency_intent: str) -> List[Tuple[str, Any]]:
+        metadata = getattr(result, "metadata", None) or {}
+        if recency_intent == "recently_opened":
+            return [
+                ("last_opened", metadata.get("last_opened")),
+                ("last_accessed", metadata.get("last_accessed")),
+                ("last_uploaded", metadata.get("last_uploaded")),
+                ("upload_date", metadata.get("upload_date")),
+            ]
+        return [
+            ("last_uploaded", metadata.get("last_uploaded")),
+            ("upload_date", metadata.get("upload_date")),
+            ("last_accessed", metadata.get("last_accessed")),
+        ]
+
+    def _parse_timestamp(self, value: Any) -> Optional[float]:
+        if not value:
+            return None
+        if hasattr(value, "timestamp"):
+            return float(value.timestamp())
+        text = str(value).strip()
+        if not text:
+            return None
+        try:
+            return datetime.fromisoformat(text.replace("Z", "+00:00")).timestamp()
+        except ValueError:
+            return None
+
+    def _recency_metadata(self, results: List[SearchResult], recency_intent: Optional[str]) -> None:
+        if not recency_intent:
+            return
+
+        timestamps: List[Optional[float]] = []
+        sources: List[Optional[str]] = []
+        raw_values: List[Any] = []
+        for result in results:
+            selected_source = None
+            selected_value = None
+            selected_timestamp = None
+            for source, value in self._timestamp_candidates(result, recency_intent):
+                parsed = self._parse_timestamp(value)
+                if parsed is not None:
+                    selected_source = source
+                    selected_value = value
+                    selected_timestamp = parsed
+                    break
+            sources.append(selected_source)
+            raw_values.append(selected_value)
+            timestamps.append(selected_timestamp)
+
+        valid_timestamps = [timestamp for timestamp in timestamps if timestamp is not None]
+        if not valid_timestamps:
+            return
+
+        oldest = min(valid_timestamps)
+        newest = max(valid_timestamps)
+        span = max(newest - oldest, 1.0)
+
+        for result, timestamp, source, raw_value in zip(results, timestamps, sources, raw_values):
+            if getattr(result, "metadata", None) is None:
+                result.metadata = {}
+            if timestamp is None:
+                score = 0.0
+            elif recency_intent == "oldest":
+                score = (newest - timestamp) / span
+            else:
+                score = (timestamp - oldest) / span
+
+            result.metadata["recency_intent"] = recency_intent
+            result.metadata["recency_score"] = round(float(score), 4)
+            result.metadata["recency_source"] = source
+            result.metadata["recency_timestamp"] = raw_value
+
+    def _rank_vector_results(self, query: str, results: List[SearchResult], top_k: int) -> List[SearchResult]:
+        keyword_scores = self._keyword_scores(query, results)
+        recency_intent = self._detect_recency_intent(query)
+        self._recency_metadata(results, recency_intent)
+
+        ranked = []
+        for result, keyword_metadata in zip(results, keyword_scores):
+            metadata = getattr(result, "metadata", None) or {}
+            vector_similarity = _bounded_similarity(getattr(result, "similarity_score", 0.0))
+            keyword_score = max(
+                _bounded_similarity(metadata.get("keyword_score")),
+                _bounded_similarity(keyword_metadata["keyword_score"]),
+            )
+            existing_bm25_score = _optional_float(metadata.get("bm25_score"))
+            bm25_score = max(
+                existing_bm25_score if existing_bm25_score is not None else 0.0,
+                float(keyword_metadata["bm25_score"]),
+            )
+            recency_score = _bounded_similarity(metadata.get("recency_score"))
+            if recency_intent:
+                retrieval_score = (0.65 * vector_similarity) + (0.15 * keyword_score) + (0.20 * recency_score)
+            else:
+                retrieval_score = (0.80 * vector_similarity) + (0.20 * keyword_score)
+            if getattr(result, "metadata", None) is None:
+                result.metadata = {}
+            result.metadata["vector_similarity"] = vector_similarity
+            result.metadata["lexical_overlap"] = keyword_metadata["lexical_overlap"]
+            result.metadata["bm25_score"] = round(bm25_score, 4)
+            result.metadata["keyword_score"] = round(keyword_score, 4)
+            result.metadata["retrieval_score"] = round(retrieval_score, 4)
+            result.metadata.setdefault("retrieval_source", "vector")
+            ranked.append(result)
+
+        return sorted(
+            ranked,
+            key=lambda x: (getattr(x, "metadata", None) or {}).get(
+                "retrieval_score",
+                _bounded_similarity(getattr(x, "similarity_score", 0.0)),
+            ),
+            reverse=True,
+        )[:top_k]
+
+    def _semantic_cache(self):
+        cache = getattr(self, "semantic_cache", None)
+        if cache is None:
+            cache = get_semantic_search_cache()
+            self.semantic_cache = cache
+        return cache
+
+    def _library_revision(self, user_id: Optional[str]) -> str:
+        return self._semantic_cache().revision_for_user(user_id)
+
+    def _search_bm25_candidates(
+        self,
+        query: str,
+        fetch_k: int,
+        document_id: Optional[str],
+        exclude_document_id: Optional[str],
+        user_id: Optional[str],
+    ) -> List[SearchResult]:
+        try:
+            rows = db.search_chunks_bm25(
+                query=query,
+                limit=fetch_k,
+                document_id=document_id,
+                exclude_document_id=exclude_document_id,
+                client_id=user_id,
+            )
+        except AttributeError:
+            return []
+        except Exception as exc:
+            print(f"⚠️ BM25 retrieval failed: {exc}")
+            return []
+
+        results: List[SearchResult] = []
+        for row in rows:
+            metadata = dict(row.get("metadata") or {})
+            metadata.setdefault("retrieval_source", "bm25")
+            results.append(
+                SearchResult(
+                    chunk_id=row.get("chunk_id") or row.get("id") or "",
+                    document_id=row.get("document_id") or "",
+                    chunk_text=row.get("chunk_text") or "",
+                    chunk_index=int(row.get("chunk_index") or 0),
+                    page_number=int(row.get("page_number") or 1),
+                    similarity_score=0.0,
+                    user_id=row.get("client_id") or user_id,
+                    metadata=metadata,
+                )
+            )
+        return results
+
+    def _merge_retrieval_candidates(
+        self,
+        vector_results: List[SearchResult],
+        bm25_results: List[SearchResult],
+    ) -> List[SearchResult]:
+        merged: Dict[str, SearchResult] = {}
+        order: List[str] = []
+
+        for result in vector_results:
+            key = (
+                getattr(result, "chunk_id", None)
+                or f"{getattr(result, 'document_id', '')}:{getattr(result, 'page_number', '')}:{len(order)}"
+            )
+            if getattr(result, "metadata", None) is None:
+                result.metadata = {}
+            result.metadata.setdefault("retrieval_source", "vector")
+            merged[key] = result
+            order.append(key)
+
+        for result in bm25_results:
+            key = (
+                getattr(result, "chunk_id", None)
+                or f"{getattr(result, 'document_id', '')}:{getattr(result, 'page_number', '')}:{len(order)}"
+            )
+            if key in merged:
+                existing = merged[key]
+                existing_metadata = getattr(existing, "metadata", None) or {}
+                bm25_metadata = getattr(result, "metadata", None) or {}
+                existing_metadata.update({
+                    bm25_key: bm25_value
+                    for bm25_key, bm25_value in bm25_metadata.items()
+                    if bm25_value is not None
+                })
+                existing_metadata["retrieval_source"] = "hybrid"
+                existing.metadata = existing_metadata
+                continue
+
+            if getattr(result, "metadata", None) is None:
+                result.metadata = {}
+            result.metadata.setdefault("retrieval_source", "bm25")
+            merged[key] = result
+            order.append(key)
+
+        return [merged[key] for key in order]
+
     async def search_documents(
         self,
         query: str,
         top_k: int = 5,
         document_id: Optional[str] = None,
+        exclude_document_id: Optional[str] = None,
         user_id: Optional[str] = None,
         llm_provider = None,
         use_advanced_rag: bool = True
@@ -258,6 +535,7 @@ class RAGService:
             query: Search query
             top_k: Number of results to return
             document_id: Optional document ID to filter results
+            exclude_document_id: Optional document ID to exclude from results
             user_id: Optional user ID to filter results
             llm_provider: Optional LLM provider for query expansion
             use_advanced_rag: Whether to use expansion and re-ranking
@@ -266,56 +544,72 @@ class RAGService:
             List of SearchResult objects
         """
         try:
+            query = (query or "").strip()
+            top_k = max(1, min(int(top_k or 1), 50))
+            if not query:
+                return []
+
+            semantic_cache = self._semantic_cache()
+            recency_intent = self._detect_recency_intent(query)
+            cache_context = SemanticCacheContext(
+                user_id=user_id,
+                document_id=document_id,
+                exclude_document_id=exclude_document_id,
+                top_k=top_k,
+                use_advanced_rag=use_advanced_rag,
+                library_revision=semantic_cache.revision_for_user(user_id),
+                recency_intent=recency_intent,
+            )
+            cached_results = semantic_cache.get_exact(query, cache_context)
+            if cached_results is not None:
+                return cached_results
+
+            # Embed the original user query first so near-duplicate cache hits can
+            # skip query expansion, vector search, and optional re-ranking.
+            query_embedding = self.embedding_service.generate_embedding(query)
+            cached_results = semantic_cache.get_semantic(query_embedding, cache_context)
+            if cached_results is not None:
+                return cached_results
+
             search_query = query
+            search_embedding = query_embedding
             
             # 1. Query Expansion (if enabled and provider available)
             if use_advanced_rag and llm_provider:
                  print("🚀 Using Advanced RAG: Query Expansion")
                  search_query = await self.expand_query(query, llm_provider)
+                 if search_query.strip() != query:
+                     search_embedding = self.embedding_service.generate_embedding(search_query)
             
-            # Generate embedding for query
-            query_embedding = self.embedding_service.generate_embedding(search_query)
+            fetch_k = self._candidate_count(top_k, use_advanced_rag)
             
-            # Fetch more candidates for re-ranking
-            # If re-ranking is enabled, fetch 3x candidates
-            fetch_k = top_k * 3 if (use_advanced_rag and self.cross_encoder) else top_k
-            
-            if USE_SUPABASE:
-                # Search using Supabase pgvector
-                results_data = db.search_vectors(
-                    query_embedding=query_embedding,
-                    match_threshold=0.1, # Lower threshold to get more candidates (0.3 was too high)
-                    match_count=fetch_k,
-                    user_id=user_id,
-                    document_id=document_id
-                )
+            vector_results = self.vector_store.search_similar(
+                search_embedding,
+                top_k=fetch_k,
+                document_id=document_id,
+                exclude_document_id=exclude_document_id,
+                user_id=user_id
+            )
+            bm25_results = self._search_bm25_candidates(
+                query=search_query,
+                fetch_k=fetch_k,
+                document_id=document_id,
+                exclude_document_id=exclude_document_id,
+                user_id=user_id,
+            )
+            results = self._merge_retrieval_candidates(vector_results, bm25_results)
                 
-                # Map to SearchResult objects
-                results = []
-                for item in results_data:
-                    results.append(SearchResult(
-                        chunk_id=item.get('id'),
-                        document_id=item.get('document_id'),
-                        chunk_text=item.get('chunk_text'),
-                        chunk_index=item.get('chunk_index'),
-                        page_number=item.get('page_number'),
-                        similarity_score=item.get('similarity'),
-                        metadata=item.get('metadata'),
-                        user_id=user_id
-                    ))
-            else:
-                # Search vector store (FAISS)
-                results = self.vector_store.search_similar(
-                    query_embedding,
-                    top_k=fetch_k,
-                    document_id=document_id,
-                    user_id=user_id
-                )
-                
-            # 2. Re-ranking (if enabled)
-            if use_advanced_rag and self.cross_encoder and results:
+            ranked_results = self._rank_vector_results(query, results, fetch_k)
+
+            # 2. Re-ranking (if enabled). retrieval_score remains the hybrid
+            # vector/keyword/recency score; rerank_score is separate metadata.
+            if use_advanced_rag and self.cross_encoder and ranked_results:
                 print("🚀 Using Advanced RAG: Re-ranking")
-                results = self.rerank_results(query, results, top_k)
+                results = self.rerank_results(query, ranked_results, top_k)
+            else:
+                results = ranked_results[:top_k]
+
+            semantic_cache.put(query, query_embedding, cache_context, results)
             
             return results
             
@@ -381,30 +675,8 @@ class RAGService:
                 final_results = global_results
             
             if not final_results:
-                # No relevant chunks found
-                # Still try to answer if it's general chat, but warn about no context
-                prompt = f"""You are a helpful AI assistant.
-                
-User question: {query}
-
-Answer: I don't have any relevant specific information in the uploaded documents to answer this question detailedly. I will try to answer based on general knowledge if possible."""
-                
-                # If we have history, use it
-                messages = []
-                if conversation_history:
-                    messages.extend(conversation_history)
-                messages.append({"role": "user", "content": prompt})
-                
-                # Use generate_chat_response if available (for history support)
-                # But llm_provider here might be the raw provider or the service wrapper?
-                # Assuming input llm_provider has generate_chat_response
-                if hasattr(llm_provider, 'generate_chat_response'):
-                    response_text = await llm_provider.generate_chat_response(messages)
-                else:
-                    response_text = await llm_provider.generate_text(str(messages), max_tokens=max_tokens)
-                
                 return {
-                    'response': response_text,
+                    'response': "I don't have relevant information in your uploaded documents to answer that.",
                     'sources': [],
                     'has_context': False
                 }
@@ -483,9 +755,9 @@ FORMATTING:
                 {
                     'page': result.page_number,
                     'text': result.chunk_text[:200] + '...' if len(result.chunk_text) > 200 else result.chunk_text,
-                    'similarity': round(result.similarity_score, 3),
                     'document_id': result.document_id,
-                    'document_name': (result.metadata or {}).get('document_name', 'Unknown')
+                    'document_name': (result.metadata or {}).get('document_name', 'Unknown'),
+                    **retrieval_score_fields(result),
                 }
                 for result in final_results
             ]
@@ -500,31 +772,41 @@ FORMATTING:
         except Exception as e:
             print(f"❌ Error generating RAG response: {str(e)}")
             return {
-                'response': f"Sorry, I encountered an error while searching your documents: {str(e)}",
+                'response': "Sorry, I encountered an error while searching your documents.",
                 'sources': [],
                 'has_context': False,
-                'error': str(e)
+                'error': 'rag_generation_failed'
             }
     
-    def delete_document_from_rag(self, document_id: str) -> Dict[str, Any]:
+    def delete_document_from_rag(self, document_id: str, user_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Remove a document from RAG system
         
         Args:
             document_id: Document ID to remove
+            user_id: Authenticated user ID for tenant filtering
             
         Returns:
             Dict with deletion statistics
         """
         try:
-            # Remove from database
-            chunks_deleted = db.delete_chunks_by_document(document_id)
-            
-            # Remove from vector store
-            if not USE_SUPABASE:
-                vectors_removed = self.vector_store.remove_document(document_id)
-            else:
-                vectors_removed = 0
+            if not user_id:
+                return {
+                    'success': False,
+                    'document_id': document_id,
+                    'error': 'user_id is required for document deletion',
+                }
+
+            document = db.get_document_by_id(document_id, client_id=user_id)
+            if not document:
+                return {
+                    'success': False,
+                    'document_id': document_id,
+                    'error': 'Document not found',
+                }
+
+            chunks_deleted = db.delete_chunks_by_document(document_id, client_id=user_id)
+            vectors_removed = self.vector_store.remove_document(document_id)
             
             return {
                 'success': True,

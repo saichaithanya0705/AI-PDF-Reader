@@ -1,10 +1,16 @@
-import sys # trigger reload 2
+import os
+import sys
 import traceback
+import logging
+import re
 
-with open("main_heartbeat.txt", "w") as f:
-    f.write("main_loaded")
+logger = logging.getLogger(__name__)
 
-print("🚀 Starting application import...")
+if os.getenv("DEBUG_HEARTBEAT", "").lower() in ("1", "true", "yes"):
+    with open("main_heartbeat.txt", "w", encoding="utf-8") as f:
+        f.write("main_loaded")
+
+logger.info("Starting application import")
 sys.stdout.flush()
 
 try:
@@ -12,13 +18,12 @@ try:
     import uuid
     from pathlib import Path
     from typing import List, Dict, Any, Optional
-    from fastapi import FastAPI, UploadFile, File, BackgroundTasks, WebSocket, WebSocketDisconnect, HTTPException, Query, Request, Depends
+    from fastapi import FastAPI, UploadFile, File, Form, BackgroundTasks, WebSocket, WebSocketDisconnect, HTTPException, Query, Request, Depends
     from pydantic import BaseModel
     from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
     from fastapi.staticfiles import StaticFiles
     from fastapi.middleware.cors import CORSMiddleware
     import os
-    import shutil
     import json
     import warnings
     import fitz  # PyMuPDF for PDF merging
@@ -66,20 +71,18 @@ from .models import WebSocketMessage, SectionHighlight, RelevantSection
 print("✅ Websocket and models loaded")
 sys.stdout.flush()
 
-# Database selection: Use Supabase if configured, otherwise SQLite
-# Database selection: Supabase Only
-USE_SUPABASE = True
-print("🗄️ Database mode: Supabase Only")
+# Storage split: Supabase authenticates users, SQLite stores records, FAISS stores vectors.
+print("🗄️ Database mode: SQLite records + FAISS vectors; Supabase auth")
 sys.stdout.flush()
 
 try:
-    from .supabase_database import get_supabase_db
-    db = get_supabase_db()
-    from .api_routes_supabase import router as api_router
+    from .database import db
+    from .document_routes import router as api_router
     from .auth_middleware import get_current_user, get_optional_user
-    print("✅ Using Supabase database with authentication")
+    from .user_resolver import resolve_user_id
+    print("✅ Using SQLite document records with Supabase authentication")
 except Exception as e:
-    print(f"❌ FATAL: Failed to initialize Supabase: {e}")
+    print(f"❌ FATAL: Failed to initialize storage/auth dependencies: {e}")
     sys.stdout.flush()
     raise
 
@@ -91,20 +94,13 @@ from .enhanced_llm_service import EnhancedLLMService
 from .tts_service import TTSService
 from .section_highlighter import SectionHighlighter
 from .duplicate_cleaner import run_duplicate_cleanup
-from .smart_upload_handler import SmartUploadHandler
 print("✅ Services loaded")
-sys.stdout.flush()
-
-print("📦 Loading PDF processors...")
-sys.stdout.flush()
-from app.utils.process_pdfs import HighPerformancePDFProcessor  # 1A outline extraction
-from app.utils.intelligent_pdf_brain import IntelligentPDFBrain  # 1B relevance/insights
-print("✅ PDF processors loaded")
 sys.stdout.flush()
 
 print("📦 Loading RAG Service...")
 sys.stdout.flush()
-from .rag_service import get_rag_service
+from .rag_service import format_retrieval_result, get_rag_service
+from .ingestion_service import get_ingestion_service
 print("✅ RAG Service loaded")
 sys.stdout.flush()
 
@@ -115,11 +111,114 @@ BACKEND_DIR = Path(__file__).parent.parent  # Go up from app/ to backend/
 DATA_DIR = BACKEND_DIR / "data"
 DOCS_DIR = DATA_DIR / "docs"
 DOCS_DIR.mkdir(parents=True, exist_ok=True)
+MAX_PDF_UPLOAD_BYTES = int(os.getenv("MAX_PDF_UPLOAD_BYTES", str(100 * 1024 * 1024)))
+MAX_PDF_TRANSFORM_BYTES = int(os.getenv("MAX_PDF_TRANSFORM_BYTES", str(150 * 1024 * 1024)))
 
 print(f"📁 Backend directory: {BACKEND_DIR}")
 print(f"📁 Data directory: {DATA_DIR}")
 print(f"📁 Docs directory: {DOCS_DIR}")
 sys.stdout.flush()
+
+
+def _path_is_within(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def _canonical_pdf_filename(filename: Optional[str], fallback: str = "document") -> str:
+    raw_name = str(filename or fallback).replace("\\", "/").replace("\x00", "")
+    basename = Path(raw_name).name
+    stem = Path(basename).stem or fallback
+    stem = re.sub(r"[^A-Za-z0-9._ -]+", "_", stem)
+    stem = re.sub(r"\s+", "_", stem).strip(" ._-")
+    if not stem:
+        stem = fallback
+    stem = stem[:120].rstrip(" ._-") or fallback
+    return f"{stem}.pdf"
+
+
+def _pdf_stem(filename: Optional[str], fallback: str = "document") -> str:
+    canonical = _canonical_pdf_filename(filename, fallback=fallback)
+    return canonical[:-4] if canonical.lower().endswith(".pdf") else canonical
+
+
+def _safe_child_path(root: Path, filename: str) -> Path:
+    raw_name = str(filename or "").replace("\\", "/").replace("\x00", "")
+    if not raw_name or "/" in raw_name or raw_name in {".", ".."}:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
+    root_path = root.resolve()
+    candidate = (root_path / raw_name).resolve()
+    if not _path_is_within(candidate, root_path):
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    return candidate
+
+
+def _safe_docs_path(filename: str) -> Path:
+    return _safe_child_path(DOCS_DIR, filename)
+
+
+def _document_pdf_path(document) -> Path:
+    file_path = Path(document.file_path).resolve()
+    if not _path_is_within(file_path, DOCS_DIR):
+        raise HTTPException(status_code=404, detail="Document file not found")
+    return file_path
+
+
+def _validate_pdf_bytes(content: bytes, filename: str) -> int:
+    if not content:
+        raise HTTPException(status_code=400, detail="Uploaded PDF is empty")
+    if len(content) > MAX_PDF_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="Uploaded PDF exceeds the size limit")
+    if not filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are supported")
+    if not content.startswith(b"%PDF-"):
+        raise HTTPException(status_code=400, detail="Uploaded file is not a valid PDF")
+
+    try:
+        pdf_doc = fitz.open(stream=content, filetype="pdf")
+        page_count = len(pdf_doc)
+        pdf_doc.close()
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=400, detail="Uploaded file is not a valid PDF")
+
+    if page_count < 1:
+        raise HTTPException(status_code=400, detail="Uploaded PDF has no pages")
+    return page_count
+
+
+def _validate_pdf_file(file_path: Path, max_bytes: int = MAX_PDF_TRANSFORM_BYTES) -> int:
+    if not _path_is_within(file_path, DOCS_DIR) or not file_path.exists():
+        raise HTTPException(status_code=404, detail="PDF file not found")
+    if file_path.stat().st_size > max_bytes:
+        raise HTTPException(status_code=413, detail="PDF exceeds the size limit")
+
+    with open(file_path, "rb") as pdf_file:
+        if pdf_file.read(5) != b"%PDF-":
+            raise HTTPException(status_code=422, detail="Stored file is not a valid PDF")
+
+    try:
+        pdf_doc = fitz.open(str(file_path))
+        page_count = len(pdf_doc)
+        pdf_doc.close()
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=422, detail="Stored file is not a valid PDF")
+
+    if page_count < 1:
+        raise HTTPException(status_code=422, detail="Stored PDF has no pages")
+    return page_count
+
+
+def _podcast_document_id_from_filename(filename: str) -> Optional[str]:
+    match = re.fullmatch(r"podcast_([0-9a-fA-F-]{36})_[0-9]+_[0-9]+\.(wav|mp3)", filename)
+    return match.group(1) if match else None
 
 print("🚀 Creating FastAPI app...")
 sys.stdout.flush()
@@ -127,14 +226,34 @@ app = FastAPI(title="Adobe Hackathon Grand Finale Backend")
 print("✅ FastAPI app created")
 sys.stdout.flush()
 
-# Add CORS middleware FIRST
+def _cors_origins() -> list:
+    raw = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
+    origins = [o.strip() for o in raw.split(",") if o.strip()]
+    return origins or ["http://localhost:5173"]
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify exact origins
+    allow_origins=_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+from starlette.middleware.base import BaseHTTPMiddleware
+from .middleware.rate_limiter import default_limiter
+
+
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        path = request.url.path
+        if path.startswith("/api/") or path.startswith("/upload"):
+            client = request.client.host if request.client else "unknown"
+            default_limiter.check_rate_limit(client, path)
+        return await call_next(request)
+
+
+app.add_middleware(RateLimitMiddleware)
 
 # Mount static files BEFORE API routes to prevent route conflicts
 # Try multiple possible paths for frontend
@@ -170,14 +289,9 @@ app.include_router(api_router)
 # Initialize services
 llm_provider = None
 try:
-    import importlib
-    import app.llm_providers as app_llm_providers
-    importlib.reload(app_llm_providers)
-    print("🔄 Reloaded llm_providers module")
-    
     from .llm_providers import get_llm_provider
     llm_provider = get_llm_provider()
-    print(f"✅ LLM Provider initialized: {type(llm_provider).__name__}")
+    logger.info("LLM provider initialized: %s", type(llm_provider).__name__)
 except Exception as e:
     import traceback
     error_msg = f"LLM Provider initialization failed: {e}\n\nFull traceback:\n{traceback.format_exc()}"
@@ -191,152 +305,61 @@ try:
 except Exception as e:
     print(f"⚠️ Enhanced LLM Service initialization failed: {e}")
 
+tts_service = None
 try:
     tts_service = TTSService()
     print(f"✅ TTS Service initialized")
 except Exception as e:
     print(f"⚠️ TTS Service initialization failed: {e}")
 
-print(f"✅ Section Highlighter initialized")
-
-# Initialize smart upload handler
-# SQLite maintenance tasks removed
+highlighter = SectionHighlighter()
+logger.info("Section highlighter initialized; uploads use canonical ingestion service")
 
 # Enhanced PDF processing function with better integration
 async def process_pdf(job_id: str, client_id: str, file_path: str, pdf_type: str, persona: str = None, job: str = None):
     print(f"Processing {pdf_type} job {job_id} for client {client_id}")
 
     try:
-        # WS Progress: Start
         await manager.send_message({
             "type": "progress",
             "job_id": job_id,
-            "data": {"percent": 10, "message": "Starting PDF extraction..."}
+            "data": {"percent": 10, "message": "Starting ingestion..."}
         }, client_id)
 
-        # 1A: Extract outline (headings, pages, text)
-        processor = HighPerformancePDFProcessor()
-        result = processor.process_single_pdf(Path(file_path), Path('data'))
-        outline = result.get('outline', [])
+        ingestion_service = get_ingestion_service()
+        result = await ingestion_service.process_document(
+            document_id=job_id,
+            user_id=client_id,
+            mode="single",
+            batch_size=32,
+        )
 
         await manager.send_message({
             "type": "progress",
-            "job_id": job_id,
-            "data": {"percent": 30, "message": f"Extracted {len(outline)} sections"}
-        }, client_id)
-
-        # Enhanced embedding and FAISS indexing
-        from .vector_store import get_vector_store
-        from .embedding_service import get_embedding_service
-        vector_store = get_vector_store()
-        embedding_service = get_embedding_service()
-
-        sections_added = 0
-        for sec in outline:
-            try:
-                sec_id = str(uuid.uuid4())
-                # Create more comprehensive text for embedding
-                section_text = f"{sec.get('heading', '')} {sec.get('text', '')}"
-
-                if section_text.strip():  # Only process non-empty sections
-                    embedding = embedding_service.generate_embedding(section_text)
-                    vector_store.index.add(np.array([embedding]).astype('float32'))
-                    # Also store metadata
-                    vector_store.metadata.append({
-                        'id': sec_id,
-                        'doc_id': job_id,
-                        'heading': sec.get('heading', ''),
-                        'text': sec.get('text', ''),
-                        'page': sec.get('page', 1),
-                        'user_id': client_id
-                    })
-
-                    # Store in Supabase if enabled
-                    try:
-                        db.store_chunk(
-                            user_id=client_id,
-                            document_id=job_id,
-                            chunk_text=section_text,
-                            chunk_index=sections_added,
-                            page_number=sec.get('page', 1),
-                            embedding=embedding.tolist(),
-                            char_count=len(section_text),
-                            word_count=len(section_text.split())
-                        )
-                    except Exception as e:
-                        print(f"⚠️ Failed to store chunk in Supabase: {e}")
-
-                    sections_added += 1
-            except Exception as e:
-                print(f"Error processing section: {e}")
-                continue
-
-        # Save the FAISS index after processing
-        vector_store.save()
-
-        await manager.send_message({
-            "type": "progress",
-            "job_id": job_id,
-            "data": {"percent": 60, "message": f"Indexed {sections_added} sections"}
-        }, client_id)
-
-        # 1B: Enhanced relevance and insights processing
-        insights = []
-        relevance_data = []
-
-        if persona and job and llm_provider:
-            try:
-                # Use LLM for better insights
-                content_summary = " ".join([sec.get('text', '')[:200] for sec in outline[:5]])  # First 5 sections
-                insights = await llm_provider.generate_insights(content_summary, persona, job)
-
-                await manager.send_message({
-                    "type": "insights",
-                    "job_id": job_id,
-                    "data": insights
-                }, client_id)
-
-            except Exception as e:
-                print(f"Error generating insights: {e}")
-                # Fallback to 1B brain
-                try:
-                    brain = IntelligentPDFBrain()
-                    temp_collection_path = Path('data/temp_collection')
-                    temp_collection_path.mkdir(exist_ok=True)
-                    shutil.copy(file_path, temp_collection_path / Path(file_path).name)
-                    insights = brain.process_collection_intelligently(temp_collection_path)
-                    shutil.rmtree(temp_collection_path)
-                except Exception as brain_error:
-                    print(f"Error with 1B brain: {brain_error}")
-
-        await manager.send_message({
-            "type": "progress",
-            "job_id": job_id,
-            "data": {"percent": 90, "message": "Finalizing processing..."}
-        }, client_id)
-
-        # Prepare final data
-        final_data = {
-            "outline": outline,
-            "insights": insights,
-            "sections_indexed": sections_added,
-            "pdf_type": pdf_type,
-            "persona": persona,
-            "job": job
-        }
-
-        # Final WS message
-        await manager.send_message({
-            "type": "complete",
             "job_id": job_id,
             "data": {
-                "percent": 100,
-                "message": "Processing Complete!",
-                "result": final_data
+                "percent": 90 if result.get("success") else 100,
+                "message": "Finalizing ingestion..." if result.get("success") else "Ingestion failed",
             }
         }, client_id)
 
-        print(f"✅ Finished processing job {job_id}: {sections_added} sections indexed")
+        message_type = "complete" if result.get("success") else "error"
+        await manager.send_message({
+            "type": message_type,
+            "job_id": job_id,
+            "data": {
+                "percent": 100,
+                "message": "Processing Complete!" if result.get("success") else result.get("error", "Processing failed"),
+                "result": {
+                    **result,
+                    "pdf_type": pdf_type,
+                    "persona": persona,
+                    "job": job,
+                }
+            }
+        }, client_id)
+
+        print(f"✅ Finished processing job {job_id}: {result}")
 
     except Exception as e:
         print(f"❌ Error processing job {job_id}: {e}")
@@ -346,6 +369,50 @@ async def process_pdf(job_id: str, client_id: str, file_path: str, pdf_type: str
             "data": {"message": f"Processing failed: {str(e)}"}
         }, client_id)
 
+
+async def process_pdf_collection(
+    collection_job_id: str,
+    client_id: str,
+    document_ids: List[str],
+    persona: str = None,
+    job: str = None,
+):
+    """Process a group of uploaded PDFs through the multi-PDF algorithm."""
+    job_ids = [collection_job_id, *document_ids]
+
+    async def send_to_all(message_type: str, percent: int, message: str, result: Optional[Dict[str, Any]] = None):
+        for current_job_id in job_ids:
+            await manager.send_message({
+                "type": message_type,
+                "job_id": current_job_id,
+                "data": {
+                    "percent": percent,
+                    "message": message,
+                    **({"result": result} if result is not None else {}),
+                },
+            }, client_id)
+
+    try:
+        await send_to_all("progress", 10, "Starting multi-PDF ingestion...")
+        ingestion_service = get_ingestion_service()
+        result = await ingestion_service.process_collection(
+            document_ids=document_ids,
+            user_id=client_id,
+            persona=persona,
+            job=job,
+            batch_size=32,
+        )
+
+        if result.get("success"):
+            await send_to_all("complete", 100, "Processing Complete!", result)
+            print(f"✅ Finished multi-PDF ingestion {collection_job_id}: {result}")
+        else:
+            await send_to_all("error", 100, result.get("error", "Processing failed"), result)
+
+    except Exception as e:
+        print(f"❌ Error processing multi-PDF job {collection_job_id}: {e}")
+        await send_to_all("error", 100, f"Processing failed: {str(e)}")
+
 # --- API Endpoints ---
 
 # NEW: Endpoint for PAST/CONTEXT PDFs (bulk upload)
@@ -353,201 +420,176 @@ async def process_pdf(job_id: str, client_id: str, file_path: str, pdf_type: str
 async def upload_context_files(
     background_tasks: BackgroundTasks,
     files: List[UploadFile] = File(...),
-    persona: str = None,
-    job: str = None,
-    current_user: Optional[dict] = Depends(get_optional_user),
-    client_id: Optional[str] = Query(None, description="User identifier for multi-tenant uploads")
+    persona: Optional[str] = Form(None),
+    job: Optional[str] = Form(None),
+    current_user: dict = Depends(get_current_user),
+    client_id: Optional[str] = Query(None, description="Deprecated; ignored when authenticated"),
 ):
     """
-    Accepts multiple PDF files to add to the knowledge base (Supabase or SQLite).
+    Accepts multiple PDF files and ingests them with the multi-PDF algorithm.
     """
     uploaded_files_info = []
-    user_id = client_id or (current_user.get("sub") if current_user else "local-user")
-    
-    print(f"📚 Uploading {len(files)} context files for user {user_id}")
+    document_ids: List[str] = []
+    user_id = resolve_user_id(current_user, client_id)
+    collection_job_id = str(uuid.uuid4())
+
+    logger.info("Uploading %s context files for user %s", len(files), user_id)
     sys.stdout.flush()
 
     for file in files:
+        current_file_path: Optional[Path] = None
         try:
-            job_id = str(uuid.uuid4())
-            filename_with_id = f"{job_id}_{file.filename}"
-            file_path = DOCS_DIR / filename_with_id
-            
-            # Save file
             content = await file.read()
-            with open(file_path, "wb") as f:
+            original_name = _canonical_pdf_filename(file.filename)
+            _validate_pdf_bytes(content, original_name)
+            file_hash = hashlib.md5(content).hexdigest()
+
+            existing = db.find_duplicate_by_hash(file_hash, client_id=user_id)
+            if existing:
+                db.update_last_uploaded(existing.id, client_id=user_id)
+                uploaded_files_info.append({
+                    "job_id": existing.id,
+                    "filename": original_name,
+                    "status": "duplicate",
+                    "is_duplicate": True,
+                    "file_url": f"/api/files/{existing.filename}",
+                })
+                print(f"🔄 Duplicate context file detected: {original_name} (ID: {existing.id})")
+                continue
+
+            file_id = str(uuid.uuid4())
+            filename_with_id = f"{file_id}_{original_name}"
+            current_file_path = _safe_docs_path(filename_with_id)
+
+            with open(current_file_path, "wb") as f:
                 f.write(content)
-                
-            # Create DB Record
-            # Create DB Record
+
             doc = db.create_document(
-                user_id=user_id,
                 filename=filename_with_id,
-                original_name=file.filename,
+                original_name=original_name,
                 file_size=len(content),
-                file_path=str(file_path),
+                file_path=str(current_file_path),
+                client_id=user_id,
                 persona=persona,
-                job_role=job
+                job_role=job,
+                file_hash=file_hash,
             )
-            job_id = doc.id
-            
-            # Add to background tasks
-            # Use 'library' context for bulk uploads
-            background_tasks.add_task(process_pdf, job_id, user_id, str(file_path), 'library', persona, job)
-            
+            document_ids.append(doc.id)
+
             uploaded_files_info.append({
-                "job_id": job_id,
-                "filename": file.filename,
-                "status": "uploading"
+                "job_id": doc.id,
+                "filename": original_name,
+                "status": "queued",
+                "file_url": f"/api/files/{filename_with_id}",
+                "is_duplicate": False,
             })
-            print(f"✅ Queued file for processing: {file.filename} (ID: {job_id})")
+            print(f"✅ Queued context file for multi-PDF ingestion: {original_name} (ID: {doc.id})")
             
         except Exception as e:
-            print(f"❌ Failed to upload {file.filename}: {e}")
+            failed_name = _canonical_pdf_filename(file.filename)
+            print(f"❌ Failed to upload {failed_name}: {e}")
             uploaded_files_info.append({
-                "filename": file.filename,
+                "filename": failed_name,
                 "error": str(e),
                 "status": "failed"
             })
             # Cleanup
             try:
-                if 'file_path' in locals() and file_path.exists():
-                    file_path.unlink()
-            except:
+                if current_file_path is not None and current_file_path.exists():
+                    current_file_path.unlink()
+            except Exception:
                 pass
+
+    if document_ids:
+        background_tasks.add_task(
+            process_pdf_collection,
+            collection_job_id,
+            user_id,
+            document_ids,
+            persona,
+            job,
+        )
 
     return JSONResponse(
         status_code=202,
         content={
-            "detail": f"Processing {len(files)} files",
+            "detail": f"Accepted {len(document_ids)} new file(s) for multi-PDF ingestion",
+            "collection_job_id": collection_job_id,
             "files": uploaded_files_info
         }
     )
+
+
 # NEW: Endpoint for CURRENT PDF (for viewing)
 @app.post("/upload/active_file")
 async def upload_active_file(
     background_tasks: BackgroundTasks,
-    persona: str = None,
-    job: str = None,
+    persona: Optional[str] = Form(None),
+    job: Optional[str] = Form(None),
     file: UploadFile = File(...),
-    current_user: Optional[dict] = Depends(get_optional_user),
-    client_id: Optional[str] = Query(None, description="User identifier for multi-tenant uploads")
+    current_user: dict = Depends(get_current_user),
+    client_id: Optional[str] = Query(None, description="Deprecated; ignored when authenticated"),
 ):
     """
-    Accepts a single "current" PDF for immediate viewing and analysis.
+    Accepts a single current PDF for viewing and single-PDF ingestion.
     """
-    user_id = client_id or (current_user.get("sub") if current_user else "local-user")
-    job_id = str(uuid.uuid4())
-    filename_with_id = f"{job_id}_{file.filename}"
-    file_path = DOCS_DIR / filename_with_id
-
-    # Save the uploaded file temporarily
+    user_id = resolve_user_id(current_user, client_id)
     file_content = await file.read()
+    original_name = _canonical_pdf_filename(file.filename)
+    _validate_pdf_bytes(file_content, original_name)
+    file_hash = hashlib.md5(file_content).hexdigest()
+
+    existing = db.find_duplicate_by_hash(file_hash, client_id=user_id)
+    if existing:
+        db.update_last_opened(existing.id, client_id=user_id)
+        return JSONResponse(
+            status_code=200,
+            content={
+                "job_id": existing.id,
+                "filename": original_name,
+                "detail": "File already exists. Updated access time for existing document.",
+                "file_url": f"/api/files/{existing.filename}",
+                "is_duplicate": True,
+                "original_upload_date": existing.upload_date.isoformat() if existing.upload_date else None,
+            },
+        )
+
+    file_id = str(uuid.uuid4())
+    filename_with_id = f"{file_id}_{original_name}"
+    file_path = _safe_docs_path(filename_with_id)
+
     with open(file_path, "wb") as buffer:
         buffer.write(file_content)
 
-    # Use smart upload handler for duplicate detection and processing
-    if 'smart_upload_handler' in globals() and smart_upload_handler:
-        try:
-            print(f"📚 Processing upload with smart handler: {file.filename}")
-
-            upload_result = smart_upload_handler.handle_upload(
-                file_path, file.filename, user_id, persona, job
-            )
-
-            if upload_result['is_duplicate']:
-                print(f"🔄 Duplicate detected: {file.filename}")
-                existing_doc = upload_result['existing_document']
-
-                # Remove temporary file since we're using existing one
-                if file_path.exists():
-                    file_path.unlink()
-
-                # Return existing document info
-                return JSONResponse(
-                    status_code=200,
-                    content={
-                        "job_id": existing_doc['id'],
-                        "filename": file.filename,
-                        "detail": f"File already exists. Updated access time for existing document.",
-                        "file_url": f"/api/files/{existing_doc['filename']}",
-                        "is_duplicate": True,
-                        "original_upload_date": existing_doc['upload_date']
-                    }
-                )
-            else:
-                print(f"✅ New file processed: {file.filename}")
-                job_id = upload_result['document_id']
-                filename_with_id = upload_result['filename']
-
-                # Remove temporary file since smart handler already processed it
-                if file_path.exists():
-                    file_path.unlink()
-                    print(f"🗑️ Removed temporary file: {file_path.name}")
-
-                print(f"✅ New document processed successfully: {filename_with_id}")
-
-                # Verify it was stored
-                if USE_SUPABASE:
-                    # For Supabase, we might need to check differently or trust it worked
-                    pass
-                else:
-                    all_docs = db.get_all_documents(client_id=user_id)
-                    print(f"📊 Total documents in database after upload: {len(all_docs)}")
-
-        except Exception as e:
-            print(f"⚠️ Smart upload handler failed: {e}")
-            raise e
-    else:
-        # Fallback: Direct upload without smart handler (for Supabase or when handler missing)
-        print(f"ℹ️ Smart upload handler not available, processing directly: {file.filename}")
-        
-        try:
-            # Create document record in DB
-            if USE_SUPABASE:
-                doc = db.create_document(
-                    user_id=user_id,
-                    filename=filename_with_id,
-                    original_name=file.filename,
-                    file_size=len(file_content),
-                    file_path=str(file_path),
-                    persona=persona,
-                    job_role=job
-                )
-                job_id = doc.id
-            else:
-                doc = db.create_document(
-                    filename=filename_with_id,
-                    original_name=file.filename,
-                    file_size=len(file_content),
-                    file_path=str(file_path),
-                    client_id=user_id,
-                    persona=persona,
-                    job_role=job
-                )
-                job_id = doc.id
-                
-            print(f"✅ New document created directly: {job_id}")
-            
-        except Exception as e:
-            print(f"❌ Failed to create document record: {e}")
-            if file_path.exists():
-                file_path.unlink()
-            raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
-
-        # Start the background processing task for this file
-        actual_file_path = DOCS_DIR / filename_with_id
-        background_tasks.add_task(process_pdf, job_id, user_id, str(actual_file_path), 'current', persona, job)
-
-        return JSONResponse(
-            status_code=202,
-            content={
-                "job_id": job_id,
-                "filename": file.filename,
-                "detail": "Active file accepted for viewing and processing.",
-                "file_url": f"/api/files/{filename_with_id}"
-            }
+    try:
+        doc = db.create_document(
+            filename=filename_with_id,
+            original_name=original_name,
+            file_size=len(file_content),
+            file_path=str(file_path),
+            client_id=user_id,
+            persona=persona,
+            job_role=job,
+            file_hash=file_hash,
         )
+    except Exception as e:
+        print(f"❌ Failed to create document record: {e}")
+        if file_path.exists():
+            file_path.unlink()
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+    background_tasks.add_task(process_pdf, doc.id, user_id, str(file_path), "current", persona, job)
+
+    return JSONResponse(
+        status_code=202,
+        content={
+            "job_id": doc.id,
+            "filename": original_name,
+            "detail": "Active file accepted for viewing and processing.",
+            "file_url": f"/api/files/{filename_with_id}",
+            "is_duplicate": False,
+        },
+    )
 
 
 @app.websocket("/ws/{client_id}")
@@ -596,95 +638,116 @@ async def get_config():
     }
 
 
+def _document_display_name(document: Any) -> str:
+    return document.original_name or document.filename or f"Document {document.id[:8]}"
+
+
+def _recommendation_from_retrieval_result(result: Any, doc_name_cache: Dict[str, str]) -> Dict[str, Any]:
+    formatted = format_retrieval_result(result, snippet_chars=200)
+    document_id = formatted.get("document_id")
+    relevance = formatted.get("retrieval_score")
+    if relevance is None:
+        relevance = formatted.get("vector_similarity", formatted.get("similarity", 0.0))
+
+    return {
+        "id": formatted.get("id"),
+        "title": formatted.get("section_title") or "Relevant section",
+        "snippet": formatted.get("text", ""),
+        "page": formatted.get("page_number") or 1,
+        "relevance": relevance or 0.0,
+        "similarity": formatted.get("similarity", 0.0),
+        "vector_similarity": formatted.get("vector_similarity", 0.0),
+        "retrieval_score": formatted.get("retrieval_score"),
+        "lexical_overlap": formatted.get("lexical_overlap"),
+        "rerank_score": formatted.get("rerank_score"),
+        "documentId": document_id,
+        "documentName": doc_name_cache.get(document_id, formatted.get("document_name", "Unknown Document")),
+        "bbox": None,
+        "file_path": formatted.get("file_path", ""),
+    }
+
+
 @app.get("/api/recommendations/{document_id}")
 async def get_recommendations(
     document_id: str,
     page: int = Query(1, ge=1),
     persona: str = Query(None),
     job: str = Query(None),
-    include_cross_document: bool = Query(True, description="Include cross-document recommendations")
+    include_cross_document: bool = Query(True, description="Include cross-document recommendations"),
+    current_user: dict = Depends(get_current_user)
 ):
     """Get related sections for a specific document and page with intelligent cross-document connections"""
     try:
-        # Import vector store and embedding service
-        import numpy as np
-        from .vector_store import get_vector_store
-        from .embedding_service import get_embedding_service
+        user_id = current_user["sub"]
 
-        vector_store = get_vector_store()
-        embedding_service = get_embedding_service()
-
-        # Query FAISS index for similar sections
-        if vector_store.index.ntotal == 0:
-            return {"recommendations": [], "cross_document_sections": []}
+        current_document = db.get_document_by_id(document_id, client_id=user_id)
+        if not current_document:
+            raise HTTPException(status_code=404, detail="Document not found")
 
         # Build a cache of document names from database
-        doc_name_cache = {}
+        doc_name_cache = {current_document.id: _document_display_name(current_document)}
         try:
-            all_docs = db.get_all_documents()
+            all_docs = db.get_all_documents(client_id=user_id)
             for doc in all_docs:
-                doc_name_cache[doc.id] = doc.original_name or doc.filename or f"Document {doc.id[:8]}"
+                doc_name_cache[doc.id] = _document_display_name(doc)
         except Exception as e:
             print(f"⚠️ Could not fetch document names: {e}")
 
-        # Get current page content (simplified - in production, extract actual page content)
-        current_content = f"Page {page} content for document {document_id}"
+        from .context_builder import get_page_content
+
+        page_content = await get_page_content(db, document_id, page)
+        if page_content:
+            current_content = page_content[:2000]
+        else:
+            metadata = current_document.metadata or {}
+            topics = metadata.get("topics") or []
+            current_content = "\n".join(
+                str(part)
+                for part in [
+                    _document_display_name(current_document),
+                    metadata.get("summary"),
+                    ", ".join(str(topic) for topic in topics[:8]) if isinstance(topics, list) else topics,
+                    f"Page {page}",
+                ]
+                if part
+            )
 
         # Enhanced query with persona and job context
         if persona and job:
             current_content += f" Context: {persona} working on {job}"
 
-        # Encode query
-        query_embedding = embedding_service.generate_embedding(current_content)
+        rag_service = get_rag_service()
+        same_document_results = await rag_service.search_documents(
+            query=current_content,
+            top_k=3,
+            document_id=document_id,
+            user_id=user_id,
+            use_advanced_rag=False,
+        )
 
-        # Search FAISS index for semantic similarity
-        k = min(10, vector_store.index.ntotal)  # Get top 10 candidates
-        distances, indices = vector_store.index.search(np.array([query_embedding]).astype('float32'), k)
+        cross_document_results = []
+        if include_cross_document:
+            cross_document_results = await rag_service.search_documents(
+                query=current_content,
+                top_k=5 if persona and job else 3,
+                exclude_document_id=document_id,
+                user_id=user_id,
+                use_advanced_rag=False,
+            )
 
-        # Separate same-document and cross-document recommendations
-        same_document_recommendations = []
-        cross_document_recommendations = []
-
-        # Track unique documents for cross-document intelligence
-        document_texts = {}
-
-        for i, idx in enumerate(indices[0]):
-            if idx < len(vector_store.metadata):
-                meta = vector_store.metadata[idx]
-                relevance = float(1.0 - distances[0][i])
-
-                # Skip very low relevance matches
-                if relevance < 0.3:
-                    continue
-
-                # Get actual document name from cache or fallback
-                doc_id = meta['doc_id']
-                doc_name = doc_name_cache.get(doc_id, meta.get('filename', f"Document {doc_id[:8]}..."))
-
-                recommendation = {
-                    "id": meta['id'],
-                    "title": meta['heading'],
-                    "snippet": meta['text'][:200] + "..." if len(meta['text']) > 200 else meta['text'],
-                    "page": meta['page'],
-                    "relevance": relevance,
-                    "documentId": meta['doc_id'],
-                    "documentName": doc_name,
-                    "bbox": None,  # Will be populated by highlighting system
-                    "file_path": meta.get('file_path', '')
-                }
-                
-                if meta['doc_id'] == document_id:
-                    same_document_recommendations.append(recommendation)
-                else:
-                    cross_document_recommendations.append(recommendation)
-                    # Store document content for intelligent analysis
-                    if meta['doc_id'] not in document_texts:
-                        document_texts[meta['doc_id']] = []
-                    document_texts[meta['doc_id']].append(meta['text'])
+        same_document_recommendations = [
+            _recommendation_from_retrieval_result(result, doc_name_cache)
+            for result in same_document_results
+        ]
+        cross_document_recommendations = [
+            _recommendation_from_retrieval_result(result, doc_name_cache)
+            for result in cross_document_results
+        ]
 
         # Enhanced cross-document intelligence using the intelligent PDF brain
-        enhanced_cross_document = []
+        enhanced_cross_document = cross_document_recommendations[:3]
         if include_cross_document and cross_document_recommendations and persona and job:
+            enhanced_cross_document = []
             try:
                 # Initialize the intelligent PDF brain
                 from app.utils.intelligent_pdf_brain import IntelligentPDFBrain
@@ -737,9 +800,11 @@ async def get_recommendations(
         
         return result
 
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"Error getting recommendations: {e}")
-        return {"recommendations": [], "cross_document_sections": [], "error": str(e)}
+        return {"recommendations": [], "cross_document_sections": []}
 
 
 @app.get("/api/insights/{document_id}")
@@ -747,57 +812,25 @@ async def get_insights(
     document_id: str,
     page: int = Query(1, ge=1),
     persona: str = Query(None),
-    job: str = Query(None)
+    job: str = Query(None),
+    current_user: dict = Depends(get_current_user)
 ):
     """Generate comprehensive AI-powered insights for a specific document and page using actual PDF content"""
     try:
         if not enhanced_llm_service:
-            print("⚠️ Enhanced LLM service not available, returning mock insights for testing")
-            # Return mock insights for testing when LLM is not available
-            mock_insights = [
-                {
-                    "id": "1",
-                    "type": "key-insight",
-                    "title": "Core Concept",
-                    "content": "This section introduces fundamental concepts that form the foundation for understanding the broader topic.",
-                    "relevance": 0.9
-                },
-                {
-                    "id": "2",
-                    "type": "did-you-know", 
-                    "title": "Background Context",
-                    "content": "Research shows that understanding these principles can improve comprehension by up to 40% compared to linear reading.",
-                    "relevance": 0.8
-                },
-                {
-                    "id": "3",
-                    "type": "counterpoint",
-                    "title": "Alternative Perspective",
-                    "content": "While this approach is widely accepted, some experts argue for a more nuanced interpretation of the data.",
-                    "relevance": 0.7
-                },
-                {
-                    "id": "4",
-                    "type": "connection",
-                    "title": "Related Concepts",
-                    "content": "This content connects to similar themes found in related documents and industry best practices.",
-                    "relevance": 0.8
-                }
-            ]
-            return {"insights": mock_insights, "mock": True}
+            raise HTTPException(status_code=503, detail="Enhanced LLM service not available")
+
+        user_id = current_user["sub"]
 
         # Get the actual document from database
-        document = db.get_document_by_id(document_id)
+        document = db.get_document_by_id(document_id, client_id=user_id)
         if not document:
-            return {"insights": [], "error": "Document not found"}
+            raise HTTPException(status_code=404, detail="Document not found")
 
         # Extract FULL PDF content for comprehensive AI analysis
         page_content = ""
         full_pdf_content = ""
-
-        # Import vector store for fallback content retrieval
-        from .vector_store import get_vector_store
-        vector_store = get_vector_store()
+        full_content = ""
 
         try:
             import fitz  # PyMuPDF
@@ -813,27 +846,26 @@ async def get_insights(
             print(f"🔍 Absolute path: {pdf_path.absolute()}")
             print(f"🔍 File exists: {pdf_path.exists()}")
 
-            if pdf_path.exists():
-                pdf_doc = fitz.open(pdf_path)
-                total_pages = len(pdf_doc)
-                
-                # Extract content from ALL pages for comprehensive analysis
-                all_pages_content = []
-                for page_num in range(total_pages):
-                    page_text = pdf_doc[page_num].get_text()
-                    if page_text.strip():  # Only add non-empty pages
-                        all_pages_content.append(f"=== Page {page_num + 1} ===\n{page_text}")
-                
-                # Get current page content specifically
-                if page <= total_pages:
-                    current_page = pdf_doc[page - 1]
-                    page_content = current_page.get_text()
-                
-                # Combine all content with current page highlighted
-                full_pdf_content = "\n\n".join(all_pages_content)
-                
-                # Create comprehensive content for LLM analysis
-                full_content = f"""DOCUMENT: {document.original_name}
+            if not pdf_path.exists():
+                raise HTTPException(status_code=404, detail="PDF file not found")
+
+            pdf_doc = fitz.open(pdf_path)
+            total_pages = len(pdf_doc)
+            if page > total_pages:
+                pdf_doc.close()
+                raise HTTPException(status_code=422, detail="Requested page is outside the PDF page range")
+
+            all_pages_content = []
+            for page_num in range(total_pages):
+                page_text = pdf_doc[page_num].get_text()
+                if page_text.strip():
+                    all_pages_content.append(f"=== Page {page_num + 1} ===\n{page_text}")
+
+            current_page = pdf_doc[page - 1]
+            page_content = current_page.get_text()
+            full_pdf_content = "\n\n".join(all_pages_content)
+
+            full_content = f"""DOCUMENT: {document.original_name}
 TOTAL PAGES: {total_pages}
 CURRENT PAGE FOCUS: {page}
 
@@ -842,45 +874,31 @@ CURRENT PAGE CONTENT:
 
 COMPLETE DOCUMENT CONTENT:
 {full_pdf_content[:15000]}{'...' if len(full_pdf_content) > 15000 else ''}"""
-                
-                pdf_doc.close()
-                print(f"📄 Extracted full PDF: {total_pages} pages, {len(full_pdf_content)} characters total")
-            else:
-                print(f"⚠️ PDF file not found: {pdf_path}")
-                # Fallback: try to get content from FAISS metadata
-                matching_sections = [meta for meta in vector_store.metadata if meta.get('doc_id') == document_id]
-                if matching_sections:
-                    page_content = "\n".join([meta.get('text', '') for meta in matching_sections if meta.get('page') == page])
-                    full_content = f"Page {page} Content:\n{page_content}"
-                else:
-                    full_content = f"Document {document.original_name}, Page {page} - Content extraction failed"
-            
+
+            pdf_doc.close()
+            print(f"📄 Extracted full PDF: {total_pages} pages, {len(full_pdf_content)} characters total")
+
+        except HTTPException:
+            raise
         except Exception as e:
             print(f"Error extracting PDF content: {e}")
-            # Fallback to FAISS metadata if PDF extraction fails
-            matching_sections = [meta for meta in metadata if meta.get('doc_id') == document_id]
-            if matching_sections:
-                page_content = "\n".join([meta.get('text', '') for meta in matching_sections if meta.get('page') == page])
-                full_content = f"Page {page} Content:\n{page_content}"
-            else:
-                full_content = f"Document: {document.original_name}, Page {page} - Unable to extract content"
+            raise HTTPException(status_code=422, detail="Could not extract document content for insights")
 
-                # Generate comprehensive insights using LLM with ACTUAL PDF FILE (multimodal analysis)
+        if not full_content.strip():
+            raise HTTPException(status_code=422, detail="No document text is available for insights")
+
         print(f"🧠 Generating comprehensive insights for {document.original_name}")
         print(f"📊 PDF file: {document.file_path}")
         print(f"📄 Page focus: {page}, Full document analysis: enabled")
-        
-        # Get related sections for context
+
         related_sections = []
         try:
-            # Get related sections from the same document and others
             all_documents = db.get_all_documents(client_id=user_id)
-            for doc in all_documents[:3]:  # Limit to 3 documents for context
-                if doc.id != document_id:  # Skip current document
+            for doc in all_documents[:3]:
+                if doc.id != document_id and hasattr(db, "get_document_metadata"):
                     doc_metadata = db.get_document_metadata(doc.id)
                     if doc_metadata:
-                        # Get a sample section from each document
-                        for meta in doc_metadata[:2]:  # Max 2 sections per document
+                        for meta in doc_metadata[:2]:
                             related_sections.append({
                                 'title': f"{doc.original_name} - Page {meta.get('page', 1)}",
                                 'snippet': meta.get('text', '')[:200] + '...' if len(meta.get('text', '')) > 200 else meta.get('text', ''),
@@ -891,7 +909,6 @@ COMPLETE DOCUMENT CONTENT:
             print(f"Warning: Could not get related sections: {e}")
 
         try:
-            # Use Enhanced LLM Service for AI insights generation
             print("🧠 Using Enhanced LLM Service for insights generation...")
             insights = await enhanced_llm_service.generate_insights_bulb(
                 content=full_content,
@@ -911,66 +928,23 @@ COMPLETE DOCUMENT CONTENT:
 
             return {"insights": insights}
             
-        except Exception as llm_error:
-            print(f"❌ LLM failed to generate insights: {llm_error}")
-            print(f"🔍 Error type: {type(llm_error).__name__}")
-            if "credentials" in str(llm_error).lower():
-                print("🔐 Credential issue detected - check GOOGLE_APPLICATION_CREDENTIALS")
-            elif "quota" in str(llm_error).lower():
-                print("💸 API quota issue detected")
-            elif "permission" in str(llm_error).lower():
-                print("🚫 Permission issue detected")
-            print("🔄 Generating content-aware insights based on extracted PDF text...")
-            
-            # Generate content-aware insights based on the actual PDF content
-            content_preview = full_content[:300] + "..." if len(full_content) > 300 else full_content
-            
-            # Create better fallback insights based on actual content
-            content_length = len(full_pdf_content) if 'full_pdf_content' in locals() else len(full_content)
-            
-            insights = [
-                {
-                    "id": "1",
-                    "type": "key-insight",
-                    "title": f"Document Analysis: {document.original_name}",
-                    "content": f"This document contains comprehensive content across multiple sections, with focus on page {page} providing key information.",
-                    "relevance": 0.9
-                },
-                {
-                    "id": "2",
-                    "type": "did-you-know",
-                    "title": "Content Metrics",
-                    "content": f"This PDF has {content_length // 1000}k+ characters of extractable content, indicating rich information density.",
-                    "relevance": 0.8
-                },
-                {
-                    "id": "3",
-                    "type": "counterpoint",
-                    "title": "Processing Status",
-                    "content": f"Content successfully extracted and analyzed - AI processing available with proper LLM configuration.",
-                    "relevance": 0.7
-                },
-                {
-                    "id": "4",
-                    "type": "connection",
-                    "title": "Document Accessibility",
-                    "content": f"Full document content processed for comprehensive analysis with page {page} as primary focus.",
-                    "relevance": 0.8
-                }
-            ]
-            
-            print(f"✅ Generated content-aware insights based on extracted PDF text")
-            return {"insights": insights, "content_based": True, "llm_error": str(llm_error)}
+        except Exception:
+            logger.exception("LLM failed to generate insights")
+            raise HTTPException(status_code=502, detail="Insight generation failed")
 
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"❌ Error generating insights: {e}")
-        import traceback
-        traceback.print_exc()
-        return {"insights": [], "error": str(e)}
+        logger.exception("Error generating insights")
+        raise HTTPException(status_code=500, detail="Failed to generate insights")
 
 
 @app.post("/api/generate-podcast")
-async def generate_podcast(request: Request):
+async def generate_podcast(
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
     """Generate a podcast-style audio overview with Azure TTS"""
     try:
         if not tts_service:
@@ -979,10 +953,23 @@ async def generate_podcast(request: Request):
         # Parse request body
         body = await request.json()
         document_id = body.get("document_id")
-        page = body.get("page", 1)
+        try:
+            page = int(body.get("page", 1))
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="Page must be a positive integer")
+        if page < 1:
+            raise HTTPException(status_code=400, detail="Page must be a positive integer")
         selected_text = body.get("selected_text")
         persona = body.get("persona")
         job = body.get("job")
+        user_id = current_user["sub"]
+
+        if not document_id:
+            raise HTTPException(status_code=400, detail="Document ID is required")
+
+        document = db.get_document_by_id(document_id, client_id=user_id)
+        if not document:
+            raise HTTPException(status_code=404, detail="Document was not found")
 
         print(f"🎙️ Generating podcast for document {document_id}, page {page}")
         print(f"📝 Selected text: {selected_text[:100] if selected_text else 'None'}...")
@@ -991,39 +978,32 @@ async def generate_podcast(request: Request):
         if selected_text and len(selected_text.strip()) > 10:
             # Use selected text
             content = selected_text.strip()
-            title = f"Selected Text from {document_id}"
+            title = f"Selected Text from {document.original_name}"
             print(f"🎯 Using selected text ({len(content)} chars)")
         else:
             # Try to get actual document content
             try:
-                # Get document from database
-                doc = db.get_document_by_id(document_id)
-                if doc:
-                    # Try to extract content from the PDF
-                    pdf_path = Path(doc.file_path)
-                    if pdf_path.exists():
-                        import PyPDF2
-                        with open(pdf_path, 'rb') as file:
-                            pdf_reader = PyPDF2.PdfReader(file)
-                            if page <= len(pdf_reader.pages):
-                                page_content = pdf_reader.pages[page - 1].extract_text()
-                                content = page_content[:2000]  # Limit for reasonable audio length
-                                title = f"{doc.original_name} - Page {page}"
-                                print(f"📄 Using PDF content ({len(content)} chars)")
-                            else:
-                                content = f"Content from page {page} of {doc.original_name}"
-                                title = f"{doc.original_name} - Page {page}"
+                # Try to extract content from the PDF after tenant and storage checks.
+                pdf_path = _document_pdf_path(document)
+                _validate_pdf_file(pdf_path)
+                import PyPDF2
+                with open(pdf_path, 'rb') as file:
+                    pdf_reader = PyPDF2.PdfReader(file)
+                    if page <= len(pdf_reader.pages):
+                        page_content = pdf_reader.pages[page - 1].extract_text()
+                        content = page_content[:2000]  # Limit for reasonable audio length
+                        title = f"{document.original_name} - Page {page}"
+                        print(f"📄 Using PDF content ({len(content)} chars)")
                     else:
-                        content = f"Document content from {doc.original_name}, page {page}"
-                        title = f"{doc.original_name} - Page {page}"
-                else:
-                    content = f"Document content from page {page}"
-                    title = f"Document - Page {page}"
+                        raise HTTPException(status_code=422, detail="Requested page is outside the PDF page range")
+            except HTTPException:
+                raise
             except Exception as e:
                 print(f"⚠️ Could not extract PDF content: {e}")
-                # Use a more descriptive fallback content
-                content = f"Welcome to your document analysis. This is page {page} of your PDF document. The system is ready to provide insights and analysis of your content."
-                title = f"Document Analysis - Page {page}"
+                raise HTTPException(status_code=422, detail="Could not extract document content for podcast")
+
+        if not content or not content.strip():
+            raise HTTPException(status_code=422, detail="No document text is available for podcast generation")
 
         # Add persona context
         if persona and job:
@@ -1034,26 +1014,23 @@ async def generate_podcast(request: Request):
         try:
             audio_data = await tts_service.generate_podcast(content, title)
 
-            # Save to temporary file
+            # Save with a document-bound filename so playback can be authorized later.
             filename = f"podcast_{document_id}_{page}_{hash(content) % 10000}.wav"
-            audio_file = await tts_service.save_audio_file(audio_data, filename)
+            audio_dir = DATA_DIR / "temp_audio"
+            audio_dir.mkdir(parents=True, exist_ok=True)
+            audio_file = _safe_child_path(audio_dir, filename)
+            with open(audio_file, "wb") as f:
+                f.write(audio_data)
 
             print(f"✅ Podcast generated: {audio_file}")
-            return {"audioUrl": f"/api/audio/{Path(audio_file).name}"}
+            return {"audioUrl": f"/api/audio/{audio_file.name}"}
 
         except Exception as tts_error:
             print(f"⚠️ Azure TTS failed: {tts_error}")
-            print(f"🔄 Using demo audio as fallback...")
+            raise HTTPException(status_code=502, detail="TTS generation failed")
 
-            # Fallback to demo audio for hackathon
-            return {
-                "audioUrl": "/api/audio/demo_podcast.mp3",
-                "title": title,
-                "content_length": len(content),
-                "status": "fallback_demo",
-                "message": f"Using demo audio - Azure TTS error: {str(tts_error)}"
-            }
-
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"❌ Error generating podcast: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1063,51 +1040,46 @@ async def generate_podcast(request: Request):
 
 @app.get("/api/files/{filename}")
 @app.head("/api/files/{filename}")
-async def get_pdf_file(filename: str):
-    """Serve uploaded PDF files for PDF.js and Adobe PDF Embed API with proper CORS headers"""
-    file_path = DOCS_DIR / filename
-    if file_path.exists():
-        return FileResponse(
-            file_path,
-            media_type="application/pdf",
-            headers={
-                "Accept-Ranges": "bytes",
-                "Cache-Control": "public, max-age=3600",
-                "Content-Disposition": f"inline; filename={filename}",
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
-                "Access-Control-Allow-Headers": "*",
-                "Cross-Origin-Resource-Policy": "cross-origin",
-                "Cross-Origin-Embedder-Policy": "unsafe-none"
-            }
-        )
-    else:
+async def get_pdf_file(filename: str, current_user: dict = Depends(get_current_user)):
+    """Serve an owned uploaded PDF for PDF.js and Adobe PDF Embed API."""
+    user_id = current_user["sub"]
+    document = db.get_document_by_filename(filename, client_id=user_id)
+    if not document:
         raise HTTPException(status_code=404, detail="PDF file not found")
+
+    file_path = _document_pdf_path(document)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="PDF file not found")
+    _validate_pdf_file(file_path)
+
+    return FileResponse(
+        file_path,
+        media_type="application/pdf",
+        headers={
+            "Accept-Ranges": "bytes",
+            "Cache-Control": "private, max-age=3600",
+            "Content-Disposition": f"inline; filename={document.original_name}",
+        }
+    )
 
 
 @app.get("/api/audio/{filename}")
-async def get_audio(filename: str):
-    """Serve generated audio files with proper headers for web playback"""
-    # Check temp_audio directory first (for generated files)
-    audio_path = DATA_DIR / "temp_audio" / filename
+async def get_audio(filename: str, current_user: dict = Depends(get_current_user)):
+    """Serve generated audio files after verifying document ownership."""
+    user_id = current_user["sub"]
+    document_id = _podcast_document_id_from_filename(filename)
+    if not document_id:
+        raise HTTPException(status_code=404, detail="Audio file not found")
+
+    document = db.get_document_by_id(document_id, client_id=user_id)
+    if not document:
+        raise HTTPException(status_code=404, detail="Audio file not found")
+
+    audio_path = _safe_child_path(DATA_DIR / "temp_audio", filename)
     if audio_path.exists():
         media_type = "audio/wav" if filename.endswith('.wav') else "audio/mpeg"
         return FileResponse(
             audio_path,
-            media_type=media_type,
-            headers={
-                "Accept-Ranges": "bytes",
-                "Cache-Control": "public, max-age=3600",
-                "Content-Disposition": f"inline; filename={filename}"
-            }
-        )
-
-    # Check demo audio directory (for demo files)
-    demo_audio_path = DATA_DIR / "audio" / filename
-    if demo_audio_path.exists():
-        media_type = "audio/wav" if filename.endswith('.wav') else "audio/mpeg"
-        return FileResponse(
-            demo_audio_path,
             media_type=media_type,
             headers={
                 "Accept-Ranges": "bytes",
@@ -1182,13 +1154,7 @@ async def analyze_text_selection(request: TextSelectionAnalysisRequest, current_
 
         user_id = current_user["sub"]
         
-        # Get current document context
-        # Pass user_id if using Supabase
-        if USE_SUPABASE:
-             current_doc = db.get_document_by_id(request.document_id, user_id)
-        else:
-             # Should not happen in Supabase only mode
-             current_doc = None
+        current_doc = db.get_document_by_id(request.document_id, client_id=user_id)
             
         if not current_doc:
             raise HTTPException(status_code=404, detail="Document not found")
@@ -1218,21 +1184,22 @@ async def analyze_text_selection(request: TextSelectionAnalysisRequest, current_
                 # Prepare sections for LLM analysis
                 candidate_sections = []
                 for i, res in enumerate(search_results):
+                    formatted = format_retrieval_result(res, snippet_chars=200)
                     # Fetch document name if missing (SearchResult might not have it if not in metadata)
-                    doc_name = "Unknown Document"
-                    if res.metadata and 'document_name' in res.metadata:
-                        doc_name = res.metadata['document_name']
-                    elif res.document_id == request.document_id:
-                        doc_name = current_doc.original_name
+                    doc_name = formatted.get("document_name", "Unknown Document")
+                    if res.document_id == request.document_id:
+                        doc_name = _document_display_name(current_doc)
                     
                     candidate_sections.append({
                         "section_id": i,
                         "document_id": res.document_id,
                         "document_name": doc_name,
-                        "title": res.metadata.get("section_title", "Untitled") if res.metadata else "Untitled",
+                        "title": formatted.get("section_title", "Untitled"),
                         "content": res.chunk_text,
                         "page": res.page_number,
-                        "faiss_score": res.similarity_score
+                        "faiss_score": formatted.get("vector_similarity", 0.0),
+                        "vector_similarity": formatted.get("vector_similarity", 0.0),
+                        "retrieval_score": formatted.get("retrieval_score"),
                     })
 
                 # Use LLM to find truly related sections
@@ -1292,12 +1259,7 @@ async def ask_gemini_selection(request: dict, current_user: dict = Depends(get_c
         if not document_id or not selected_text:
             return {"error": "Missing document_id or selected_text"}
 
-        # Get document
-        if USE_SUPABASE:
-            document = db.get_document_by_id(document_id, user_id)
-        else:
-             # Should not happen
-            document = None
+        document = db.get_document_by_id(document_id, client_id=user_id)
             
         if not document:
             return {"error": "Document not found"}
@@ -1368,97 +1330,20 @@ Keep the explanation concise but informative (2-3 paragraphs maximum)."""
         return {"error": f"Failed to get explanation: {str(e)}"}
 
 
-@app.post("/api/generate-podcast")
-async def generate_podcast(
-    content: str,
-    document_id: str,
-    page: int = 1,
-    persona: str = None,
-    job: str = None,
-    include_related: bool = True
-):
-    """
-    Bonus Feature: Generate podcast from content (+5 points)
-    Creates 2-speaker conversational audio overview
-    """
-    try:
-        if not enhanced_llm_service:
-            raise HTTPException(status_code=503, detail="Enhanced LLM service not available")
-
-        # Get related sections if requested
-        related_sections = []
-        if include_related:
-            try:
-                import numpy as np
-                from .vector_store import get_vector_store
-                from .embedding_service import get_embedding_service
-
-                vector_store = get_vector_store()
-                embedding_service = get_embedding_service()
-
-                if vector_store.index.ntotal > 0:
-                    query_embedding = embedding_service.generate_embedding(content[:500])  # Use first 500 chars
-
-                    k = min(5, vector_store.index.ntotal)
-                    distances, indices = vector_store.index.search(np.array([query_embedding]).astype('float32'), k)
-
-                    for i, idx in enumerate(indices[0]):
-                        if idx < len(vector_store.metadata):
-                            section_data = vector_store.metadata[idx]
-                            related_sections.append({
-                                "title": section_data.get("section_title", section_data.get("heading", "Section")),
-                                "content": section_data.get("text", "")[:200],
-                                "document_name": section_data.get("document_name", "Document")
-                            })
-            except Exception as e:
-                print(f"Error getting related sections for podcast: {e}")
-
-        # Generate insights for podcast content
-        insights = await enhanced_llm_service.generate_insights_bulb(
-            content, related_sections, persona, job
-        )
-
-        # Generate podcast script
-        script = await enhanced_llm_service.generate_podcast_script(
-            content, related_sections, insights, persona, job
-        )
-
-        # Generate audio (for now, return script - audio generation can be done client-side)
-        # In production, would generate actual audio file
-        audio_file = None
-        try:
-            audio_file = await enhanced_llm_service.generate_podcast_audio(script)
-        except Exception as e:
-            print(f"Audio generation failed, returning script only: {e}")
-
-        return {
-            "script": script,
-            "audio_file": audio_file,
-            "insights": insights,
-            "related_sections": related_sections,
-            "metadata": {
-                "document_id": document_id,
-                "page": page,
-                "persona": persona,
-                "job": job,
-                "duration_estimate": script.get("duration_estimate", "3-4 minutes")
-            }
-        }
-
-    except Exception as e:
-        print(f"Error generating podcast: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 @app.get("/api/highlights/{document_id}")
 async def get_section_highlights(
     document_id: str,
-    page: int = Query(1, ge=1)
+    page: int = Query(1, ge=1),
+    current_user: dict = Depends(get_current_user)
 ):
     """Get section highlighting data for PDF overlay"""
     try:
         # First get recommendations for this page
-        recommendations_response = await get_recommendations(document_id, page)
+        recommendations_response = await get_recommendations(
+            document_id=document_id,
+            page=page,
+            current_user=current_user
+        )
         recommendations = recommendations_response.get("recommendations", [])
 
         if not recommendations:
@@ -1478,12 +1363,13 @@ async def get_section_highlights(
 
 
 @app.post("/api/split-document")
-async def split_document(request: Request):
+async def split_document(request: Request, current_user: dict = Depends(get_current_user)):
     """Split a PDF document into multiple PDFs based on page ranges"""
     try:
         body = await request.json()
         document_id = body.get("document_id")
         splits = body.get("splits", [])  # List of {name, start_page, end_page}
+        user_id = current_user["sub"]
 
         if not document_id:
             raise HTTPException(status_code=400, detail="Document ID is required")
@@ -1493,21 +1379,15 @@ async def split_document(request: Request):
 
         print(f"✂️ Splitting document {document_id} into {len(splits)} parts")
 
-        # Get document from database
-        document = db.get_document_by_id(document_id)
+        # Get document from database with tenant scope.
+        document = db.get_document_by_id(document_id, client_id=user_id)
         if not document:
             raise HTTPException(status_code=404, detail="Document not found")
 
-        # Verify PDF file exists
-        pdf_path = Path(document.file_path)
-        if not pdf_path.exists():
-            raise HTTPException(status_code=404, detail=f"PDF file not found: {document.original_name}")
+        pdf_path = _document_pdf_path(document)
 
         # Validate page ranges
-        import fitz
-        source_doc = fitz.open(str(pdf_path))
-        total_pages = len(source_doc)
-        source_doc.close()
+        total_pages = _validate_pdf_file(pdf_path)
 
         # Check page ranges for validity and overlaps
         used_pages = set()
@@ -1539,11 +1419,13 @@ async def split_document(request: Request):
         for i, split in enumerate(splits):
             start_page = split.get("start_page", 1) - 1  # Convert to 0-based indexing
             end_page = split.get("end_page", 1) - 1
-            split_name = split.get("name", "").strip()
+            split_name = str(split.get("name") or "").strip()
 
             # Generate name if not provided
             if not split_name:
-                split_name = f"{document.original_name.replace('.pdf', '')}_part_{i+1}"
+                split_name = f"{_pdf_stem(document.original_name)}_part_{i+1}"
+            output_display_name = _canonical_pdf_filename(split_name, fallback=f"split_part_{i+1}")
+            split_name = _pdf_stem(output_display_name)
 
             print(f"  Creating split {i+1}: {split_name} (pages {start_page+1}-{end_page+1})")
 
@@ -1552,10 +1434,11 @@ async def split_document(request: Request):
             split_doc.insert_pdf(source_doc, from_page=start_page, to_page=end_page)
 
             # Save split document
-            output_filename = f"{uuid.uuid4()}_{split_name}.pdf"
-            output_path = DOCS_DIR / output_filename
+            output_filename = f"{uuid.uuid4()}_{output_display_name}"
+            output_path = _safe_docs_path(output_filename)
             split_doc.save(str(output_path))
             split_doc.close()
+            _validate_pdf_file(output_path)
 
             # Calculate file hash and size
             file_size = output_path.stat().st_size
@@ -1566,10 +1449,10 @@ async def split_document(request: Request):
             try:
                 new_document = db.create_document(
                     filename=output_filename,
-                    original_name=f"{split_name}.pdf",
+                    original_name=output_display_name,
                     file_size=file_size,
                     file_path=str(output_path),
-                    client_id=document.client_id,
+                    client_id=user_id,
                     persona=document.persona or "System",
                     job_role=document.job_role or "PDF Split",
                     file_hash=file_hash
@@ -1577,7 +1460,7 @@ async def split_document(request: Request):
 
                 created_documents.append({
                     "id": new_document.id,
-                    "name": f"{split_name}.pdf",
+                    "name": output_display_name,
                     "filename": output_filename,
                     "size": file_size,
                     "pages": end_page - start_page + 1,
@@ -1611,12 +1494,13 @@ async def split_document(request: Request):
 
 
 @app.post("/api/merge-documents")
-async def merge_documents(request: Request):
+async def merge_documents(request: Request, current_user: dict = Depends(get_current_user)):
     """Merge multiple PDF documents into a single PDF"""
     try:
         body = await request.json()
         document_ids = body.get("document_ids", [])
-        output_name = body.get("output_name", "").strip()
+        output_name = str(body.get("output_name") or "").strip()
+        user_id = current_user["sub"]
 
         if len(document_ids) < 2:
             raise HTTPException(status_code=400, detail="At least 2 documents required for merging")
@@ -1627,7 +1511,7 @@ async def merge_documents(request: Request):
         # Get documents from database
         documents = []
         for doc_id in document_ids:
-            doc = db.get_document_by_id(doc_id)
+            doc = db.get_document_by_id(doc_id, client_id=user_id)
             if not doc:
                 raise HTTPException(status_code=404, detail=f"Document {doc_id} not found")
             documents.append(doc)
@@ -1635,9 +1519,8 @@ async def merge_documents(request: Request):
         # Verify all files exist
         pdf_paths = []
         for doc in documents:
-            pdf_path = Path(doc.file_path)
-            if not pdf_path.exists():
-                raise HTTPException(status_code=404, detail=f"PDF file not found: {doc.original_name}")
+            pdf_path = _document_pdf_path(doc)
+            _validate_pdf_file(pdf_path)
             pdf_paths.append(pdf_path)
 
         # Generate output filename
@@ -1647,11 +1530,13 @@ async def merge_documents(request: Request):
             while True:
                 auto_name = f"merged_pdf_{counter}"
                 # Check if this name already exists in database
-                existing = db.search_documents(auto_name)
+                existing = db.search_documents(auto_name, client_id=user_id)
                 if not any(doc.original_name.startswith(auto_name) for doc in existing):
                     output_name = auto_name
                     break
                 counter += 1
+        output_display_name = _canonical_pdf_filename(output_name, fallback="merged_pdf")
+        output_name = _pdf_stem(output_display_name)
 
         # Create merged PDF using PyMuPDF
         merged_doc = fitz.open()
@@ -1668,10 +1553,11 @@ async def merge_documents(request: Request):
             print(f"    Added {page_count} pages (total: {total_pages})")
 
         # Save merged PDF
-        output_filename = f"{uuid.uuid4()}_{output_name}.pdf"
-        output_path = DOCS_DIR / output_filename
+        output_filename = f"{uuid.uuid4()}_{output_display_name}"
+        output_path = _safe_docs_path(output_filename)
         merged_doc.save(str(output_path))
         merged_doc.close()
+        _validate_pdf_file(output_path)
 
         # Calculate file hash and size
         file_size = output_path.stat().st_size
@@ -1682,10 +1568,10 @@ async def merge_documents(request: Request):
         try:
             new_document = db.create_document(
                 filename=output_filename,
-                original_name=f"{output_name}.pdf",
+                original_name=output_display_name,
                 file_size=file_size,
                 file_path=str(output_path),
-                client_id=None,
+                client_id=user_id,
                 persona="System",
                 job_role="PDF Merge",
                 file_hash=file_hash
@@ -1721,13 +1607,13 @@ async def merge_documents(request: Request):
 
 # Library Statistics Endpoint for Chatbot Context
 @app.get("/api/library/statistics")
-async def get_library_statistics(current_user: dict = Depends(get_optional_user)):
+async def get_library_statistics(current_user: dict = Depends(get_current_user)):
     """
     Get library statistics for chatbot context
     Returns document counts, types, and recent activity
     """
     try:
-        user_id = current_user.get("sub") if current_user else "anonymous"
+        user_id = current_user["sub"]
         
         # Import context builder
         from .context_builder import build_library_context
@@ -1758,7 +1644,7 @@ class ChatRequest(BaseModel):
 @app.post("/api/chat")
 async def chat_endpoint(
     request: ChatRequest,
-    current_user: dict = Depends(get_optional_user)
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Handle chat messages with AI assistant using context-aware RAG
@@ -1768,15 +1654,14 @@ async def chat_endpoint(
         if not llm_provider:
             raise HTTPException(status_code=503, detail="LLM service not available")
 
-        # Get user ID (optional for unauthenticated access)
-        user_id = current_user.get("sub") if current_user else "00000000-0000-0000-0000-000000000000"
+        user_id = current_user["sub"]
         
-        # DEBUG LOGGING
-        with open("backend_debug.log", "a", encoding="utf-8") as f:
-            f.write(f"\n--- Request at {datetime.now().isoformat()} ---\n")
-            f.write(f"User ID: {user_id}\n")
-            f.write(f"Message: {request.message}\n")
-            f.write(f"Context Type: {request.context_type}\n")
+        if os.getenv("DEBUG_CHAT_LOGGING", "false").lower() == "true":
+            with open("backend_debug.log", "a", encoding="utf-8") as f:
+                f.write(f"\n--- Request at {datetime.now().isoformat()} ---\n")
+                f.write(f"User ID: {user_id}\n")
+                f.write(f"Message Length: {len(request.message)}\n")
+                f.write(f"Context Type: {request.context_type}\n")
 
         print(f"👤 User ID: {user_id}")
         
@@ -1844,30 +1729,34 @@ async def chat_endpoint(
                 cross_results = await rag_service.search_documents(
                     query=request.message,
                     top_k=3,
-                    document_id=None,  # Search all documents
+                    exclude_document_id=request.document_id,
                     user_id=user_id,
                     llm_provider=None,
                     use_advanced_rag=False
                 )
 
-                # Filter out results from current document and format
                 doc_name_cache = {}
                 try:
-                    all_docs = db.get_all_documents(user_id)
+                    all_docs = db.get_all_documents(client_id=user_id)
                     for doc in all_docs:
-                        doc_name_cache[doc.id] = doc.original_name or doc.filename or f"Document"
+                        doc_name_cache[doc.id] = _document_display_name(doc)
                 except:
                     pass
 
                 for result in cross_results:
-                    if result.document_id != request.document_id:
-                        cross_doc_suggestions.append({
-                            'document_id': result.document_id,
-                            'document_name': doc_name_cache.get(result.document_id, 'Document'),
-                            'page_number': result.page_number or 1,
-                            'text': result.chunk_text[:150] + '...' if len(result.chunk_text) > 150 else result.chunk_text,
-                            'similarity': round(result.similarity_score, 3) if result.similarity_score else 0.5
-                        })
+                    formatted = format_retrieval_result(result, snippet_chars=150)
+                    cross_doc_suggestions.append({
+                        'document_id': formatted.get('document_id'),
+                        'document_name': doc_name_cache.get(
+                            formatted.get('document_id'),
+                            formatted.get('document_name', 'Document'),
+                        ),
+                        'page_number': formatted.get('page_number') or 1,
+                        'text': formatted.get('text', ''),
+                        'similarity': formatted.get('similarity', 0.0),
+                        'vector_similarity': formatted.get('vector_similarity', 0.0),
+                        'retrieval_score': formatted.get('retrieval_score'),
+                    })
             except Exception as e:
                 print(f"⚠️ Could not fetch cross-document suggestions: {e}")
 
@@ -1897,10 +1786,10 @@ async def chat_endpoint(
             context = await build_library_context(db=db, user_id=user_id)
             print("✅ Library context built")
             
-            # DEBUG LOGGING
-            with open("backend_debug.log", "a", encoding="utf-8") as f:
-                f.write(f"Library Context Stats: {context.get('statistics')}\n")
-                f.write(f"Doc Summaries: {len(context.get('document_summaries', []))}\n")
+            if os.getenv("DEBUG_CHAT_LOGGING", "false").lower() == "true":
+                with open("backend_debug.log", "a", encoding="utf-8") as f:
+                    f.write(f"Library Context Stats: {context.get('statistics')}\n")
+                    f.write(f"Doc Summaries: {len(context.get('document_summaries', []))}\n")
             
             # NEW: Perform library-wide search for relevant content
             print("🔍 Searching library documents...")
@@ -1946,30 +1835,12 @@ async def chat_endpoint(
                 "timestamp": datetime.now().isoformat()
             }
     
-    except Exception as e:
-        print(f"❌ Chat endpoint error: {e}")
-        import traceback
-        traceback.print_exc()
-        
-        # Log to file for debugging
-        with open("backend_error.log", "a", encoding="utf-8") as f:
-            f.write(f"\n\n--- Error at {datetime.now().isoformat()} ---\n")
-            f.write(f"Error: {str(e)}\n")
-            f.write(traceback.format_exc())
-        
-        # Fallback response
-        # Fallback response with specific error if safe
-        error_msg = str(e)
-        user_msg = "I apologize, but I encountered an error processing your request."
-        
-        # Check for known safe error messages to show to user
-        safe_errors = ["quota", "429", "resourceexhausted", "invalidargument", "context window", "api key"]
-        if any(err in error_msg.lower() for err in safe_errors):
-             user_msg = f"Service Error: {error_msg}"
-        
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Chat endpoint error")
         return {
-            "response": user_msg,
-            "error": error_msg,
+            "response": "I apologize, but I encountered an error processing your request.",
             "success": False,
             "timestamp": datetime.now().isoformat()
         }
@@ -1977,7 +1848,7 @@ async def chat_endpoint(
 
 # RAG endpoints
 @app.post("/api/rag/process/{document_id}")
-async def process_document_for_rag(document_id: str):
+async def process_document_for_rag(document_id: str, current_user: dict = Depends(get_current_user)):
     """
     Process a single document for RAG
     Chunks, embeds, and stores in vector database
@@ -1985,65 +1856,58 @@ async def process_document_for_rag(document_id: str):
     try:
         from .rag_service import get_rag_service
         rag_service = get_rag_service()
-        
-        # Get all documents
-        documents = db.get_all_documents()
-        
-        if not documents:
+        user_id = current_user["sub"]
+
+        document = db.get_document_by_id(document_id, client_id=user_id)
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found")
+
+        existing_chunks = db.get_chunk_count(document_id=document_id, client_id=user_id)
+
+        if existing_chunks > 0:
             return {
                 "success": True,
-                "message": "No documents to process",
-                "processed": 0
+                "document_id": document_id,
+                "message": "Document already processed",
+                "chunks_existing": existing_chunks,
             }
-        
-        # Process each document
-        results = []
-        for document in documents:
-            # Check if already processed
-            existing_chunks = db.get_chunk_count(document.id)
-            if existing_chunks > 0:
-                print(f"⏭️ Skipping {document.original_name} (already processed)")
-                continue
-            
-            # Check if file exists
-            file_path = Path(document.file_path)
-            if not file_path.exists():
-                print(f"❌ File not found: {document.original_name}")
-                continue
-            
-            # Process
-            result = await rag_service.process_document(
-                document_id=document.id,
-                pdf_path=str(file_path),
-                batch_size=32
-            )
-            results.append(result)
-        
-        successful = sum(1 for r in results if r.get('success', False))
-        
-        return {
-            "success": True,
-            "total_documents": len(documents),
-            "processed": len(results),
-            "successful": successful,
-            "results": results
-        }
-        
+
+        file_path = Path(document.file_path)
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail="Document file not found")
+
+        return await rag_service.process_document(
+            document_id=document.id,
+            pdf_path=str(file_path),
+            user_id=user_id,
+            mode="single",
+            batch_size=32
+        )
+
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"❌ Error processing all documents: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.delete("/api/rag/document/{document_id}")
-async def delete_document_from_rag(document_id: str):
+async def delete_document_from_rag(document_id: str, current_user: dict = Depends(get_current_user)):
     """Remove document from RAG system"""
     try:
         from .rag_service import get_rag_service
         rag_service = get_rag_service()
-        
-        result = rag_service.delete_document_from_rag(document_id)
+        user_id = current_user["sub"]
+
+        document = db.get_document_by_id(document_id, client_id=user_id)
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found")
+
+        result = rag_service.delete_document_from_rag(document_id, user_id=user_id)
         return result
-        
+
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"❌ Error deleting document from RAG: {e}")
         raise HTTPException(status_code=500, detail=str(e))

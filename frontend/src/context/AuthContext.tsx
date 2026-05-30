@@ -1,7 +1,8 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { AuthChangeEvent, AuthError, Session, User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabaseClient';
+import { getDevelopmentUser, isDevAuthBypassEnabled } from '../lib/devAuth';
 
 type AuthContextValue = {
   user: User | null;
@@ -14,7 +15,7 @@ type AuthContextValue = {
   resetError: () => void;
 };
 
-const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+export const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -24,6 +25,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     let mounted = true;
+    if (isDevAuthBypassEnabled()) {
+      setUser(getDevelopmentUser());
+      setSession(null);
+      setLoading(false);
+      return () => {
+        mounted = false;
+      };
+    }
 
     const initialise = async () => {
       try {
@@ -58,6 +67,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const signIn: AuthContextValue['signIn'] = async ({ email, password }) => {
+    if (isDevAuthBypassEnabled()) {
+      setUser(getDevelopmentUser());
+      setSession(null);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
@@ -72,6 +88,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const signUp: AuthContextValue['signUp'] = async ({ email, password, metadata }) => {
+    if (isDevAuthBypassEnabled()) {
+      setUser(getDevelopmentUser());
+      setSession(null);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
@@ -93,6 +116,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const signOut: AuthContextValue['signOut'] = async () => {
+    if (isDevAuthBypassEnabled()) {
+      setUser(getDevelopmentUser());
+      setSession(null);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
       const { error: signOutError } = await supabase.auth.signOut();
@@ -113,12 +143,4 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-};
-
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
 };

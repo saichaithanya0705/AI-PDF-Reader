@@ -4,34 +4,41 @@ Generates vector embeddings for text using SentenceTransformer or Transformers f
 """
 from typing import List
 import numpy as np
+import os
 import torch
+
+
+class EmbeddingServiceUnavailableError(RuntimeError):
+    """Raised when embeddings are requested before a real model is available."""
 
 
 class EmbeddingService:
     """Service for generating text embeddings"""
     
-    def __init__(self, model_name: str = 'all-MiniLM-L6-v2'):
+    def __init__(self, model_name: str = None):
         """
         Initialize the embedding service
         
         Args:
             model_name: Name of the SentenceTransformer model to use
         """
-        self.model_name = model_name
+        self.model_name = model_name or os.getenv("EMBEDDING_MODEL_NAME", "all-MiniLM-L6-v2")
         self.embedding_dim = 384  # Dimension for all-MiniLM-L6-v2
         self.model = None
         self.tokenizer = None
         self.transformers_model = None
         self.use_transformers_fallback = False
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.load_error = None
         
-        print(f"[*] Loading embedding model: {model_name}")
+        print(f"[*] Loading embedding model: {self.model_name}")
         
         # Try sentence_transformers first
         try:
             from sentence_transformers import SentenceTransformer
-            self.model = SentenceTransformer(model_name)
+            self.model = SentenceTransformer(self.model_name)
             self.model = self.model.to(self.device)
+            self.embedding_dim = int(self.model.get_sentence_embedding_dimension())
             print(f"[OK] sentence_transformers loaded successfully on {self.device}")
             print(f"     Embedding dimension: {self.embedding_dim}")
         except Exception as e:
@@ -43,22 +50,33 @@ class EmbeddingService:
                 from transformers import AutoTokenizer, AutoModel
                 
                 # Use the same model but via transformers
-                model_path = f"sentence-transformers/{model_name}"
+                model_path = self.model_name
+                if "/" not in model_path:
+                    model_path = f"sentence-transformers/{model_path}"
                 print(f"     Loading tokenizer from: {model_path}")
                 self.tokenizer = AutoTokenizer.from_pretrained(model_path)
                 
                 print(f"     Loading model from: {model_path}")
                 self.transformers_model = AutoModel.from_pretrained(model_path)
                 self.transformers_model = self.transformers_model.to(self.device)
+                self.embedding_dim = int(getattr(self.transformers_model.config, "hidden_size", self.embedding_dim))
                 self.use_transformers_fallback = True
                 
                 print(f"[OK] Transformers fallback loaded successfully on {self.device}")
                 print(f"     Embedding dimension: {self.embedding_dim}")
             except Exception as fallback_error:
                 print(f"[ERROR] Error loading transformers fallback: {str(fallback_error)}")
-                print("[WARN] Running in dummy mode: Embeddings will be zero vectors.")
+                print("[ERROR] Embedding service unavailable; refusing to generate fake vectors.")
                 self.model = None
                 self.transformers_model = None
+                self.load_error = fallback_error
+
+    def _ensure_model_loaded(self) -> None:
+        if self.model is None and self.transformers_model is None:
+            detail = f": {self.load_error}" if self.load_error else ""
+            raise EmbeddingServiceUnavailableError(
+                f"Embedding model '{self.model_name}' is not available{detail}"
+            )
     
     def _mean_pooling(self, model_output, attention_mask):
         """Mean pooling - take average of all tokens"""
@@ -77,9 +95,7 @@ class EmbeddingService:
             List of floats representing the embedding vector
         """
         try:
-            # Check if any model is loaded
-            if self.model is None and self.transformers_model is None:
-                return [0.0] * self.embedding_dim
+            self._ensure_model_loaded()
 
             if not text or not text.strip():
                 return [0.0] * self.embedding_dim
@@ -89,14 +105,10 @@ class EmbeddingService:
                 embedding = self.model.encode(
                     text,
                     convert_to_numpy=True,
-                    show_progress_bar=False
+                    show_progress_bar=False,
+                    normalize_embeddings=True,
                 )
-                
-                # Normalize for cosine similarity
-                norm = np.linalg.norm(embedding)
-                if norm > 0:
-                    embedding = embedding / norm
-                
+
                 return embedding.tolist()
             
             # Use transformers fallback
@@ -128,7 +140,7 @@ class EmbeddingService:
                 return embedding.tolist()
             
             else:
-                raise Exception("No embedding model loaded")
+                raise EmbeddingServiceUnavailableError(f"Embedding model '{self.model_name}' is not available")
             
         except Exception as e:
             print(f"[ERROR] Error generating embedding: {str(e)}")
@@ -155,9 +167,7 @@ class EmbeddingService:
             if not texts:
                 return []
             
-            # Fallback if no model loaded
-            if self.model is None and self.transformers_model is None:
-                return [[0.0] * self.embedding_dim] * len(texts)
+            self._ensure_model_loaded()
             
             # Filter out empty texts but keep track of indices
             non_empty_texts = []
@@ -176,12 +186,9 @@ class EmbeddingService:
                     non_empty_texts,
                     batch_size=batch_size,
                     convert_to_numpy=True,
-                    show_progress_bar=show_progress
+                    show_progress_bar=show_progress,
+                    normalize_embeddings=True,
                 )
-                
-                # Normalize embeddings
-                norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
-                embeddings = np.where(norms > 0, embeddings / norms, embeddings)
                 
             # Use transformers fallback
             elif self.use_transformers_fallback and self.transformers_model is not None:
@@ -219,7 +226,7 @@ class EmbeddingService:
                 embeddings = np.vstack(all_embeddings)
             
             else:
-                return [[0.0] * self.embedding_dim] * len(texts)
+                raise EmbeddingServiceUnavailableError(f"Embedding model '{self.model_name}' is not available")
             
             # Create result list with zero vectors for empty texts
             result = [[0.0] * self.embedding_dim] * len(texts)
@@ -232,9 +239,7 @@ class EmbeddingService:
             
         except Exception as e:
             print(f"[ERROR] Error generating batch embeddings: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            return [[0.0] * self.embedding_dim] * len(texts)
+            raise
     
     def compute_similarity(
         self,

@@ -8,6 +8,8 @@ import os
 from typing import Optional
 from functools import lru_cache
 
+from ..auth_config import auth_bypass_enabled, development_user
+
 # JWT configuration
 SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -37,6 +39,9 @@ def verify_jwt_token(credentials: HTTPAuthorizationCredentials = Depends(securit
     Raises:
         HTTPException: If token is invalid or missing
     """
+    if auth_bypass_enabled():
+        return str(development_user()["sub"])
+
     if not SUPABASE_JWT_SECRET:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -119,9 +124,14 @@ async def get_current_user(user_id: str = Depends(verify_jwt_token)) -> dict:
     Returns:
         dict: User information
     """
+    if auth_bypass_enabled():
+        return development_user()
+
     return {
+        "sub": user_id,
         "user_id": user_id,
         "authenticated": True,
+        "auth_bypassed": False,
     }
 
 
@@ -163,6 +173,9 @@ class OptionalAuth:
         """
         auth_header = request.headers.get("Authorization")
         
+        if auth_bypass_enabled():
+            return str(development_user()["sub"])
+
         if not auth_header or not auth_header.startswith("Bearer "):
             return None
         
@@ -188,8 +201,8 @@ def require_auth_for_production():
     Helper to conditionally require auth based on environment
     Useful during development/testing
     """
-    env = os.getenv("ENVIRONMENT", "development")
-    if env == "production":
+    env = os.getenv("APP_ENV") or os.getenv("ENVIRONMENT") or "production"
+    if env.lower() == "production":
         return Depends(verify_jwt_token)
     return None
 

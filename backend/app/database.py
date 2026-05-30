@@ -4,6 +4,8 @@ Database models and operations for PDF document management
 
 import sqlite3
 import uuid
+import hashlib
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Dict, Any
@@ -182,9 +184,63 @@ class DocumentDatabase:
             # Create indexes for document_chunks
             conn.execute("CREATE INDEX IF NOT EXISTS idx_chunks_document_id ON document_chunks(document_id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_chunks_page_number ON document_chunks(page_number)")
+
+            conn.execute("""
+                CREATE VIRTUAL TABLE IF NOT EXISTS document_chunks_fts USING fts5(
+                    chunk_id UNINDEXED,
+                    document_id UNINDEXED,
+                    chunk_text,
+                    tokenize='unicode61'
+                )
+            """)
+            conn.execute("""
+                INSERT INTO document_chunks_fts(rowid, chunk_id, document_id, chunk_text)
+                SELECT c.rowid, c.id, c.document_id, c.chunk_text
+                FROM document_chunks c
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM document_chunks_fts f WHERE f.chunk_id = c.id
+                )
+            """)
             
             conn.commit()
             print("✅ Document chunks table initialized for RAG")
+
+    def _notify_library_changed(self, client_id: Optional[str] = None) -> None:
+        try:
+            from .semantic_cache import get_semantic_search_cache
+            get_semantic_search_cache().mark_library_changed(client_id)
+        except Exception as exc:
+            print(f"⚠️ Failed to update semantic cache revision: {exc}")
+
+    def _client_id_for_document(self, document_id: str) -> Optional[str]:
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute(
+                "SELECT client_id FROM documents WHERE id = ?",
+                (document_id,),
+            )
+            row = cursor.fetchone()
+            return row[0] if row else None
+
+    def _row_to_document(self, row: sqlite3.Row) -> Document:
+        doc_data = dict(row)
+        if doc_data.get('validation_result'):
+            doc_data['validation_result'] = json.loads(doc_data['validation_result'])
+        if doc_data.get('metadata'):
+            doc_data['metadata'] = json.loads(doc_data['metadata'])
+        if doc_data.get('tags'):
+            doc_data['tags'] = json.loads(doc_data['tags'])
+
+        doc_data['upload_date'] = datetime.fromisoformat(doc_data['upload_date'])
+        if doc_data.get('last_uploaded'):
+            doc_data['last_uploaded'] = datetime.fromisoformat(doc_data['last_uploaded'])
+        if doc_data.get('last_opened'):
+            doc_data['last_opened'] = datetime.fromisoformat(doc_data['last_opened'])
+        if doc_data.get('last_accessed'):
+            doc_data['last_accessed'] = datetime.fromisoformat(doc_data['last_accessed'])
+
+        doc_data.pop('created_at', None)
+        doc_data.pop('updated_at', None)
+        return Document(**doc_data)
     
     def create_document(self,
                        filename: str,
@@ -259,6 +315,7 @@ class DocumentDatabase:
 
             conn.execute(query, base_values)
             conn.commit()
+        self._notify_library_changed(client_id)
         
         return document
     
@@ -343,26 +400,22 @@ class DocumentDatabase:
             if not row:
                 return None
 
-            doc_data = dict(row)
-            if doc_data['validation_result']:
-                doc_data['validation_result'] = json.loads(doc_data['validation_result'])
-            if doc_data['metadata']:
-                doc_data['metadata'] = json.loads(doc_data['metadata'])
-            if doc_data['tags']:
-                doc_data['tags'] = json.loads(doc_data['tags'])
+            return self._row_to_document(row)
 
-            doc_data['upload_date'] = datetime.fromisoformat(doc_data['upload_date'])
-            if doc_data['last_uploaded']:
-                doc_data['last_uploaded'] = datetime.fromisoformat(doc_data['last_uploaded'])
-            if doc_data['last_opened']:
-                doc_data['last_opened'] = datetime.fromisoformat(doc_data['last_opened'])
-            if doc_data['last_accessed']:
-                doc_data['last_accessed'] = datetime.fromisoformat(doc_data['last_accessed'])
+    def get_document_by_filename(self, filename: str, client_id: Optional[str] = None) -> Optional[Document]:
+        """Get a non-deleted document by stored filename with optional tenant filtering."""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            params: List[Any] = [filename]
+            query = "SELECT * FROM documents WHERE filename = ? AND status != 'deleted'"
 
-            doc_data.pop('created_at', None)
-            doc_data.pop('updated_at', None)
+            if client_id:
+                query += " AND client_id = ?"
+                params.append(client_id)
 
-            return Document(**doc_data)
+            cursor = conn.execute(query, params)
+            row = cursor.fetchone()
+            return self._row_to_document(row) if row else None
 
     def get_document_metadata(self, document_id: str) -> List[Dict[str, Any]]:
         """Get metadata/sections for a document"""
@@ -446,7 +499,11 @@ class DocumentDatabase:
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute(query, values)
             conn.commit()
-            return cursor.rowcount > 0
+            updated = cursor.rowcount > 0
+
+        if updated:
+            self._notify_library_changed(client_id or self._client_id_for_document(document_id))
+        return updated
     
     def delete_document(
         self,
@@ -455,6 +512,7 @@ class DocumentDatabase:
         client_id: Optional[str] = None
     ) -> bool:
         """Delete a document (soft delete by default)"""
+        changed_client_id = client_id or self._client_id_for_document(document_id)
         with sqlite3.connect(self.db_path) as conn:
             params: List[Any]
             if soft_delete:
@@ -470,7 +528,11 @@ class DocumentDatabase:
 
             cursor = conn.execute(query, params)
             conn.commit()
-            return cursor.rowcount > 0
+            deleted = cursor.rowcount > 0
+
+        if deleted:
+            self._notify_library_changed(changed_client_id)
+        return deleted
 
     def update_last_opened(self, document_id: str, client_id: Optional[str] = None) -> bool:
         """Update the last_opened timestamp for a document"""
@@ -543,14 +605,17 @@ class DocumentDatabase:
                 'total_size_bytes': row[4] or 0
             }
 
-    def find_duplicate_by_hash(self, file_hash: str) -> Optional[Document]:
+    def find_duplicate_by_hash(self, file_hash: str, client_id: Optional[str] = None) -> Optional[Document]:
         """Find document with matching hash"""
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
-            cursor = conn.execute(
-                "SELECT * FROM documents WHERE file_hash = ? AND status != 'deleted'",
-                (file_hash,)
-            )
+            query = "SELECT * FROM documents WHERE file_hash = ? AND status != 'deleted'"
+            params: List[Any] = [file_hash]
+            if client_id:
+                query += " AND client_id = ?"
+                params.append(client_id)
+
+            cursor = conn.execute(query, params)
             row = cursor.fetchone()
 
             if row:
@@ -709,18 +774,30 @@ class DocumentDatabase:
             embedding_blob = pickle.dumps(embedding)
         
         with sqlite3.connect(self.db_path) as conn:
-            conn.execute("""
+            cursor = conn.execute("""
                 INSERT INTO document_chunks 
                 (id, document_id, chunk_text, chunk_index, page_number, embedding, char_count, word_count)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """, (chunk_id, document_id, chunk_text, chunk_index, page_number, 
                   embedding_blob, char_count, word_count))
+            conn.execute(
+                """
+                INSERT INTO document_chunks_fts(rowid, chunk_id, document_id, chunk_text)
+                VALUES (?, ?, ?, ?)
+                """,
+                (cursor.lastrowid, chunk_id, document_id, chunk_text),
+            )
             conn.commit()
+        self._notify_library_changed(self._client_id_for_document(document_id))
         
         return chunk_id
     
-    def get_chunks_by_document(self, document_id: str) -> List[Dict[str, Any]]:
+    def get_chunks_by_document(self, document_id: str, client_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """Get all chunks for a document"""
+        document = self.get_document_by_id(document_id, client_id=client_id) if client_id else self.get_document_by_id(document_id)
+        if not document:
+            return []
+
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.execute("""
@@ -740,23 +817,211 @@ class DocumentDatabase:
             
             return chunks
     
-    def delete_chunks_by_document(self, document_id: str) -> int:
+    def delete_chunks_by_document(self, document_id: str, client_id: Optional[str] = None) -> int:
         """Delete all chunks for a document"""
+        document = self.get_document_by_id(document_id, client_id=client_id) if client_id else self.get_document_by_id(document_id)
+        if not document:
+            return 0
+
+        changed_client_id = client_id or document.client_id
         with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                "DELETE FROM document_chunks_fts WHERE document_id = ?",
+                (document_id,),
+            )
             cursor = conn.execute(
                 "DELETE FROM document_chunks WHERE document_id = ?",
                 (document_id,)
             )
             conn.commit()
-            return cursor.rowcount
+            deleted = cursor.rowcount
+
+        if deleted:
+            self._notify_library_changed(changed_client_id)
+        return deleted
+
+    def search_chunks_bm25(
+        self,
+        query: str,
+        limit: int = 20,
+        document_id: Optional[str] = None,
+        exclude_document_id: Optional[str] = None,
+        client_id: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Search indexed chunks with SQLite FTS5 BM25 ranking."""
+        fts_query = self._fts_query(query)
+        if not fts_query:
+            return []
+
+        limit = max(1, min(int(limit or 1), 100))
+        sql = """
+            SELECT
+                c.id AS chunk_id,
+                c.document_id,
+                c.chunk_text,
+                c.chunk_index,
+                c.page_number,
+                d.client_id,
+                d.filename,
+                d.original_name,
+                d.file_path,
+                d.upload_date,
+                d.last_uploaded,
+                d.last_opened,
+                d.last_accessed,
+                bm25(document_chunks_fts) AS bm25_rank
+            FROM document_chunks_fts
+            JOIN document_chunks c ON c.id = document_chunks_fts.chunk_id
+            JOIN documents d ON d.id = c.document_id
+            WHERE document_chunks_fts MATCH ?
+              AND d.status != 'deleted'
+        """
+        params: List[Any] = [fts_query]
+
+        if document_id:
+            sql += " AND c.document_id = ?"
+            params.append(document_id)
+        if exclude_document_id:
+            sql += " AND c.document_id != ?"
+            params.append(exclude_document_id)
+        if client_id:
+            sql += " AND d.client_id = ?"
+            params.append(client_id)
+
+        sql += " ORDER BY bm25_rank ASC LIMIT ?"
+        params.append(limit)
+
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = [dict(row) for row in conn.execute(sql, params).fetchall()]
+
+        if not rows:
+            return []
+
+        positive_scores = []
+        for row in rows:
+            rank = float(row.get("bm25_rank") or 0.0)
+            positive_scores.append(-rank if rank < 0 else 1.0 / (1.0 + rank))
+
+        max_score = max(positive_scores) if positive_scores else 0.0
+        results: List[Dict[str, Any]] = []
+        for row, positive_score in zip(rows, positive_scores):
+            keyword_score = (positive_score / max_score) if max_score > 0 else 0.0
+            row["metadata"] = {
+                "document_name": row.get("original_name") or row.get("filename") or "Unknown Document",
+                "filename": row.get("filename"),
+                "original_name": row.get("original_name"),
+                "file_path": row.get("file_path"),
+                "upload_date": row.get("upload_date"),
+                "last_uploaded": row.get("last_uploaded") or row.get("upload_date"),
+                "last_opened": row.get("last_opened"),
+                "last_accessed": row.get("last_accessed"),
+                "retrieval_source": "bm25",
+                "bm25_rank": round(float(row.get("bm25_rank") or 0.0), 6),
+                "bm25_score": round(float(positive_score), 6),
+                "keyword_score": round(float(keyword_score), 4),
+            }
+            results.append(row)
+
+        return results
+
+    def _fts_query(self, query: str) -> str:
+        terms = re.findall(r"[A-Za-z0-9]{2,}", query or "")
+        if not terms:
+            return ""
+        return " OR ".join(f'"{term}"' for term in terms[:24])
+
+    def get_library_revision(self, client_id: Optional[str] = None) -> str:
+        """Return a stable revision hash for the active document library.
+
+        Retrieval cache entries use this value as part of their scope. Any
+        upload, metadata update, soft/hard delete, or chunk reingestion changes
+        the payload and therefore stops stale cache entries from matching.
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            params: List[Any] = []
+            where_clause = "WHERE status != 'deleted'"
+            if client_id:
+                where_clause += " AND client_id = ?"
+                params.append(client_id)
+
+            document_rows = conn.execute(
+                f"""
+                SELECT
+                    id,
+                    filename,
+                    original_name,
+                    status,
+                    processing_status,
+                    upload_date,
+                    last_uploaded,
+                    last_opened,
+                    last_accessed,
+                    updated_at,
+                    file_size,
+                    COALESCE(metadata, '') AS metadata
+                FROM documents
+                {where_clause}
+                ORDER BY id
+                """,
+                params,
+            ).fetchall()
+
+            chunk_rows = conn.execute(
+                f"""
+                SELECT
+                    d.id AS document_id,
+                    COUNT(c.id) AS chunk_count,
+                    COALESCE(MAX(c.created_at), '') AS latest_chunk_at
+                FROM documents d
+                LEFT JOIN document_chunks c ON c.document_id = d.id
+                {where_clause.replace('status', 'd.status').replace('client_id', 'd.client_id')}
+                GROUP BY d.id
+                ORDER BY d.id
+                """,
+                params,
+            ).fetchall()
+
+        payload = {
+            "client_id": client_id or "",
+            "documents": [dict(row) for row in document_rows],
+            "chunks": [dict(row) for row in chunk_rows],
+        }
+        serialized = json.dumps(payload, sort_keys=True, default=str, separators=(",", ":"))
+        return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
     
-    def get_chunk_count(self, document_id: Optional[str] = None) -> int:
+    def get_chunk_count(self, document_id: Optional[str] = None, client_id: Optional[str] = None) -> int:
         """Get total chunk count, optionally filtered by document"""
         with sqlite3.connect(self.db_path) as conn:
             if document_id:
+                if client_id:
+                    cursor = conn.execute(
+                        """
+                        SELECT COUNT(*)
+                        FROM document_chunks c
+                        JOIN documents d ON d.id = c.document_id
+                        WHERE c.document_id = ?
+                          AND d.client_id = ?
+                          AND d.status != 'deleted'
+                        """,
+                        (document_id, client_id)
+                    )
+                else:
+                    cursor = conn.execute(
+                        "SELECT COUNT(*) FROM document_chunks WHERE document_id = ?",
+                        (document_id,)
+                    )
+            elif client_id:
                 cursor = conn.execute(
-                    "SELECT COUNT(*) FROM document_chunks WHERE document_id = ?",
-                    (document_id,)
+                    """
+                    SELECT COUNT(*)
+                    FROM document_chunks c
+                    JOIN documents d ON d.id = c.document_id
+                    WHERE d.client_id = ?
+                      AND d.status != 'deleted'
+                    """,
+                    (client_id,)
                 )
             else:
                 cursor = conn.execute("SELECT COUNT(*) FROM document_chunks")
@@ -765,4 +1030,3 @@ class DocumentDatabase:
 
 # Global database instance
 db = DocumentDatabase()
-

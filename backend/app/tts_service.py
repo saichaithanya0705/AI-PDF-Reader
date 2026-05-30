@@ -8,9 +8,20 @@ import asyncio
 import tempfile
 from abc import ABC, abstractmethod
 from typing import Optional, Dict, Any
-import azure.cognitiveservices.speech as speechsdk
 import requests
 from pathlib import Path
+import logging
+
+try:
+    import azure.cognitiveservices.speech as speechsdk
+except ImportError:
+    speechsdk = None
+
+logger = logging.getLogger(__name__)
+
+
+class TTSConfigurationError(RuntimeError):
+    """Raised when a real TTS provider is not configured correctly."""
 
 
 class TTSProvider(ABC):
@@ -26,10 +37,13 @@ class AzureTTSProvider(TTSProvider):
         self.api_key = os.getenv('AZURE_TTS_KEY')
         self.region = os.getenv('AZURE_TTS_REGION', 'eastasia')  # Use direct region from env
 
-        if not self.api_key:
-            raise ValueError("Azure TTS API key not provided")
+        if speechsdk is None:
+            raise TTSConfigurationError("Azure Speech SDK is not installed")
 
-        print(f"🔊 Azure TTS Config: Region={self.region}, Key={self.api_key[:10]}...")
+        if not self.api_key:
+            raise TTSConfigurationError("Azure TTS API key not provided")
+
+        logger.info("Azure TTS configured for region %s", self.region)
 
         try:
             # Configure speech service
@@ -121,7 +135,7 @@ class GoogleTTSProvider(TTSProvider):
     def __init__(self):
         self.api_key = os.getenv('GOOGLE_TTS_API_KEY')
         if not self.api_key:
-            raise ValueError("Google TTS API key not provided")
+            raise TTSConfigurationError("Google TTS API key not provided")
     
     async def generate_audio(self, text: str, voice: str = None) -> bytes:
         """Generate audio using Google TTS API"""
@@ -160,36 +174,25 @@ class GoogleTTSProvider(TTSProvider):
 
 
 class LocalTTSProvider(TTSProvider):
-    """Local TTS provider for development/fallback"""
+    """
+    Disabled placeholder kept only so explicit TTS_PROVIDER=local fails loudly.
+    """
     
     async def generate_audio(self, text: str, voice: str = None) -> bytes:
-        """Generate simple audio file (placeholder for local TTS)"""
-        # This is a placeholder - in a real implementation, you might use
-        # libraries like pyttsx3 or espeak for local TTS
-        
-        # For now, return a minimal WAV file header (silence)
-        # This ensures the API doesn't fail even without TTS service
-        wav_header = b'RIFF\x24\x08\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00\x22\x56\x00\x00\x44\xac\x00\x00\x02\x00\x10\x00data\x00\x08\x00\x00'
-        silence_data = b'\x00' * 2048  # 2KB of silence
-        return wav_header + silence_data
+        raise TTSConfigurationError("Local silent TTS is disabled; configure Azure or Google TTS")
 
 
 def get_tts_provider() -> TTSProvider:
     """Factory function to get the appropriate TTS provider"""
     provider_type = os.getenv('TTS_PROVIDER', 'azure').lower()
     
-    try:
-        if provider_type == 'azure':
-            return AzureTTSProvider()
-        elif provider_type == 'google':
-            return GoogleTTSProvider()
-        else:
-            # Fallback to local TTS
-            return LocalTTSProvider()
-    except Exception as e:
-        print(f"Warning: Failed to initialize {provider_type} TTS provider: {e}")
-        print("Falling back to local TTS provider")
-        return LocalTTSProvider()
+    if provider_type == 'azure':
+        return AzureTTSProvider()
+    if provider_type == 'google':
+        return GoogleTTSProvider()
+    if provider_type == 'local':
+        raise TTSConfigurationError("Local silent TTS is disabled; configure Azure or Google TTS")
+    raise TTSConfigurationError(f"Unsupported TTS_PROVIDER '{provider_type}'")
 
 
 class TTSService:

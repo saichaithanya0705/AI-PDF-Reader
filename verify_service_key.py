@@ -1,13 +1,30 @@
+"""
+Verify a Supabase service-role JWT against SUPABASE_JWT_SECRET (env only).
 
-import jwt
+Usage:
+  set SUPABASE_JWT_SECRET=...
+  set TEST_SERVICE_JWT=eyJ...
+  python verify_service_key.py
+"""
 import os
+import sys
 
-key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlxZXFjdHplYW5sb215bnd3d2NnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2Mjg2NjA1MywiZXhwIjoyMDc4NDQyMDUzfQ.PCYkL7I5Tc8pF4l8ulI6YuNHNclr__XnZjci-mQu7eY"
-secret = "rayDYIGN286sCrUjnw0xa1u/kr/wLIjxt3CgC51STIFUkgUbD07p0NDeG7qN3d6rThGEXY91bXosU4TzgKGBYA=="
+from jose import jwt, JWTError
+
+secret = os.getenv("SUPABASE_JWT_SECRET")
+token = os.getenv("TEST_SERVICE_JWT")
+
+if not secret:
+    print("Set SUPABASE_JWT_SECRET in the environment.", file=sys.stderr)
+    sys.exit(1)
+if not token:
+    print("Set TEST_SERVICE_JWT to a service-role JWT to verify.", file=sys.stderr)
+    sys.exit(1)
 
 try:
-    decoded = jwt.decode(key, secret, algorithms=["HS256"], options={"verify_aud": False})
-    print("✅ Service Key Verified!")
+    decoded = jwt.decode(token, secret, algorithms=["HS256"], options={"verify_aud": False})
+    print("Service key verified.")
     print(decoded)
-except Exception as e:
-    print(f"❌ Verification Failed: {e}")
+except JWTError as e:
+    print(f"Verification failed: {e}", file=sys.stderr)
+    sys.exit(1)

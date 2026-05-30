@@ -43,10 +43,10 @@ const DocumentCard: React.FC<DocumentCardProps> = ({ document, onClick, isSelect
 
     // Use a more robust approach with try-catch
     try {
-      document.addEventListener('click', handleClickOutside, true);
+      window.document.addEventListener('click', handleClickOutside, true);
       return () => {
         try {
-          document.removeEventListener('click', handleClickOutside, true);
+          window.document.removeEventListener('click', handleClickOutside, true);
         } catch (error) {
           console.warn('Error removing event listener:', error);
         }
@@ -274,6 +274,24 @@ const DocumentCard: React.FC<DocumentCardProps> = ({ document, onClick, isSelect
               className="absolute right-0 mt-2 w-40 bg-slate-800/95 backdrop-blur rounded-lg shadow-xl border border-slate-600/50 py-2 z-20"
               onClick={(e) => e.stopPropagation()} // Prevent the dropdown from triggering card click
             >
+              {/* Select Option */}
+              {!isSelectMode && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelectMode();
+                    setShowMenu(false);
+                  }}
+                  className="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-cyan-400 hover:bg-slate-700/60 hover:text-cyan-300 transition-all duration-200"
+                  title="Select documents for bulk actions"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7 4h10a2 2 0 012 2v12a2 2 0 01-2 2H7a2 2 0 01-2-2V6a2 2 0 012-2z" />
+                  </svg>
+                  Select
+                </button>
+              )}
+
               {/* Rename Option */}
               <button
                 onClick={(e) => {

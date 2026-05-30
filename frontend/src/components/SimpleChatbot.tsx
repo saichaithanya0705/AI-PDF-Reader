@@ -1,10 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageSquare, Send, X, Loader2, Bot, User, Minimize2, History, FileText, ExternalLink } from 'lucide-react';
+import { MessageSquare, Send, X, Loader2, Bot, User, Minimize2, History, FileText, ExternalLink, Copy, Check } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
-import { API_URL } from '../config';
 import ChatHistory from './ChatHistory';
-import { useAuth } from '../context/AuthContext';
+import { apiRequest } from '../lib/api';
 
 interface RelatedDocument {
   id: string;
@@ -31,6 +30,17 @@ interface SimpleChatbotProps {
   isMinimized?: boolean;
   onToggleMinimize?: () => void;
   initialMessage?: string;
+  variant?: 'floating' | 'docked';
+}
+
+interface ChatMessageRecord {
+  role?: unknown;
+  content?: unknown;
+  created_at?: unknown;
+  metadata?: {
+    sources?: unknown;
+    search_results?: unknown;
+  };
 }
 
 const SimpleChatbot: React.FC<SimpleChatbotProps> = ({
@@ -41,10 +51,10 @@ const SimpleChatbot: React.FC<SimpleChatbotProps> = ({
   onClose,
   isMinimized = false,
   onToggleMinimize,
-  initialMessage
+  initialMessage,
+  variant = 'floating'
 }) => {
   const navigate = useNavigate();
-  const { session } = useAuth();
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
@@ -58,8 +68,12 @@ const SimpleChatbot: React.FC<SimpleChatbotProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [selectedChatText, setSelectedChatText] = useState('');
+  const [selectionMenuPosition, setSelectionMenuPosition] = useState<{ x: number; y: number } | null>(null);
+  const [copiedSelection, setCopiedSelection] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -79,12 +93,94 @@ const SimpleChatbot: React.FC<SimpleChatbotProps> = ({
   useEffect(() => {
     if (initialMessage && !isMinimized) {
       setInputMessage(initialMessage);
-      // Auto-focus the input so user can immediately send or edit
-      setTimeout(() => {
-        inputRef.current?.focus();
-      }, 100);
+      inputRef.current?.focus();
     }
   }, [initialMessage, isMinimized]);
+
+  useEffect(() => {
+    if (isMinimized) return;
+
+    const handleChatSelection = () => {
+      const selection = window.getSelection();
+      const text = selection?.toString().trim();
+
+      if (!selection || !text || text.length < 2 || selection.rangeCount === 0) {
+        setSelectedChatText('');
+        setSelectionMenuPosition(null);
+        setCopiedSelection(false);
+        return;
+      }
+
+      const range = selection.getRangeAt(0);
+      const selectionNode = range.commonAncestorContainer;
+      const selectionElement =
+        selectionNode.nodeType === Node.ELEMENT_NODE
+          ? (selectionNode as Element)
+          : selectionNode.parentElement;
+      const isInsideMessages = Boolean(messagesContainerRef.current?.contains(selectionNode));
+      const isInteractiveChrome = Boolean(
+        selectionElement?.closest('button, input, textarea, [contenteditable="true"], [data-chat-selection-ignore="true"]')
+      );
+
+      if (isInsideMessages && !isInteractiveChrome) {
+        const rect = range.getBoundingClientRect();
+        setSelectedChatText(text);
+        setSelectionMenuPosition({
+          x: rect.left + rect.width / 2,
+          y: rect.top - 10,
+        });
+      } else {
+        setSelectedChatText('');
+        setSelectionMenuPosition(null);
+        setCopiedSelection(false);
+      }
+    };
+
+    window.document.addEventListener('mouseup', handleChatSelection);
+    window.document.addEventListener('selectionchange', handleChatSelection);
+
+    return () => {
+      window.document.removeEventListener('mouseup', handleChatSelection);
+      window.document.removeEventListener('selectionchange', handleChatSelection);
+    };
+  }, [isMinimized]);
+
+  const clearChatSelection = () => {
+    window.getSelection()?.removeAllRanges();
+    setSelectedChatText('');
+    setSelectionMenuPosition(null);
+    setCopiedSelection(false);
+  };
+
+  const askAboutSelectedChatText = () => {
+    if (!selectedChatText.trim()) return;
+    setInputMessage(`Regarding this chat excerpt: "${selectedChatText}"\n\nQuestion: `);
+    clearChatSelection();
+    inputRef.current?.focus();
+  };
+
+  const copySelectedChatText = async () => {
+    if (!selectedChatText.trim()) return;
+    await navigator.clipboard.writeText(selectedChatText);
+    setCopiedSelection(true);
+    setTimeout(() => setCopiedSelection(false), 1500);
+  };
+
+  const normalizeRelatedDocuments = (value: unknown): RelatedDocument[] => {
+    if (!Array.isArray(value)) return [];
+
+    return value
+      .filter((entry): entry is Record<string, unknown> => typeof entry === 'object' && entry !== null)
+      .map((entry) => ({
+        id: typeof entry.id === 'string' ? entry.id : `${entry.document_id || 'doc'}-${entry.page_number || 1}`,
+        document_id: typeof entry.document_id === 'string' ? entry.document_id : '',
+        document_name: typeof entry.document_name === 'string' ? entry.document_name : 'Document',
+        page_number: typeof entry.page_number === 'number' ? entry.page_number : 1,
+        text: typeof entry.text === 'string' ? entry.text : '',
+        similarity: typeof entry.similarity === 'number' ? entry.similarity : 0,
+      }))
+      .filter((entry) => entry.document_id);
+  };
 
   const sendMessage = async () => {
     if (!inputMessage.trim() || isLoading) return;
@@ -100,12 +196,8 @@ const SimpleChatbot: React.FC<SimpleChatbotProps> = ({
     setIsLoading(true);
 
     try {
-      const response = await fetch(`${API_URL}/api/chat`, {
+      const data = await apiRequest<Record<string, unknown>>('/api/chat', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session?.access_token}`,
-        },
         body: JSON.stringify({
           message: inputMessage,
           document_id: documentId,
@@ -119,23 +211,24 @@ const SimpleChatbot: React.FC<SimpleChatbotProps> = ({
         }),
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-
       // Update session ID if it was created
-      if (data.session_id && !sessionId) {
+      if (typeof data.session_id === 'string' && !sessionId) {
         setSessionId(data.session_id);
       }
 
       // Extract related documents from the new dedicated field, sources, or search_results
-      const relatedDocs = data.related_documents || data.sources || data.context?.search_results || data.context?.related_documents || [];
+      const context = typeof data.context === 'object' && data.context !== null
+        ? data.context as Record<string, unknown>
+        : {};
+      const relatedDocs = normalizeRelatedDocuments(
+        data.related_documents || data.sources || context.search_results || context.related_documents
+      );
 
       const assistantMessage: Message = {
         role: 'assistant',
-        content: data.response || 'I apologize, but I encountered an issue processing your request.',
+        content: typeof data.response === 'string'
+          ? data.response
+          : 'I apologize, but I encountered an issue processing your request.',
         timestamp: new Date(),
         relatedDocuments: relatedDocs
       };
@@ -156,7 +249,7 @@ const SimpleChatbot: React.FC<SimpleChatbotProps> = ({
     }
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       sendMessage();
@@ -165,21 +258,18 @@ const SimpleChatbot: React.FC<SimpleChatbotProps> = ({
 
   const loadSession = async (sessionIdToLoad: string) => {
     try {
-      const response = await fetch(`${API_URL}/api/chat/sessions/${sessionIdToLoad}`);
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
+      const data = await apiRequest<Record<string, unknown>>(`/api/chat/sessions/${sessionIdToLoad}`);
+      const historyMessages = Array.isArray(data.messages) ? data.messages : [];
 
       // Convert messages from history format to Message format
-      const loadedMessages: Message[] = data.messages.map((msg: any) => ({
-        role: msg.role,
-        content: msg.content,
-        timestamp: new Date(msg.created_at),
-        relatedDocuments: msg.metadata?.sources || msg.metadata?.search_results || []
-      }));
+      const loadedMessages: Message[] = historyMessages
+        .filter((message): message is ChatMessageRecord => typeof message === 'object' && message !== null)
+        .map((message) => ({
+          role: message.role === 'user' ? 'user' : 'assistant',
+          content: typeof message.content === 'string' ? message.content : '',
+          timestamp: typeof message.created_at === 'string' ? new Date(message.created_at) : new Date(),
+          relatedDocuments: normalizeRelatedDocuments(message.metadata?.sources || message.metadata?.search_results),
+        }));
 
       setMessages(loadedMessages);
       setSessionId(sessionIdToLoad);
@@ -194,6 +284,10 @@ const SimpleChatbot: React.FC<SimpleChatbotProps> = ({
   };
 
   if (isMinimized) {
+    if (variant === 'docked') {
+      return null;
+    }
+
     return (
       <div className="fixed bottom-6 right-6 z-50">
         <button
@@ -214,8 +308,12 @@ const SimpleChatbot: React.FC<SimpleChatbotProps> = ({
     );
   }
 
+  const containerClass = variant === 'docked'
+    ? 'h-full w-full bg-slate-900 border-l border-slate-700 flex flex-col overflow-hidden'
+    : 'fixed bottom-6 right-6 w-96 h-[600px] bg-slate-900 rounded-2xl shadow-2xl border border-slate-700 flex flex-col z-50 overflow-hidden';
+
   return (
-    <div className="fixed bottom-6 right-6 w-96 h-[600px] bg-slate-900 rounded-2xl shadow-2xl border border-slate-700 flex flex-col z-50 overflow-hidden">
+    <div className={containerClass}>
       {/* Header */}
       <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -259,7 +357,7 @@ const SimpleChatbot: React.FC<SimpleChatbotProps> = ({
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-900">
+      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-900">
         {messages.map((message, index) => (
           <div
             key={index}
@@ -361,17 +459,56 @@ const SimpleChatbot: React.FC<SimpleChatbotProps> = ({
         <div ref={messagesEndRef} />
       </div>
 
+      {selectedChatText && selectionMenuPosition && (
+        <div
+          data-chat-selection-ignore="true"
+          className="fixed z-[70] flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800 p-2 shadow-2xl"
+          onMouseDown={(event) => event.preventDefault()}
+          style={{
+            left: `${selectionMenuPosition.x}px`,
+            top: `${selectionMenuPosition.y}px`,
+            transform: 'translate(-50%, -100%)',
+          }}
+        >
+          <button
+            onClick={askAboutSelectedChatText}
+            className="flex items-center gap-2 rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+            title="Ask AI about this chat excerpt"
+          >
+            <MessageSquare className="h-4 w-4" />
+            Ask AI
+          </button>
+          <button
+            onClick={copySelectedChatText}
+            className="flex items-center gap-2 rounded-md bg-slate-700 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-600"
+            title="Copy selected chat text"
+          >
+            {copiedSelection ? (
+              <>
+                <Check className="h-4 w-4 text-green-400" />
+                <span>Copied</span>
+              </>
+            ) : (
+              <>
+                <Copy className="h-4 w-4" />
+                <span>Copy</span>
+              </>
+            )}
+          </button>
+        </div>
+      )}
+
       {/* Input */}
       <div className="p-4 bg-slate-800 border-t border-slate-700">
         <div className="flex gap-2">
-          <input
+          <textarea
             ref={inputRef}
-            type="text"
             value={inputMessage}
             onChange={(e) => setInputMessage(e.target.value)}
-            onKeyPress={handleKeyPress}
+            onKeyDown={handleKeyPress}
             placeholder="Type your message..."
-            className="flex-1 bg-slate-900 text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 border border-slate-700 placeholder-slate-500"
+            rows={2}
+            className="max-h-28 min-h-[3rem] flex-1 resize-none rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
             disabled={isLoading}
           />
           <button
@@ -397,7 +534,6 @@ const SimpleChatbot: React.FC<SimpleChatbotProps> = ({
       {/* Chat History Modal */}
       {showHistory && (
         <ChatHistory
-          userId={documentId || "anonymous"}
           onLoadSession={loadSession}
           onClose={() => setShowHistory(false)}
         />

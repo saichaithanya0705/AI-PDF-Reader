@@ -543,7 +543,7 @@ class HighPerformancePDFProcessor:
 
         return outline
     
-    def extract_outline_from_content(self, doc, language_patterns=None) -> List[Dict]:
+    def extract_outline_from_content(self, doc, language_patterns=None, include_positions: bool = False) -> List[Dict]:
         """Extract outline using professional PDF heading detection"""
         outline = []
         
@@ -618,7 +618,7 @@ class HighPerformancePDFProcessor:
                             "page": page_num,  # Page numbers start from 0
                             "font_size": font_size,
                             "is_bold": is_bold,
-                            "y_position": line.get("y", 0)
+                            "y_position": self._line_y_position(line)
                         })
         
         # Step 3: Sort and rank headings properly
@@ -626,18 +626,25 @@ class HighPerformancePDFProcessor:
             # Sort by page number, then by position on page
             all_headings.sort(key=lambda x: (x["page"], x.get("y_position", 0)))
             
-            # Remove font_size, is_bold, and y_position from final output
-            for heading in all_headings:
-                if "font_size" in heading:
-                    del heading["font_size"]
-                if "is_bold" in heading:
-                    del heading["is_bold"]
-                if "y_position" in heading:
-                    del heading["y_position"]
+            if not include_positions:
+                # Remove internal scoring and coordinate fields from public outline output.
+                for heading in all_headings:
+                    if "font_size" in heading:
+                        del heading["font_size"]
+                    if "is_bold" in heading:
+                        del heading["is_bold"]
+                    if "y_position" in heading:
+                        del heading["y_position"]
             
             outline = all_headings
         
         return outline
+
+    def _line_y_position(self, line: Dict) -> float:
+        bbox = line.get("bbox")
+        if bbox and len(bbox) >= 2:
+            return float(bbox[1])
+        return float(line.get("y", 0) or 0)
     
     def detect_heading_professionally(self, line, typography) -> Tuple[bool, str]:
         """Professional heading detection using typography analysis"""
@@ -1299,6 +1306,83 @@ def extract_pdf_title(pdf_path: str) -> str:
         logger.error(f"Could not extract title from {pdf_path}: {e}")
         return Path(pdf_path).stem.replace('_', ' ').title()
 
+def _page_text_lines(page) -> List[Dict]:
+    lines = []
+    text_dict = page.get_text("dict")
+
+    for block in text_dict.get("blocks", []):
+        if "lines" not in block:
+            continue
+        for line in block["lines"]:
+            line_text = "".join(span.get("text", "") for span in line.get("spans", [])).strip()
+            if not line_text:
+                continue
+
+            bbox = line.get("bbox")
+            if not bbox and line.get("spans"):
+                span_boxes = [span.get("bbox") for span in line["spans"] if span.get("bbox")]
+                if span_boxes:
+                    bbox = (
+                        min(box[0] for box in span_boxes),
+                        min(box[1] for box in span_boxes),
+                        max(box[2] for box in span_boxes),
+                        max(box[3] for box in span_boxes),
+                    )
+
+            lines.append({
+                "text": line_text,
+                "y_position": float(bbox[1]) if bbox else 0.0,
+            })
+
+    return lines
+
+
+def _outline_page_index(heading_info: Dict, page_count: int, zero_based_pages: bool) -> int:
+    try:
+        page_number = int(heading_info.get("page", 0))
+    except (TypeError, ValueError):
+        page_number = 0
+
+    page_index = page_number if zero_based_pages else page_number - 1
+    return min(max(page_index, 0), max(page_count - 1, 0))
+
+
+def _extract_section_content(doc, outline_dicts: List[Dict], index: int, zero_based_pages: bool) -> str:
+    heading = outline_dicts[index]
+    next_heading = outline_dicts[index + 1] if index + 1 < len(outline_dicts) else None
+
+    start_page = _outline_page_index(heading, len(doc), zero_based_pages)
+    end_page = _outline_page_index(next_heading, len(doc), zero_based_pages) if next_heading else len(doc) - 1
+    if end_page < start_page:
+        end_page = start_page
+
+    start_y = heading.get("y_position")
+    next_y = next_heading.get("y_position") if next_heading else None
+    next_page = _outline_page_index(next_heading, len(doc), zero_based_pages) if next_heading else None
+    content_lines = []
+
+    for page_num in range(start_page, end_page + 1):
+        for line in _page_text_lines(doc[page_num]):
+            line_text = line["text"].strip()
+            y_position = line["y_position"]
+
+            if page_num == start_page:
+                if start_y is not None and y_position <= float(start_y) + 0.5:
+                    continue
+                if start_y is None and line_text == str(heading.get("text", "")).strip():
+                    continue
+
+            if next_heading and page_num == next_page:
+                if next_y is not None and y_position >= float(next_y) - 0.5:
+                    break
+                if next_y is None and line_text == str(next_heading.get("text", "")).strip():
+                    break
+
+            content_lines.append(line_text)
+
+    return "\n".join(content_lines).strip()
+
+
 def extract_sections(pdf_path: str, doc_id: str) -> List[Section]:
     """
     Processes a single PDF to extract its full hierarchical content.
@@ -1312,30 +1396,19 @@ def extract_sections(pdf_path: str, doc_id: str) -> List[Section]:
     """
     processor = HighPerformancePDFProcessor()
     all_sections = []
+    doc = None
     
     try:
         doc = fitz.open(pdf_path)
         
         # 1. Get the outline (headings) first
-        outline_dicts = processor.extract_outline_from_content(doc)
+        outline_dicts = processor.extract_outline_from_content(doc, include_positions=True)
+        zero_based_pages = any(int(item.get("page", 0)) == 0 for item in outline_dicts if str(item.get("page", "")).isdigit())
         
         # 2. Now, extract the full text content for each section
         for i, heading_info in enumerate(outline_dicts):
-            start_page = heading_info['page']
-            
-            # Determine the end page and text
-            end_page = outline_dicts[i + 1]['page'] if i + 1 < len(outline_dicts) else len(doc)
-            
-            content_text = ""
-            for page_num in range(start_page, end_page):
-                content_text += doc[page_num].get_text()
-
-            # For the last section on a page, it might share with the next heading
-            # This is a simplification; more advanced logic could use bounding boxes.
-            if i + 1 < len(outline_dicts) and outline_dicts[i+1]['page'] == start_page:
-                next_heading_text = outline_dicts[i+1]['text']
-                if next_heading_text in content_text:
-                    content_text = content_text.split(next_heading_text)[0]
+            page_index = _outline_page_index(heading_info, len(doc), zero_based_pages)
+            content_text = _extract_section_content(doc, outline_dicts, i, zero_based_pages)
 
             all_sections.append(
                 Section(
@@ -1343,14 +1416,15 @@ def extract_sections(pdf_path: str, doc_id: str) -> List[Section]:
                     doc_filename=Path(pdf_path).name,
                     section_title=heading_info['text'],
                     content=content_text.strip(),
-                    page_number=heading_info['page'],
+                    page_number=page_index,
                     level=heading_info['level']
                 )
             )
-            
-        doc.close()
         
     except Exception as e:
         logger.error(f"Could not extract sections from {pdf_path}: {e}")
+    finally:
+        if doc is not None:
+            doc.close()
 
     return all_sections

@@ -36,6 +36,41 @@ class EnhancedLLMService:
     def __init__(self):
         self.provider = os.getenv("LLM_PROVIDER", "gemini").lower()
         logger.info(f"✅ Enhanced LLM Service initialized with provider: {self.provider}")
+
+    def _parse_json_array(self, response: str) -> List[Any]:
+        payload = json.loads(response)
+        if not isinstance(payload, list):
+            logger.warning("LLM response was not a JSON array")
+            return []
+        return payload
+
+    def _coerce_related_section(self, item: Dict[str, Any], all_sections: List[Dict]) -> Optional[Dict[str, Any]]:
+        if not isinstance(item, dict):
+            return None
+
+        section_id = item.get('section_id')
+        if isinstance(section_id, bool) or not isinstance(section_id, int):
+            return None
+        if section_id < 0 or section_id >= len(all_sections):
+            return None
+
+        try:
+            relevance_score = float(item.get('relevance_score', 0))
+        except (TypeError, ValueError):
+            relevance_score = 0.0
+        relevance_score = max(0.0, min(1.0, relevance_score))
+
+        original_section = all_sections[section_id]
+        return {
+            "section_id": section_id,
+            "relevance_score": relevance_score,
+            "snippet": str(item.get("snippet", "")),
+            "connection_type": str(item.get("connection_type", "similar")),
+            "document_id": original_section.get('document_id'),
+            "document_name": original_section.get('document_name'),
+            "page": original_section.get('page', 1),
+            "title": original_section.get('title', 'Untitled Section')
+        }
     
     async def generate_text_selection_insights(self, selected_text: str, context: str, persona: str = None, job: str = None) -> Dict[str, Any]:
         """Generate insights for selected text - core hackathon feature"""
@@ -153,20 +188,12 @@ Focus on semantic relevance, not just keyword matching.
             response = await asyncio.to_thread(get_llm_response, messages)
 
             try:
-                related = json.loads(response)
-                # Enhance with original section data
+                related = self._parse_json_array(response)
                 enhanced_results = []
                 for item in related[:max_results]:
-                    section_id = item.get('section_id', 0)
-                    if section_id < len(all_sections):
-                        original_section = all_sections[section_id]
-                        enhanced_results.append({
-                            **item,
-                            "document_id": original_section.get('document_id'),
-                            "document_name": original_section.get('document_name'),
-                            "page": original_section.get('page', 1),
-                            "title": original_section.get('title', 'Untitled Section')
-                        })
+                    result = self._coerce_related_section(item, all_sections)
+                    if result:
+                        enhanced_results.append(result)
 
                 return enhanced_results
 

@@ -1,14 +1,17 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import type { PDFPageProxy } from 'pdfjs-dist/types/src/display/api';
 import { PDFDocument } from '../context/PDFContext';
 import { API_URL } from '../config';
+import { fetchAuthenticatedBlobUrl, generateAudio, getAuthHeaders } from '../lib/api';
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Loader2, MessageSquare, Copy, Volume2, Check } from 'lucide-react';
-import 'react-pdf/dist/esm/Page/TextLayer.css';
-import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
+import 'react-pdf/dist/Page/TextLayer.css';
+import 'react-pdf/dist/Page/AnnotationLayer.css';
 
-// Configure PDF.js worker - use CDN for pdfjs-dist 3.11.174
-pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
+pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+  'pdfjs-dist/build/pdf.worker.min.mjs',
+  import.meta.url
+).toString();
 
 interface SimplePDFViewerProps {
   document: PDFDocument;
@@ -40,20 +43,58 @@ const SimplePDFViewer: React.FC<SimplePDFViewerProps> = ({
   const [pageVoiceGenerating, setPageVoiceGenerating] = useState(false);
   const [currentPageText, setCurrentPageText] = useState<string>('');
   const [currentAudio, setCurrentAudio] = useState<HTMLAudioElement | null>(null);
+  const [pdfHeaders, setPdfHeaders] = useState<Record<string, string> | null>(null);
+  const [pdfLoadError, setPdfLoadError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const audioObjectUrlRef = useRef<string | null>(null);
   const pdfUrl = pdfDocument.url?.startsWith('http') ? pdfDocument.url : `${API_URL}${pdfDocument.url}`;
+  const pdfOptions = useMemo(() => (
+    pdfHeaders
+      ? {
+          httpHeaders: pdfHeaders,
+          withCredentials: false,
+        }
+      : undefined
+  ), [pdfHeaders]);
 
   useEffect(() => {
     return () => {
       currentAudio?.pause();
+      if (audioObjectUrlRef.current) {
+        URL.revokeObjectURL(audioObjectUrlRef.current);
+        audioObjectUrlRef.current = null;
+      }
     };
   }, [currentAudio]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setPdfHeaders(null);
+    setPdfLoadError(null);
+
+    getAuthHeaders()
+      .then((headers) => {
+        if (!cancelled) {
+          setPdfHeaders(headers);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          console.error('Failed to prepare PDF authentication headers:', error);
+          setPdfLoadError('Unable to authenticate the protected PDF file.');
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pdfUrl]);
 
   const handlePageLoadSuccess = useCallback(async (page: PDFPageProxy) => {
     try {
       const textContent = await page.getTextContent();
-      const combinedText = textContent.items
-        .map((item: any) => (typeof item.str === 'string' ? item.str : ''))
+      const combinedText = (textContent.items as Array<{ str?: unknown }>)
+        .map((item) => (typeof item.str === 'string' ? item.str : ''))
         .join(' ')
         .replace(/\s+/g, ' ')
         .trim();
@@ -66,30 +107,26 @@ const SimplePDFViewer: React.FC<SimplePDFViewerProps> = ({
 
   const requestVoiceover = useCallback(
     async (text: string) => {
-      const response = await fetch(`${API_URL}/api/generate-audio`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text,
-          document_id: pdfDocument.id,
-          page_number: pageNumber,
-        }),
-      });
+      const data = await generateAudio(text, pdfDocument.id, pageNumber);
+      const audioPath = data && typeof data === 'object'
+        ? (data as { audioUrl?: unknown; audio_url?: unknown }).audioUrl ?? (data as { audio_url?: unknown }).audio_url
+        : undefined;
 
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        throw new Error(error.detail || 'Failed to generate audio');
-      }
-
-      const data = await response.json();
-      if (data.audio_url) {
+      if (typeof audioPath === 'string' && audioPath.trim()) {
         currentAudio?.pause();
-        const audio = new Audio(`${API_URL}${data.audio_url}`);
+        if (audioObjectUrlRef.current) {
+          URL.revokeObjectURL(audioObjectUrlRef.current);
+          audioObjectUrlRef.current = null;
+        }
+
+        const audioObjectUrl = await fetchAuthenticatedBlobUrl(audioPath);
+        audioObjectUrlRef.current = audioObjectUrl;
+        const audio = new Audio(audioObjectUrl);
         setCurrentAudio(audio);
         await audio.play();
       }
     },
-    [API_URL, currentAudio, pageNumber, pdfDocument.id]
+    [currentAudio, pageNumber, pdfDocument.id]
   );
 
   const onDocumentLoadSuccess = useCallback(({ numPages }: { numPages: number }) => {
@@ -102,11 +139,28 @@ const SimplePDFViewer: React.FC<SimplePDFViewerProps> = ({
       const selection = window.getSelection();
       const text = selection?.toString().trim();
 
-      if (text && text.length > 0) {
+      if (!selection || !text || text.length < 2 || selection.rangeCount === 0) {
+        setSelectedText('');
+        setMenuPosition(null);
+        setCopied(false);
+        return;
+      }
+
+      const range = selection.getRangeAt(0);
+      const selectionNode = range.commonAncestorContainer;
+      const selectionElement =
+        selectionNode.nodeType === Node.ELEMENT_NODE
+          ? (selectionNode as Element)
+          : selectionNode.parentElement;
+      const textLayer = selectionElement?.closest('.react-pdf__Page__textContent');
+      const isPdfTextSelection = Boolean(
+        textLayer && containerRef.current?.contains(textLayer)
+      );
+
+      if (isPdfTextSelection) {
         setSelectedText(text);
 
         // Get selection position for floating menu
-        const range = selection?.getRangeAt(0);
         const rect = range?.getBoundingClientRect();
 
         if (rect) {
@@ -142,6 +196,8 @@ const SimplePDFViewer: React.FC<SimplePDFViewerProps> = ({
   };
 
   const handleAskLLM = () => {
+    if (!selectedText.trim()) return;
+
     // Call the new onAskLLM callback if provided
     if (onAskLLM) {
       onAskLLM(selectedText, pageNumber);
@@ -242,25 +298,41 @@ const SimplePDFViewer: React.FC<SimplePDFViewerProps> = ({
 
       {/* PDF Content Area */}
       <div className="flex-1 overflow-auto bg-slate-950 flex justify-center p-4 relative">
-        <Document
-          file={pdfUrl}
-          onLoadSuccess={onDocumentLoadSuccess}
-          loading={<Loader2 className="w-8 h-8 animate-spin text-cyan-400" />}
-        >
-          <Page
-            pageNumber={pageNumber}
-            scale={scale}
-            renderTextLayer={true}
-            renderAnnotationLayer={true}
-            onLoadSuccess={handlePageLoadSuccess}
-            className="shadow-2xl"
-          />
-        </Document>
+        {pdfLoadError ? (
+          <div className="flex max-w-md flex-col items-center justify-center gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-6 text-center text-red-100">
+            <p className="font-medium">Could not load this PDF</p>
+            <p className="text-sm text-red-200/80">{pdfLoadError}</p>
+          </div>
+        ) : !pdfOptions ? (
+          <Loader2 className="w-8 h-8 animate-spin text-cyan-400" />
+        ) : (
+          <Document
+            file={pdfUrl}
+            options={pdfOptions}
+            onLoadSuccess={onDocumentLoadSuccess}
+            loading={<Loader2 className="w-8 h-8 animate-spin text-cyan-400" />}
+            error={
+              <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-100">
+                Unable to load the protected PDF file.
+              </div>
+            }
+          >
+            <Page
+              pageNumber={pageNumber}
+              scale={scale}
+              renderTextLayer={true}
+              renderAnnotationLayer={true}
+              onLoadSuccess={handlePageLoadSuccess}
+              className="shadow-2xl"
+            />
+          </Document>
+        )}
 
         {/* Floating Selection Menu */}
         {selectedText && menuPosition && (
           <div
             className="fixed z-50 bg-slate-800 rounded-lg shadow-2xl border border-slate-700 p-2 flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-200"
+            onMouseDown={(event) => event.preventDefault()}
             style={{
               left: `${menuPosition.x}px`,
               top: `${menuPosition.y}px`,
@@ -274,7 +346,7 @@ const SimplePDFViewer: React.FC<SimplePDFViewerProps> = ({
               title="Ask AI about this text"
             >
               <MessageSquare className="w-4 h-4" />
-              Ask LLM
+              Ask AI
             </button>
 
             {/* Copy Button */}

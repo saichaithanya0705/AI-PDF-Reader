@@ -1,70 +1,110 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { usePDF } from '../context/PDFContext';
-import { FileText, ExternalLink } from 'lucide-react';
+import { usePDF } from '../context/usePDF';
+import { ExternalLink, FileText } from 'lucide-react';
 
-const RelatedDocumentsSidebar: React.FC = () => {
-    const { crossDocumentSections } = usePDF();
-    const navigate = useNavigate();
+interface RelatedDocumentsSidebarProps {
+  currentDocumentId?: string;
+}
 
-    const handleNavigate = (docId: string, page: number) => {
-        navigate(`/reader/${docId}?page=${page}`);
-    };
+const RelatedDocumentsSidebar: React.FC<RelatedDocumentsSidebarProps> = ({ currentDocumentId }) => {
+  const { documents, crossDocumentSections } = usePDF();
+  const navigate = useNavigate();
 
-    if (crossDocumentSections.length === 0) {
-        return null;
-    }
+  const handleNavigate = (docId: string, page: number = 1) => {
+    navigate(`/reader/${docId}?page=${page}`);
+  };
 
-    return (
-        <div className="w-80 bg-white border-l border-gray-200 h-full overflow-y-auto flex flex-col shadow-sm z-10">
-            <div className="p-4 border-b border-gray-100 bg-gray-50/50 backdrop-blur-sm sticky top-0">
-                <h3 className="font-semibold text-gray-800 flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-indigo-600" />
-                    Related Documents
-                </h3>
-                <p className="text-xs text-gray-500 mt-1">
-                    Found {crossDocumentSections.length} relevant sections in other files
-                </p>
-            </div>
+  if (documents.length <= 1 && crossDocumentSections.length === 0) {
+    return null;
+  }
 
-            <div className="flex-1 p-3 space-y-3">
-                {crossDocumentSections.map((section) => (
-                    <div
-                        key={`${section.documentId}-${section.page}-${section.id}`}
-                        className="group p-3 rounded-xl border border-gray-100 bg-white hover:border-indigo-200 hover:shadow-md transition-all duration-200 cursor-pointer relative overflow-hidden"
-                        onClick={() => handleNavigate(section.documentId, section.page)}
-                    >
-                        <div className="absolute top-0 right-0 p-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <ExternalLink className="w-3 h-3 text-indigo-400" />
-                        </div>
+  return (
+    <aside className="hidden h-full w-72 shrink-0 flex-col overflow-hidden border-r border-slate-700 bg-slate-900/95 lg:flex">
+      <div className="border-b border-slate-700 p-4">
+        <h3 className="flex items-center gap-2 text-sm font-semibold text-white">
+          <FileText className="h-4 w-4 text-cyan-300" />
+          Uploaded PDFs
+        </h3>
+        <p className="mt-1 text-xs text-slate-400">
+          {documents.length} file{documents.length === 1 ? '' : 's'} available in this workspace
+        </p>
+      </div>
 
-                        <div className="flex items-start gap-3 mb-2">
-                            <div className="p-1.5 rounded-lg bg-indigo-50 text-indigo-600 group-hover:bg-indigo-100 transition-colors">
-                                <FileText className="w-4 h-4" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                                <h4 className="text-sm font-medium text-gray-900 truncate" title={section.documentName}>
-                                    {section.documentName}
-                                </h4>
-                                <div className="flex items-center gap-2 mt-0.5">
-                                    <span className="text-xs font-medium text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">
-                                        Page {section.page}
-                                    </span>
-                                    <span className="text-xs text-gray-400">
-                                        {Math.round(section.relevance * 100)}% match
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <p className="text-xs text-gray-600 line-clamp-3 leading-relaxed pl-1 border-l-2 border-gray-100 group-hover:border-indigo-200 transition-colors">
-                            "{section.snippet}"
-                        </p>
-                    </div>
-                ))}
-            </div>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="space-y-2 p-3">
+          {documents.map((document) => {
+            const isActive = document.id === currentDocumentId;
+            return (
+              <button
+                key={document.id}
+                onClick={() => handleNavigate(document.id)}
+                className={`w-full rounded-lg border p-3 text-left transition-colors ${
+                  isActive
+                    ? 'border-cyan-400/50 bg-cyan-400/10 text-white'
+                    : 'border-slate-700 bg-slate-800/70 text-slate-200 hover:border-slate-500 hover:bg-slate-800'
+                }`}
+                title={document.name}
+              >
+                <div className="flex items-start gap-3">
+                  <span className={`mt-0.5 rounded-md p-1.5 ${isActive ? 'bg-cyan-400/20 text-cyan-200' : 'bg-slate-700 text-slate-300'}`}>
+                    <FileText className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium">{document.name}</span>
+                    <span className="mt-1 block text-xs text-slate-400">
+                      {Math.max(1, Math.round((document.size || 0) / 1024))} KB
+                    </span>
+                  </span>
+                </div>
+              </button>
+            );
+          })}
         </div>
-    );
+
+        {crossDocumentSections.length > 0 && (
+          <div className="border-t border-slate-700 p-3">
+            <div className="mb-3">
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-300">
+                Relevant Lines
+              </h4>
+              <p className="mt-1 text-xs text-slate-500">
+                Matches from other PDFs for the current page
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              {crossDocumentSections.map((section) => (
+                <button
+                  key={`${section.documentId}-${section.page}-${section.id}`}
+                  className="group w-full rounded-lg border border-slate-700 bg-slate-800/60 p-3 text-left transition-colors hover:border-indigo-400/50 hover:bg-slate-800"
+                  onClick={() => handleNavigate(section.documentId, section.page)}
+                >
+                  <div className="mb-2 flex items-start gap-2">
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium text-cyan-200" title={section.documentName}>
+                        {section.documentName}
+                      </span>
+                      <span className="mt-1 inline-flex items-center gap-2 text-xs text-slate-400">
+                        Page {section.page}
+                        <span className="rounded bg-indigo-400/10 px-1.5 py-0.5 text-indigo-200">
+                          {Math.round(section.relevance * 100)}% match
+                        </span>
+                      </span>
+                    </span>
+                    <ExternalLink className="h-3.5 w-3.5 shrink-0 text-slate-500 opacity-0 transition-opacity group-hover:opacity-100" />
+                  </div>
+                  <p className="line-clamp-3 border-l-2 border-slate-700 pl-2 text-xs leading-relaxed text-slate-300 group-hover:border-indigo-400/50">
+                    {section.snippet}
+                  </p>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </aside>
+  );
 };
 
 export default RelatedDocumentsSidebar;

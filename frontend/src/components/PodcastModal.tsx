@@ -1,6 +1,6 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { X, Play, Pause, Volume2, Download, Loader2 } from 'lucide-react';
-import { API_URL } from '../config';
+import { fetchAuthenticatedBlobUrl, generatePodcast as generatePodcastApi } from '../lib/api';
 
 interface PodcastModalProps {
   isVisible: boolean;
@@ -28,39 +28,38 @@ const PodcastModal: React.FC<PodcastModalProps> = ({
   const [volume, setVolume] = useState(1);
 
   const audioRef = useRef<HTMLAudioElement>(null);
+  const audioObjectUrlRef = useRef<string | null>(null);
 
-  const generatePodcast = async () => {
+  const generatePodcast = useCallback(async () => {
     setIsGenerating(true);
     setError(null);
 
     try {
-  const response = await fetch(`${API_URL}/api/generate-podcast`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          document_id: documentId,
-          page: currentPage,
-          persona: persona,
-          job: job
-        })
-      });
+      const data = await generatePodcastApi(undefined, documentId, currentPage, persona, job);
+      const audioPath = data && typeof data === 'object'
+        ? (data as { audioUrl?: unknown; audio_url?: unknown }).audioUrl ?? (data as { audio_url?: unknown }).audio_url
+        : undefined;
 
-      if (!response.ok) {
-        throw new Error(`Failed to generate podcast: ${response.statusText}`);
+      if (typeof audioPath !== 'string' || !audioPath.trim()) {
+        throw new Error('Podcast generation did not return an audio URL');
       }
 
-  const data = await response.json();
-  setAudioUrl(`${API_URL}${data.audioUrl}`);
+      if (audioObjectUrlRef.current) {
+        URL.revokeObjectURL(audioObjectUrlRef.current);
+        audioObjectUrlRef.current = null;
+      }
+
+      const objectUrl = await fetchAuthenticatedBlobUrl(audioPath);
+      audioObjectUrlRef.current = objectUrl;
+      setAudioUrl(objectUrl);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate podcast');
     } finally {
       setIsGenerating(false);
     }
-  };
+  }, [currentPage, documentId, job, persona]);
 
-  const togglePlayPause = () => {
+  const togglePlayPause = useCallback(() => {
     if (!audioRef.current) return;
 
     if (isPlaying) {
@@ -69,7 +68,7 @@ const PodcastModal: React.FC<PodcastModalProps> = ({
       audioRef.current.play();
     }
     setIsPlaying(!isPlaying);
-  };
+  }, [isPlaying]);
 
   const handleTimeUpdate = () => {
     if (audioRef.current) {
@@ -121,7 +120,7 @@ const PodcastModal: React.FC<PodcastModalProps> = ({
     if (isVisible && !audioUrl && !isGenerating) {
       generatePodcast();
     }
-  }, [isVisible]);
+  }, [audioUrl, generatePodcast, isGenerating, isVisible]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -156,17 +155,25 @@ const PodcastModal: React.FC<PodcastModalProps> = ({
     const audio = audioRef.current;
     if (audio) {
       audio.volume = volume;
+      const handleEnded = () => setIsPlaying(false);
       audio.addEventListener('timeupdate', handleTimeUpdate);
       audio.addEventListener('loadedmetadata', handleLoadedMetadata);
-      audio.addEventListener('ended', () => setIsPlaying(false));
+      audio.addEventListener('ended', handleEnded);
 
       return () => {
         audio.removeEventListener('timeupdate', handleTimeUpdate);
         audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
-        audio.removeEventListener('ended', () => setIsPlaying(false));
+        audio.removeEventListener('ended', handleEnded);
       };
     }
   }, [audioUrl, volume]);
+
+  useEffect(() => () => {
+    if (audioObjectUrlRef.current) {
+      URL.revokeObjectURL(audioObjectUrlRef.current);
+      audioObjectUrlRef.current = null;
+    }
+  }, []);
 
   if (!isVisible) return null;
 

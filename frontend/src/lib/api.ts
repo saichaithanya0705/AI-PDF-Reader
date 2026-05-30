@@ -1,82 +1,150 @@
 /**
- * Authenticated API client for making requests to the backend
- * Automatically includes JWT token from Supabase session
+ * Authenticated API client for backend requests.
+ *
+ * Production identity comes from Supabase JWTs. The only client_id fallback is
+ * the explicit local development auth bypass, matching backend policy.
  */
 import { supabase } from './supabaseClient';
 import { API_URL } from '../config';
+import { isDevAuthBypassEnabled } from './devAuth';
+
+type JsonPrimitive = string | number | boolean | null;
+export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
+export type JsonObject = Record<string, JsonValue>;
 
 export class ApiError extends Error {
   constructor(
     message: string,
     public status: number,
-    public data?: any
+    public data?: unknown
   ) {
     super(message);
     this.name = 'ApiError';
   }
 }
 
+const isFormDataBody = (body: BodyInit | null | undefined): body is FormData => (
+  typeof FormData !== 'undefined' && body instanceof FormData
+);
+
+const resolveApiUrl = (endpoint: string): string => (
+  /^https?:\/\//i.test(endpoint) ? endpoint : `${API_URL}${endpoint}`
+);
+
+const toEndpointWithParams = (endpoint: string, params: URLSearchParams): string => {
+  const query = params.toString();
+  return query ? `${endpoint}?${query}` : endpoint;
+};
+
+const parseErrorPayload = async (response: Response): Promise<unknown> => {
+  const contentType = response.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    return response.json().catch(() => ({}));
+  }
+  return response.text().catch(() => '');
+};
+
+const errorMessageFromPayload = (payload: unknown, fallback: string): string => {
+  if (payload && typeof payload === 'object' && 'detail' in payload) {
+    const detail = (payload as { detail?: unknown }).detail;
+    if (typeof detail === 'string' && detail.trim()) {
+      return detail;
+    }
+  }
+
+  if (typeof payload === 'string' && payload.trim()) {
+    return payload;
+  }
+
+  return fallback;
+};
+
+const handleAuthFailure = async (): Promise<never> => {
+  if (!isDevAuthBypassEnabled()) {
+    await supabase.auth.signOut();
+    window.location.href = '/login';
+  }
+  throw new ApiError('Session expired. Please login again.', 401);
+};
+
+export const getDevClientIdParam = (clientId?: string): URLSearchParams => {
+  const params = new URLSearchParams();
+  if (isDevAuthBypassEnabled() && clientId?.trim()) {
+    params.set('client_id', clientId.trim());
+  }
+  return params;
+};
+
 /**
- * Get authentication headers with JWT token
- * @returns Headers object with Authorization token
- * @throws Error if user is not authenticated
+ * Get authentication headers with JWT token.
  */
-export async function getAuthHeaders(): Promise<HeadersInit> {
+export async function getAuthHeaders(): Promise<Record<string, string>> {
+  if (isDevAuthBypassEnabled()) {
+    return {};
+  }
+
   const { data: { session } } = await supabase.auth.getSession();
-  
+
   if (!session) {
     throw new ApiError('Not authenticated. Please login.', 401);
   }
-  
+
   return {
-    'Authorization': `Bearer ${session.access_token}`,
+    Authorization: `Bearer ${session.access_token}`,
   };
 }
 
+export async function apiFetch(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<Response> {
+  const authHeaders = await getAuthHeaders();
+  const headers = new Headers(options.headers);
+
+  Object.entries(authHeaders).forEach(([key, value]) => {
+    headers.set(key, value);
+  });
+
+  if (options.body && !isFormDataBody(options.body) && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+
+  const response = await fetch(resolveApiUrl(endpoint), {
+    ...options,
+    headers,
+  });
+
+  if (response.status === 401) {
+    await handleAuthFailure();
+  }
+
+  return response;
+}
+
 /**
- * Make an authenticated API request
- * @param endpoint - API endpoint (e.g., '/api/documents')
- * @param options - Fetch options
- * @returns Response data
+ * Make an authenticated API request and parse its JSON response.
  */
-export async function apiRequest<T = any>(
+export async function apiRequest<T = unknown>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
   try {
-    const authHeaders = await getAuthHeaders();
-    
-    const response = await fetch(`${API_URL}${endpoint}`, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...authHeaders,
-        ...options.headers,
-      },
-    });
-    
-    // Handle authentication errors
-    if (response.status === 401) {
-      // Token expired or invalid
-      await supabase.auth.signOut();
-      window.location.href = '/login';
-      throw new ApiError('Session expired. Please login again.', 401);
-    }
-    
-    // Handle other errors
+    const response = await apiFetch(endpoint, options);
+
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
+      const errorData = await parseErrorPayload(response);
       throw new ApiError(
-        errorData.detail || response.statusText,
+        errorMessageFromPayload(errorData, response.statusText),
         response.status,
         errorData
       );
     }
-    
-    // Parse response
-    const data = await response.json();
-    return data;
-    
+
+    if (response.status === 204) {
+      return undefined as T;
+    }
+
+    return await response.json() as T;
   } catch (error) {
     if (error instanceof ApiError) {
       throw error;
@@ -87,177 +155,136 @@ export async function apiRequest<T = any>(
 }
 
 /**
- * Upload file with authentication
- * @param endpoint - Upload endpoint
- * @param formData - FormData with file
- * @returns Upload response
+ * Upload form data with authentication.
  */
-export async function uploadFile<T = any>(
+export async function uploadFile<T = unknown>(
   endpoint: string,
   formData: FormData
 ): Promise<T> {
-  try {
-    const authHeaders = await getAuthHeaders();
-    
-    const response = await fetch(`${API_URL}${endpoint}`, {
-      method: 'POST',
-      headers: {
-        ...authHeaders,
-        // Don't set Content-Type for FormData - browser sets it with boundary
-      },
-      body: formData,
-    });
-    
-    if (response.status === 401) {
-      await supabase.auth.signOut();
-      window.location.href = '/login';
-      throw new ApiError('Session expired. Please login again.', 401);
-    }
-    
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new ApiError(
-        errorData.detail || response.statusText,
-        response.status,
-        errorData
-      );
-    }
-    
-    return await response.json();
-    
-  } catch (error) {
-    if (error instanceof ApiError) {
-      throw error;
-    }
-    console.error('Upload failed:', error);
-    throw new ApiError('Upload failed. Please try again.', 0);
+  return apiRequest<T>(endpoint, {
+    method: 'POST',
+    body: formData,
+  });
+}
+
+export async function fetchAuthenticatedBlobUrl(endpoint: string): Promise<string> {
+  const response = await apiFetch(endpoint);
+  if (!response.ok) {
+    const errorData = await parseErrorPayload(response);
+    throw new ApiError(
+      errorMessageFromPayload(errorData, response.statusText),
+      response.status,
+      errorData
+    );
   }
+
+  const blob = await response.blob();
+  return URL.createObjectURL(blob);
 }
 
 // =============================================================================
 // Convenience methods for common operations
 // =============================================================================
 
-/**
- * Get all documents for current user
- */
-export async function getAllDocuments() {
-  return apiRequest('/api/documents');
+export async function getAllDocuments<T = unknown>() {
+  return apiRequest<T>('/api/documents');
 }
 
-/**
- * Get sorted documents
- */
-export async function getSortedDocuments(sortBy: string = 'upload_date', sortOrder: string = 'desc') {
-  return apiRequest(`/api/documents/sorted/${sortBy}?sort_order=${sortOrder}`);
+export async function getSortedDocuments<T = unknown>() {
+  return getAllDocuments<T>();
 }
 
-/**
- * Get specific document by ID
- */
-export async function getDocument(documentId: string) {
-  return apiRequest(`/api/documents/${documentId}`);
+export async function getDocument<T = unknown>(documentId: string) {
+  return apiRequest<T>(`/api/documents/${encodeURIComponent(documentId)}`);
 }
 
-/**
- * Upload document (active file)
- */
-export async function uploadDocument(
+export async function uploadDocument<T = unknown>(
   file: File,
-  clientId: string,
+  clientId?: string,
   persona?: string,
   job?: string
 ) {
   const formData = new FormData();
   formData.append('file', file);
-  
-  const params = new URLSearchParams({ client_id: clientId });
-  if (persona) params.append('persona', persona);
-  if (job) params.append('job', job);
-  
-  return uploadFile(`/upload/active_file?${params.toString()}`, formData);
+  if (persona) formData.append('persona', persona);
+  if (job) formData.append('job', job);
+
+  const params = getDevClientIdParam(clientId);
+  return uploadFile<T>(toEndpointWithParams('/upload/active_file', params), formData);
 }
 
-/**
- * Upload context files (bulk)
- */
-export async function uploadContextFiles(
+export async function uploadContextFiles<T = unknown>(
   files: File[],
-  clientId: string,
-  persona?: string,
-  job?: string
-) {
-  const formData = new FormData();
-  files.forEach(file => formData.append('files', file));
-  
-  const params = new URLSearchParams({ client_id: clientId });
-  if (persona) params.append('persona', persona);
-  if (job) params.append('job', job);
-  
-  return uploadFile(`/upload/context_files?${params.toString()}`, formData);
-}
-
-/**
- * Delete document
- */
-export async function deleteDocument(documentId: string, hardDelete: boolean = false) {
-  return apiRequest(`/api/documents/${documentId}?hard_delete=${hardDelete}`, {
-    method: 'DELETE',
-  });
-}
-
-/**
- * Delete all documents
- */
-export async function deleteAllDocuments(hardDelete: boolean = false) {
-  return apiRequest(`/api/documents/all?hard_delete=${hardDelete}`, {
-    method: 'DELETE',
-  });
-}
-
-/**
- * Get recommendations for document
- */
-export async function getRecommendations(
-  documentId: string,
-  page: number = 1,
+  clientId?: string,
   persona?: string,
   job?: string,
-  includeCrossDocument: boolean = true
+  considerPrevious?: boolean
 ) {
-  const params = new URLSearchParams({
-    page: page.toString(),
-    include_cross_document: includeCrossDocument.toString(),
-  });
-  
-  if (persona) params.append('persona', persona);
-  if (job) params.append('job', job);
-  
-  return apiRequest(`/api/recommendations/${documentId}?${params.toString()}`);
+  const formData = new FormData();
+  files.forEach((file) => formData.append('files', file));
+  if (persona) formData.append('persona', persona);
+  if (job) formData.append('job', job);
+  if (considerPrevious !== undefined) {
+    formData.append('consider_previous', String(considerPrevious));
+  }
+
+  const params = getDevClientIdParam(clientId);
+  return uploadFile<T>(toEndpointWithParams('/upload/context_files', params), formData);
 }
 
-/**
- * Get insights for document
- */
+export async function deleteDocument(documentId: string, permanent = false) {
+  return apiRequest(`/api/documents/${encodeURIComponent(documentId)}?permanent=${permanent}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function deleteAllDocuments(documentIds: string[], permanent = false) {
+  await Promise.all(documentIds.map((documentId) => deleteDocument(documentId, permanent)));
+  return { success: true, count: documentIds.length };
+}
+
+export async function updateDocumentMetadata(
+  documentId: string,
+  metadata: Record<string, unknown>
+) {
+  return apiRequest(`/api/documents/${encodeURIComponent(documentId)}/update-metadata`, {
+    method: 'POST',
+    body: JSON.stringify(metadata),
+  });
+}
+
+export async function getRecommendations(
+  documentId: string,
+  page = 1,
+  persona?: string,
+  job?: string,
+  includeCrossDocument = true
+) {
+  const params = new URLSearchParams({
+    page: String(page),
+    include_cross_document: String(includeCrossDocument),
+  });
+
+  if (persona) params.append('persona', persona);
+  if (job) params.append('job', job);
+
+  return apiRequest(`/api/recommendations/${encodeURIComponent(documentId)}?${params}`);
+}
+
 export async function getInsights(
   documentId: string,
-  page: number = 1,
+  page = 1,
   persona?: string,
   job?: string
 ) {
-  const params = new URLSearchParams({
-    page: page.toString(),
-  });
-  
+  const params = new URLSearchParams({ page: String(page) });
+
   if (persona) params.append('persona', persona);
   if (job) params.append('job', job);
-  
-  return apiRequest(`/api/insights/${documentId}?${params.toString()}`);
+
+  return apiRequest(`/api/insights/${encodeURIComponent(documentId)}?${params}`);
 }
 
-/**
- * Send chat message
- */
 export async function sendChatMessage(
   message: string,
   documentId?: string,
@@ -275,16 +302,13 @@ export async function sendChatMessage(
   });
 }
 
-/**
- * Analyze text selection
- */
 export async function analyzeTextSelection(
   selectedText: string,
   documentId: string,
   page: number,
   persona?: string,
   job?: string,
-  includeCrossDocument: boolean = true
+  includeCrossDocument = true
 ) {
   return apiRequest('/api/text-selection-analysis', {
     method: 'POST',
@@ -299,9 +323,6 @@ export async function analyzeTextSelection(
   });
 }
 
-/**
- * Ask GPT about selected text
- */
 export async function askGPT(
   selectedText: string,
   context?: string,
@@ -319,39 +340,51 @@ export async function askGPT(
   });
 }
 
-/**
- * Generate audio for text
- */
-export async function generateAudio(
-  text: string,
-  voice: string = 'alloy',
-  speed: number = 1.0
+export async function askGeminiSelection(
+  documentId: string,
+  selectedText: string,
+  page: number,
+  contextChars = 500
 ) {
-  return apiRequest('/api/generate-audio', {
+  return apiRequest('/api/ask-gemini-selection', {
     method: 'POST',
     body: JSON.stringify({
-      text,
-      voice,
-      speed,
+      document_id: documentId,
+      selected_text: selectedText,
+      page,
+      context_chars: contextChars,
     }),
   });
 }
 
-/**
- * Generate podcast
- */
+export async function generateAudio(
+  text: string,
+  documentId?: string,
+  page = 1
+) {
+  return apiRequest('/api/generate-podcast', {
+    method: 'POST',
+    body: JSON.stringify({
+      selected_text: text,
+      document_id: documentId,
+      page,
+    }),
+  });
+}
+
 export async function generatePodcast(
-  content: string,
+  content: string | undefined,
   documentId: string,
-  page: number = 1,
+  page = 1,
   persona?: string,
   job?: string,
-  includeRelated: boolean = true
+  includeRelated = true
 ) {
   return apiRequest('/api/generate-podcast', {
     method: 'POST',
     body: JSON.stringify({
       content,
+      selected_text: content,
       document_id: documentId,
       page,
       persona,
@@ -361,37 +394,58 @@ export async function generatePodcast(
   });
 }
 
+export async function splitDocument(
+  documentId: string,
+  splits: Array<{ name: string; start_page: number; end_page: number }>
+) {
+  return apiRequest('/api/split-document', {
+    method: 'POST',
+    body: JSON.stringify({
+      document_id: documentId,
+      splits,
+    }),
+  });
+}
+
+export async function mergeDocuments(documentIds: string[], outputName: string) {
+  return apiRequest('/api/merge-documents', {
+    method: 'POST',
+    body: JSON.stringify({
+      document_ids: documentIds,
+      output_name: outputName,
+    }),
+  });
+}
+
 // =============================================================================
-// Public endpoints (no authentication required)
+// Public endpoints
 // =============================================================================
 
-/**
- * Make a public API request (no authentication)
- */
-export async function publicApiRequest<T = any>(
+export async function publicApiRequest<T = unknown>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
   try {
-    const response = await fetch(`${API_URL}${endpoint}`, {
+    const headers = new Headers(options.headers);
+    if (options.body && !isFormDataBody(options.body) && !headers.has('Content-Type')) {
+      headers.set('Content-Type', 'application/json');
+    }
+
+    const response = await fetch(resolveApiUrl(endpoint), {
       ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
+      headers,
     });
-    
+
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
+      const errorData = await parseErrorPayload(response);
       throw new ApiError(
-        errorData.detail || response.statusText,
+        errorMessageFromPayload(errorData, response.statusText),
         response.status,
         errorData
       );
     }
-    
-    return await response.json();
-    
+
+    return await response.json() as T;
   } catch (error) {
     if (error instanceof ApiError) {
       throw error;
@@ -401,16 +455,10 @@ export async function publicApiRequest<T = any>(
   }
 }
 
-/**
- * Health check (public)
- */
 export async function healthCheck() {
   return publicApiRequest('/health');
 }
 
-/**
- * Get config (public)
- */
 export async function getConfig() {
   return publicApiRequest('/config');
 }

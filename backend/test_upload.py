@@ -1,79 +1,84 @@
-import requests
+"""
+Manual upload smoke probe.
+
+Run with:
+    python backend/test_upload.py
+
+Requires Supabase service key and a running API on localhost:8080.
+Optional env:
+    TEST_EMAIL / TEST_PASSWORD
+    BASE_URL (default http://localhost:8080)
+"""
 import os
 import time
-from dotenv import load_dotenv
-from supabase import create_client
+from pathlib import Path
 
-# Load environment variables
-load_dotenv()
 
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
+def main():
+    import requests
+    from dotenv import load_dotenv
+    from supabase import create_client
 
-if not SUPABASE_URL or not SUPABASE_KEY:
-    print("❌ Missing Supabase credentials in .env")
-    exit(1)
+    load_dotenv(Path(__file__).parent.parent / ".env")
 
-# Initialize Supabase client
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+    supabase_url = os.getenv("SUPABASE_URL")
+    supabase_key = os.getenv("SUPABASE_SERVICE_KEY")
+    base_url = os.getenv("BASE_URL", "http://localhost:8080")
+    test_email = os.getenv("TEST_EMAIL")
+    test_password = os.getenv("TEST_PASSWORD")
 
-# User credentials
-email = "ysaichaaithu2005@gmail.com"
-password = "Sai@752005"
+    if not supabase_url or not supabase_key:
+        raise SystemExit("Missing SUPABASE_URL or SUPABASE_SERVICE_KEY in .env")
 
-user_id = None
+    supabase = create_client(supabase_url, supabase_key)
 
-try:
-    print("Fetching a valid user ID via Admin API...")
-    # Use admin API to list users (requires service role key)
-    users_response = supabase.auth.admin.list_users()
-    if isinstance(users_response, list) and len(users_response) > 0:
-        user_id = users_response[0].id
-        print(f"✅ Found valid User ID: {user_id}")
-    elif hasattr(users_response, 'users') and users_response.users:
-        user_id = users_response.users[0].id
-        print(f"✅ Found valid User ID: {user_id}")
+    token = None
+    if test_email and test_password:
+        session = supabase.auth.sign_in_with_password(
+            {"email": test_email, "password": test_password}
+        )
+        token = session.session.access_token
     else:
-        print("❌ No users found in Supabase auth.users")
-        exit(1)
-except Exception as e:
-    print(f"❌ Failed to fetch users: {e}")
-    exit(1)
+        users_response = supabase.auth.admin.list_users()
+        users = users_response if isinstance(users_response, list) else getattr(users_response, "users", [])
+        if not users:
+            raise SystemExit("No users in Supabase; set TEST_EMAIL and TEST_PASSWORD")
+        user_id = users[0].id
+        print(f"Using first admin user: {user_id}")
 
-# Create a dummy PDF
-pdf_content = b"%PDF-1.4\n%Test PDF Content"
-with open("test.pdf", "wb") as f:
-    f.write(pdf_content)
+    pdf_content = b"%PDF-1.4\n%Test PDF Content"
+    test_path = Path("test.pdf")
+    test_path.write_bytes(pdf_content)
 
-url = f"http://localhost:8000/upload/active_file?client_id={user_id}"
-files = {'file': ('test.pdf', open('test.pdf', 'rb'), 'application/pdf')}
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    url = f"{base_url}/upload/active_file"
 
-print(f"Sending request to {url}...")
-
-try:
-    # Retry logic in case server is still starting
-    max_retries = 5
-    for i in range(max_retries):
-        try:
-            response = requests.post(url, files=files)
-            print(f"Status Code: {response.status_code}")
-            print(f"Response: {response.text}")
-            
-            if response.status_code == 200 or response.status_code == 202:
-                print("✅ Upload successful!")
+    try:
+        print(f"POST {url} (authenticated)")
+        max_retries = 5
+        for index in range(max_retries):
+            try:
+                with test_path.open("rb") as file_handle:
+                    response = requests.post(
+                        url,
+                        files={"file": ("test.pdf", file_handle, "application/pdf")},
+                        headers=headers,
+                        timeout=60,
+                    )
+                print(f"Status: {response.status_code}")
+                print(response.text)
+                if response.status_code in (200, 202):
+                    print("Upload successful.")
+                    break
                 break
-            else:
-                print("❌ Upload failed!")
-                break
-        except requests.exceptions.ConnectionError:
-            print(f"Connection failed, retrying ({i+1}/{max_retries})...")
-            time.sleep(2)
-    else:
-        print("❌ Could not connect to server after retries.")
+            except requests.exceptions.ConnectionError:
+                print(f"Connection failed, retry {index + 1}/{max_retries}")
+                time.sleep(2)
+        else:
+            print("Could not connect to server.")
+    finally:
+        test_path.unlink(missing_ok=True)
 
-except Exception as e:
-    print(f"Error: {e}")
-finally:
-    files['file'][1].close()
-    if os.path.exists("test.pdf"):
-        os.remove("test.pdf")
+
+if __name__ == "__main__":
+    main()

@@ -1,6 +1,25 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useCallback, useEffect, useMemo, useState } from 'react';
 import { API_URL } from '../config';
-import { getAuthHeaders } from '../lib/api';
+import {
+  askGPT as askGPTApi,
+  deleteAllDocuments as deleteAllDocumentsApi,
+  deleteDocument as deleteDocumentApi,
+  getAllDocuments as getAllDocumentsApi,
+  getDocument as getDocumentApi,
+  getInsights as getInsightsApi,
+  getRecommendations as getRecommendationsApi,
+  updateDocumentMetadata,
+  uploadContextFiles,
+  uploadDocument as uploadDocumentApi,
+} from '../lib/api';
+
+type UnknownRecord = Record<string, unknown>;
+
+interface ClassificationOption {
+  persona: string;
+  job: string;
+  keywords: string[];
+}
 
 export interface PDFDocument {
   id: string;
@@ -11,6 +30,7 @@ export interface PDFDocument {
   url: string;
   thumbnail?: string;
   size: number;
+  metadata?: UnknownRecord;
   validation?: {
     isValid: boolean;
     issues: string[];
@@ -47,6 +67,19 @@ export interface Insight {
   relevance: number;
 }
 
+interface BulkUploadFileResult {
+  job_id?: string;
+  filename?: string;
+  file_url?: string;
+  status?: string;
+  is_duplicate?: boolean;
+}
+
+interface ActiveUploadResult {
+  job_id: string;
+  file_url?: string;
+}
+
 interface PDFContextType {
   documents: PDFDocument[];
   currentDocument: PDFDocument | null;
@@ -55,9 +88,10 @@ interface PDFContextType {
   insights: Insight[];
   isOnline: boolean;
   isLoadingDocuments: boolean;
-  uploadDocument: (file: File, client_id: string, persona?: string, job?: string) => Promise<string>;
-  uploadBulkDocuments: (files: File[], client_id: string, persona?: string, job?: string, considerPrevious?: boolean) => Promise<string[]>;
-  setCurrentDocument: (doc: PDFDocument) => void;
+  uploadDocument: (file: File, clientId: string, persona?: string, job?: string) => Promise<string>;
+  uploadBulkDocuments: (files: File[], clientId: string, persona?: string, job?: string, considerPrevious?: boolean) => Promise<string[]>;
+  setCurrentDocument: (doc: PDFDocument | null) => void;
+  loadDocument: (documentId: string) => Promise<PDFDocument | null>;
   getRelatedSections: (documentId: string, currentPage: number) => Promise<RelatedSection[]>;
   getInsights: (documentId: string, currentPage: number) => Promise<Insight[]>;
   askGPT: (selectedText: string, context: string) => Promise<string>;
@@ -67,18 +101,353 @@ interface PDFContextType {
   deleteDocument: (documentId: string) => Promise<void>;
   deleteAllDocuments: (permanent?: boolean) => Promise<void>;
   renameDocument: (documentId: string, newName: string) => Promise<void>;
-  classifyUserIntent: (userInput: string) => Promise<any>;
-  getPersonaJobSuggestions: (userInput: string, topK?: number) => Promise<any>;
+  classifyUserIntent: (userInput: string) => Promise<unknown>;
+  getPersonaJobSuggestions: (userInput: string, topK?: number) => Promise<unknown>;
 }
 
-const PDFContext = createContext<PDFContextType | undefined>(undefined);
+export const PDFContext = createContext<PDFContextType | undefined>(undefined);
 
-export const usePDF = () => {
-  const context = useContext(PDFContext);
-  if (!context) {
-    throw new Error('usePDF must be used within a PDFProvider');
+const isRecord = (value: unknown): value is UnknownRecord => (
+  typeof value === 'object' && value !== null
+);
+
+const asString = (value: unknown): string | undefined => (
+  typeof value === 'string' && value.trim().length > 0 ? value : undefined
+);
+
+const asNumber = (value: unknown, fallback = 0): number => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
   }
-  return context;
+  return fallback;
+};
+
+const asBoolean = (value: unknown, fallback = false): boolean => (
+  typeof value === 'boolean' ? value : fallback
+);
+
+const CLASSIFICATION_OPTIONS: ClassificationOption[] = [
+  {
+    persona: 'Undergraduate Chemistry Student',
+    job: 'Identify key concepts and mechanisms for exam preparation',
+    keywords: ['chemistry', 'exam', 'reaction', 'molecule', 'mechanism', 'organic', 'inorganic'],
+  },
+  {
+    persona: 'Graduate Research Student',
+    job: 'Extract research methodologies and findings',
+    keywords: ['research', 'paper', 'methodology', 'findings', 'literature', 'experiment', 'study'],
+  },
+  {
+    persona: 'Travel Planner',
+    job: 'Plan trip itineraries and budget allocation',
+    keywords: ['travel', 'trip', 'itinerary', 'hotel', 'flight', 'budget', 'destination'],
+  },
+  {
+    persona: 'HR Professional',
+    job: 'Review compliance requirements and procedures',
+    keywords: ['hr', 'employee', 'policy', 'compliance', 'hiring', 'benefits', 'procedure'],
+  },
+  {
+    persona: 'Legal Professional',
+    job: 'Review contract terms and legal obligations',
+    keywords: ['legal', 'contract', 'clause', 'agreement', 'law', 'obligation', 'liability'],
+  },
+  {
+    persona: 'Software Engineer',
+    job: 'Understand technical specifications and APIs',
+    keywords: ['software', 'api', 'code', 'technical', 'system', 'architecture', 'developer'],
+  },
+  {
+    persona: 'Financial Analyst',
+    job: 'Analyze financial data and trends',
+    keywords: ['finance', 'financial', 'revenue', 'cost', 'forecast', 'market', 'investment'],
+  },
+  {
+    persona: 'General Reader',
+    job: 'General understanding and learning',
+    keywords: [],
+  },
+];
+
+const classifyIntentLocally = (userInput: string) => {
+  const normalizedInput = userInput.toLowerCase();
+  const scoredOptions = CLASSIFICATION_OPTIONS
+    .map((option) => ({
+      option,
+      score: option.keywords.filter((keyword) => normalizedInput.includes(keyword)).length,
+    }))
+    .sort((a, b) => b.score - a.score);
+  const bestMatch = scoredOptions[0]?.score > 0
+    ? scoredOptions[0]
+    : scoredOptions.find((entry) => entry.option.persona === 'General Reader') || scoredOptions[0];
+  const confidence = bestMatch.score > 2 ? 0.86 : bestMatch.score > 0 ? 0.68 : 0.55;
+
+  return {
+    status: 'success',
+    classification: {
+      persona: {
+        name: bestMatch.option.persona,
+        confidence,
+        reasoning: 'Matched the request against the supported local persona/job profiles.',
+      },
+      job: {
+        name: bestMatch.option.job,
+        confidence,
+        reasoning: 'Selected the closest task profile for the described reading goal.',
+      },
+      combined_confidence: confidence,
+      suggestions: [
+        'Review and adjust the persona/job before uploading if the match feels off.',
+      ],
+      alternatives: {
+        personas: scoredOptions.slice(0, 3).map(({ option, score }) => ({
+          name: option.persona,
+          confidence: score > 0 ? Math.min(0.85, 0.5 + score * 0.12) : 0.45,
+        })),
+        jobs: scoredOptions.slice(0, 3).map(({ option, score }) => ({
+          name: option.job,
+          confidence: score > 0 ? Math.min(0.85, 0.5 + score * 0.12) : 0.45,
+        })),
+      },
+    },
+  };
+};
+
+const parseDate = (value: unknown, fallback = new Date()): Date => {
+  const text = typeof value === 'string' || typeof value === 'number' ? value : undefined;
+  if (text === undefined) return fallback;
+  const date = new Date(text);
+  return Number.isNaN(date.getTime()) ? fallback : date;
+};
+
+const parseOptionalDate = (value: unknown): Date | null => {
+  if (value === null || value === undefined || value === '') return null;
+  const date = parseDate(value, new Date(Number.NaN));
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const readMetadata = (value: unknown): UnknownRecord | undefined => (
+  isRecord(value) ? value : undefined
+);
+
+const readStringArray = (value: unknown): string[] => (
+  Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : []
+);
+
+const getDisplayName = (record: UnknownRecord): string => {
+  const metadata = readMetadata(record.metadata);
+  return (
+    asString(metadata?.display_name) ||
+    asString(record.original_name) ||
+    asString(record.name) ||
+    asString(record.filename) ||
+    'Unknown Document'
+  );
+};
+
+const normalizeBackendUrl = (fileUrl: unknown, filename: unknown, fallbackUrl = '') => {
+  const url = asString(fileUrl);
+  if (url) {
+    if (/^(https?:|blob:)/i.test(url)) return url;
+    return `${API_URL}${url.startsWith('/') ? url : `/${url}`}`;
+  }
+
+  const fileName = asString(filename);
+  if (fileName) {
+    return `${API_URL}/api/files/${encodeURIComponent(fileName)}`;
+  }
+
+  return fallbackUrl;
+};
+
+const normalizeValidation = (value: unknown): PDFDocument['validation'] | undefined => {
+  if (!isRecord(value)) return undefined;
+  const severity = asString(value.severity);
+
+  return {
+    isValid: asBoolean(value.isValid, asBoolean(value.is_valid, true)),
+    issues: readStringArray(value.issues),
+    warnings: readStringArray(value.warnings),
+    summary: asString(value.summary) || 'Unknown status',
+    severity: severity === 'warning' || severity === 'error' ? severity : 'success',
+  };
+};
+
+const formatBackendDocument = (record: UnknownRecord, fallbackUrl = ''): PDFDocument | null => {
+  const id = asString(record.id);
+  if (!id) return null;
+
+  const uploadDate = parseDate(record.upload_date ?? record.uploadDate);
+  const metadata = readMetadata(record.metadata);
+
+  return {
+    id,
+    name: getDisplayName(record),
+    uploadDate,
+    lastOpened: parseOptionalDate(record.last_opened ?? record.last_accessed ?? record.lastOpened),
+    lastUploaded: parseOptionalDate(record.last_uploaded ?? record.lastUploaded) || uploadDate,
+    url: normalizeBackendUrl(record.url, record.filename, fallbackUrl),
+    thumbnail: asString(record.thumbnail),
+    size: asNumber(record.file_size ?? record.size),
+    metadata,
+    validation: normalizeValidation(record.validation_result),
+  };
+};
+
+const mergeDocumentsById = (existingDocuments: PDFDocument[], incomingDocuments: PDFDocument[]) => {
+  const merged = [...existingDocuments];
+
+  incomingDocuments.forEach((incomingDocument) => {
+    const index = merged.findIndex((document) => document.id === incomingDocument.id);
+    if (index >= 0) {
+      merged[index] = { ...merged[index], ...incomingDocument };
+    } else {
+      merged.push(incomingDocument);
+    }
+  });
+
+  return merged;
+};
+
+const normalizeDocumentsResponse = (data: unknown): PDFDocument[] => {
+  if (!isRecord(data) || !Array.isArray(data.documents)) return [];
+
+  return data.documents
+    .filter(isRecord)
+    .map((record) => formatBackendDocument(record))
+    .filter((document): document is PDFDocument => Boolean(document));
+};
+
+const normalizeDocumentResponse = (data: unknown): PDFDocument | null => {
+  if (!isRecord(data)) return null;
+  const record = isRecord(data.document) ? data.document : data;
+  return formatBackendDocument(record);
+};
+
+const normalizeRelatedSection = (record: UnknownRecord, fallbackDocumentId: string): RelatedSection | null => {
+  const documentId = asString(record.documentId ?? record.document_id) || fallbackDocumentId;
+  const page = asNumber(record.page ?? record.page_number, 1);
+  const id = asString(record.id) || `${documentId}-${page}-${asString(record.title) || 'section'}`;
+  const enhancedRelevance = record.enhanced_relevance === undefined
+    ? undefined
+    : asNumber(record.enhanced_relevance);
+
+  return {
+    id,
+    title: asString(record.title) || asString(record.section_title) || 'Related section',
+    snippet: asString(record.snippet) || asString(record.text) || '',
+    page,
+    relevance: asNumber(record.relevance ?? record.relevance_score ?? record.similarity, 0),
+    documentId,
+    documentName: asString(record.documentName ?? record.document_name) || 'Document',
+    enhanced_relevance: enhancedRelevance,
+    intelligence_explanation: asString(record.intelligence_explanation),
+    file_path: asString(record.file_path),
+  };
+};
+
+const normalizeSections = (value: unknown, fallbackDocumentId: string): RelatedSection[] => (
+  Array.isArray(value)
+    ? value
+      .filter(isRecord)
+      .map((record) => normalizeRelatedSection(record, fallbackDocumentId))
+      .filter((section): section is RelatedSection => Boolean(section))
+    : []
+);
+
+const normalizeInsights = (value: unknown): Insight[] => {
+  if (!Array.isArray(value)) return [];
+
+  const allowedTypes = new Set<Insight['type']>([
+    'key-insight',
+    'did-you-know',
+    'counterpoint',
+    'connection',
+  ]);
+
+  return value.filter(isRecord).map((record, index) => {
+    const type = asString(record.type);
+    const normalizedType = allowedTypes.has(type as Insight['type'])
+      ? type as Insight['type']
+      : 'key-insight';
+
+    return {
+      id: asString(record.id) || `insight-${index}`,
+      type: normalizedType,
+      title: asString(record.title) || 'Insight',
+      content: asString(record.content) || asString(record.text) || '',
+      relevance: asNumber(record.relevance, 0),
+    };
+  });
+};
+
+const sortDocuments = (documents: PDFDocument[], sortBy: string, sortOrder: string) => {
+  const direction = sortOrder === 'asc' ? 1 : -1;
+  const getTime = (date: Date | null | undefined) => date?.getTime() || 0;
+
+  return [...documents].sort((a, b) => {
+    switch (sortBy) {
+      case 'name':
+      case 'nameAZ':
+        return direction * a.name.localeCompare(b.name);
+      case 'size':
+        return direction * (a.size - b.size);
+      case 'last_opened':
+      case 'recentlyOpened':
+        return direction * (getTime(a.lastOpened) - getTime(b.lastOpened));
+      case 'last_uploaded':
+      case 'recentlyUploaded':
+      case 'upload_date':
+      default:
+        return direction * (getTime(a.lastUploaded || a.uploadDate) - getTime(b.lastUploaded || b.uploadDate));
+    }
+  });
+};
+
+const parseActiveUploadResult = (data: unknown): ActiveUploadResult => {
+  if (!isRecord(data) || typeof data.job_id !== 'string' || data.job_id.trim().length === 0) {
+    throw new Error('Upload response did not include a valid document id');
+  }
+
+  return {
+    job_id: data.job_id,
+    file_url: asString(data.file_url),
+  };
+};
+
+const normalizeBulkUploadResults = (data: unknown, files: File[]): BulkUploadFileResult[] => {
+  if (!isRecord(data)) {
+    throw new Error('Bulk upload response was not a valid object');
+  }
+
+  if (Array.isArray(data.files)) {
+    return data.files
+      .filter(isRecord)
+      .map((result) => ({
+        job_id: asString(result.job_id),
+        filename: asString(result.filename),
+        file_url: asString(result.file_url),
+        status: asString(result.status),
+        is_duplicate: typeof result.is_duplicate === 'boolean' ? result.is_duplicate : undefined,
+      }));
+  }
+
+  const legacyJobIds = data.job_ids;
+  if (Array.isArray(legacyJobIds)) {
+    const legacyFileUrls = Array.isArray(data.file_urls) ? data.file_urls : [];
+
+    return files.map((file, index) => ({
+      job_id: asString(legacyJobIds[index]),
+      filename: file.name,
+      file_url: asString(legacyFileUrls[index]),
+      status: 'queued',
+      is_duplicate: false,
+    }));
+  }
+
+  throw new Error('Bulk upload response did not include uploaded file records');
 };
 
 export const PDFProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -90,10 +459,18 @@ export const PDFProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isLoadingDocuments, setIsLoadingDocuments] = useState(false);
 
-  const getClientId = () => {
-    const stored = localStorage.getItem('currentClientId');
-    return stored && stored.trim().length > 0 ? stored : undefined;
-  };
+  const persistDocuments = useCallback((nextDocuments: PDFDocument[]) => {
+    setDocuments(nextDocuments);
+    localStorage.setItem('pdf-documents', JSON.stringify(nextDocuments));
+  }, []);
+
+  const mergeAndPersistDocuments = useCallback((incomingDocuments: PDFDocument[]) => {
+    setDocuments((previousDocuments) => {
+      const nextDocuments = mergeDocumentsById(previousDocuments, incomingDocuments);
+      localStorage.setItem('pdf-documents', JSON.stringify(nextDocuments));
+      return nextDocuments;
+    });
+  }, []);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -102,10 +479,21 @@ export const PDFProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    // Load stored documents
     const stored = localStorage.getItem('pdf-documents');
     if (stored) {
-      setDocuments(JSON.parse(stored));
+      try {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          const restored = parsed
+            .filter(isRecord)
+            .map((record) => formatBackendDocument(record, asString(record.url) || ''))
+            .filter((document): document is PDFDocument => Boolean(document));
+          setDocuments(restored);
+        }
+      } catch (error) {
+        console.warn('Failed to restore cached PDF documents:', error);
+        localStorage.removeItem('pdf-documents');
+      }
     }
 
     return () => {
@@ -114,853 +502,266 @@ export const PDFProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, []);
 
-  const BACKEND_URL = API_URL;
+  const uploadDocument = useCallback(async (file: File, clientId: string, persona?: string, job?: string): Promise<string> => {
+    const data = await uploadDocumentApi(file, clientId, persona, job);
+    const uploadResult = parseActiveUploadResult(data);
 
-  const uploadDocument = async (file: File, client_id: string, persona?: string, job?: string): Promise<string> => {
+    const document: PDFDocument = {
+      id: uploadResult.job_id,
+      name: file.name,
+      uploadDate: new Date(),
+      lastUploaded: new Date(),
+      url: normalizeBackendUrl(uploadResult.file_url, undefined, URL.createObjectURL(file)),
+      size: file.size,
+    };
+
+    mergeAndPersistDocuments([document]);
+    return uploadResult.job_id;
+  }, [mergeAndPersistDocuments]);
+
+  const uploadBulkDocuments = useCallback(async (
+    files: File[],
+    clientId: string,
+    persona?: string,
+    job?: string,
+    considerPrevious?: boolean
+  ): Promise<string[]> => {
+    const data = await uploadContextFiles(files, clientId, persona, job, considerPrevious);
+    const fileResults = normalizeBulkUploadResults(data, files);
+
+    const newDocuments: PDFDocument[] = fileResults
+      .map((result, index) => {
+        if (!result.job_id) return null;
+        const sourceFile = files[index];
+        const fallbackName = sourceFile?.name || result.filename || 'Document';
+        const fallbackSize = sourceFile?.size || 0;
+
+        return {
+          id: result.job_id,
+          name: result.filename || fallbackName,
+          uploadDate: new Date(),
+          lastUploaded: new Date(),
+          url: normalizeBackendUrl(result.file_url, undefined, sourceFile ? URL.createObjectURL(sourceFile) : ''),
+          size: fallbackSize,
+        };
+      })
+      .filter((document): document is PDFDocument => Boolean(document));
+
+    mergeAndPersistDocuments(newDocuments);
+
+    return fileResults
+      .map((result) => result.job_id)
+      .filter((jobId): jobId is string => Boolean(jobId));
+  }, [mergeAndPersistDocuments]);
+
+  const updateDocuments = useCallback((newDocs: PDFDocument[]) => {
+    persistDocuments(newDocs);
+  }, [persistDocuments]);
+
+  const fetchAllDocuments = useCallback(async (): Promise<void> => {
+    setIsLoadingDocuments(true);
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-      if (persona) formData.append('persona', persona);
-      if (job) formData.append('job', job);
-
-      let headers = {};
-      try {
-        const authHeaders = await getAuthHeaders();
-        headers = { ...authHeaders };
-      } catch (e) {
-        console.warn('Not authenticated, uploading without auth headers');
-      }
-
-      const response = await fetch(`${BACKEND_URL}/upload/active_file?client_id=${client_id}`, {
-        method: 'POST',
-        headers: headers,
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Upload error:', response.status, errorText);
-        throw new Error(`Upload failed: ${response.statusText}`);
-      }
-      const data = await response.json();
-      console.log('Upload success:', data);
-
-      const document: PDFDocument = {
-        id: data.job_id,
-        name: file.name,
-        uploadDate: new Date(),
-        url: data.file_url ? `${BACKEND_URL}${data.file_url}` : URL.createObjectURL(file),
-        size: file.size
-      };
-
-      const newDocuments = [...documents, document];
-      setDocuments(newDocuments);
-      localStorage.setItem('pdf-documents', JSON.stringify(newDocuments));
-      console.log('Document added to state:', document);
-
-      return data.job_id;
+      const data = await getAllDocumentsApi();
+      persistDocuments(normalizeDocumentsResponse(data));
+      localStorage.removeItem('documents');
     } catch (error) {
-      console.error('Upload failed:', error);
-      throw error;
+      console.error('Error fetching documents from API:', error);
+    } finally {
+      setIsLoadingDocuments(false);
     }
-  };
+  }, [persistDocuments]);
 
-  const uploadBulkDocuments = async (files: File[], client_id: string, persona?: string, job?: string, considerPrevious?: boolean): Promise<string[]> => {
+  const fetchSortedDocuments = useCallback(async (sortBy = 'upload_date', sortOrder = 'desc'): Promise<void> => {
+    setIsLoadingDocuments(true);
     try {
-      const formData = new FormData();
-      files.forEach(file => formData.append('files', file));
-      if (persona) formData.append('persona', persona);
-      if (job) formData.append('job', job);
-      if (considerPrevious !== undefined) formData.append('consider_previous', considerPrevious.toString());
-
-      let headers = {};
-      try {
-        const authHeaders = await getAuthHeaders();
-        headers = { ...authHeaders };
-      } catch (e) {
-        console.warn('Not authenticated, uploading without auth headers');
-      }
-
-      const response = await fetch(`${BACKEND_URL}/upload/context_files?client_id=${client_id}`, {
-        method: 'POST',
-        headers: headers,
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Bulk upload error:', response.status, errorText);
-        throw new Error(`Bulk upload failed: ${response.statusText}`);
-      }
-      const data = await response.json();
-      console.log('Bulk upload success:', data);
-
-      const newDocs: PDFDocument[] = files.map((file, index) => ({
-        id: data.job_ids[index],
-        name: file.name,
-        uploadDate: new Date(),
-        url: data.file_urls && data.file_urls[index] ? `${BACKEND_URL}${data.file_urls[index]}` : URL.createObjectURL(file),
-        size: file.size
-      }));
-
-      const updatedDocuments = [...documents, ...newDocs];
-      setDocuments(updatedDocuments);
-      localStorage.setItem('pdf-documents', JSON.stringify(updatedDocuments));
-      console.log('Bulk documents added to state:', newDocs);
-
-      return data.job_ids;
+      const data = await getAllDocumentsApi();
+      const formattedDocuments = normalizeDocumentsResponse(data);
+      persistDocuments(sortDocuments(formattedDocuments, sortBy, sortOrder));
+      localStorage.removeItem('documents');
     } catch (error) {
-      console.error('Bulk upload failed:', error);
-      throw error;
+      console.error('Error fetching sorted documents:', error);
+    } finally {
+      setIsLoadingDocuments(false);
     }
-  };
+  }, [persistDocuments]);
 
-  const updateDocuments = (newDocs: PDFDocument[]) => {
-    setDocuments(newDocs);
-    localStorage.setItem('pdf-documents', JSON.stringify(newDocs));
-  };
-
-  const getRelatedSections = async (documentId: string, currentPage: number): Promise<RelatedSection[]> => {
+  const loadDocument = useCallback(async (documentId: string): Promise<PDFDocument | null> => {
     try {
-      // Get persona and job from localStorage for intelligent recommendations
+      const data = await getDocumentApi(documentId);
+      const document = normalizeDocumentResponse(data);
+      if (!document) {
+        return null;
+      }
+
+      mergeAndPersistDocuments([document]);
+      setCurrentDocument(document);
+      return document;
+    } catch (error) {
+      console.error('Error loading document:', error);
+      return null;
+    }
+  }, [mergeAndPersistDocuments]);
+
+  const getRelatedSections = useCallback(async (documentId: string, currentPage: number): Promise<RelatedSection[]> => {
+    try {
       const persona = localStorage.getItem('lastPersona') || 'Student';
       const job = localStorage.getItem('lastJob') || 'Learning and Research';
-
-      const queryParams = new URLSearchParams({
-        page: currentPage.toString(),
-        include_cross_document: 'true'
-      });
-
-      // Always include persona and job (with defaults)
-      queryParams.append('persona', persona);
-      queryParams.append('job', job);
-
-      let headers = {};
-      try {
-        const authHeaders = await getAuthHeaders();
-        headers = { ...authHeaders };
-      } catch (e) {
-        console.warn('Not authenticated, fetching recommendations without auth headers');
-      }
-
-      const response = await fetch(`${BACKEND_URL}/api/recommendations/${documentId}?${queryParams}`, {
-        headers: headers
-      });
-      if (!response.ok) {
-        throw new Error(`Failed to fetch recommendations: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      const sections = data.recommendations || [];
-      const crossDocSections = data.cross_document_sections || [];
-
-      console.log('📊 Related sections found:', {
-        sameDocument: sections.length,
-        crossDocument: crossDocSections.length,
-        intelligenceEnabled: data.intelligence_enabled
-      });
+      const data = await getRecommendationsApi(documentId, currentPage, persona, job, true);
+      const response = isRecord(data) ? data : {};
+      const sections = normalizeSections(response.recommendations, documentId);
+      const crossDocSections = normalizeSections(response.cross_document_sections, documentId);
 
       setRelatedSections(sections);
       setCrossDocumentSections(crossDocSections);
-
       return sections;
     } catch (error) {
       console.error('Error fetching related sections:', error);
-
-      // Fallback to mock data if API fails
-      const mockSections: RelatedSection[] = [
-        {
-          id: '1',
-          title: 'Introduction to Machine Learning',
-          snippet: 'This section introduces fundamental concepts of machine learning algorithms and their applications in modern data science.',
-          page: 5,
-          relevance: 0.95,
-          documentId: 'doc-1',
-          documentName: 'AI Fundamentals.pdf'
-        },
-        {
-          id: '2',
-          title: 'Neural Network Architecture',
-          snippet: 'Detailed explanation of neural network structures and how they process information through interconnected nodes.',
-          page: 12,
-          relevance: 0.87,
-          documentId: 'doc-2',
-          documentName: 'Deep Learning Guide.pdf'
-        },
-        {
-          id: '3',
-          title: 'Data Preprocessing Techniques',
-          snippet: 'Essential methods for cleaning and preparing data before feeding it into machine learning models.',
-          page: 3,
-          relevance: 0.82,
-          documentId: documentId,
-          documentName: currentDocument?.name || 'Current Document'
-        }
-      ];
-
-      setRelatedSections(mockSections);
-      return mockSections;
+      setRelatedSections([]);
+      setCrossDocumentSections([]);
+      return [];
     }
-  };
+  }, []);
 
-  const getInsights = async (documentId: string, currentPage: number): Promise<Insight[]> => {
+  const getInsights = useCallback(async (documentId: string, currentPage: number): Promise<Insight[]> => {
     if (!isOnline) {
       return [];
     }
 
     try {
-      // For individual document insights, don't use persona/job - use comprehensive analysis
-      const queryParams = new URLSearchParams({
-        page: currentPage.toString()
-      });
+      const data = await getInsightsApi(documentId, currentPage);
+      const response = isRecord(data) ? data : {};
+      const normalizedInsights = normalizeInsights(response.insights);
 
-      console.log('🧠 Fetching comprehensive AI insights for document:', documentId, 'page:', currentPage);
-
-      let headers = {};
-      try {
-        const authHeaders = await getAuthHeaders();
-        headers = { ...authHeaders };
-      } catch (e) {
-        console.warn('Not authenticated, fetching insights without auth headers');
-      }
-
-      const response = await fetch(`${BACKEND_URL}/api/insights/${documentId}?${queryParams}`, {
-        headers: headers
-      });
-      if (!response.ok) {
-        throw new Error(`Failed to fetch insights: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      const insights = data.insights || [];
-
-      console.log('🧠 Received insights:', insights.length, 'comprehensive insights');
-
-      setInsights(insights);
-      return insights;
+      setInsights(normalizedInsights);
+      return normalizedInsights;
     } catch (error) {
       console.error('Error fetching insights:', error);
-
-      // Fallback to mock data if API fails
-      const mockInsights: Insight[] = [
-        {
-          id: '1',
-          type: 'key-insight',
-          title: 'Key Insight',
-          content: 'Machine learning models require substantial amounts of quality data to achieve optimal performance and generalization.',
-          relevance: 0.9
-        },
-        {
-          id: '2',
-          type: 'did-you-know',
-          title: 'Did You Know?',
-          content: 'The term "artificial intelligence" was first coined by John McCarthy in 1956 during the Dartmouth Conference.',
-          relevance: 0.85
-        },
-        {
-          id: '3',
-          type: 'counterpoint',
-          title: 'Counterpoint',
-          content: 'While deep learning is powerful, traditional machine learning methods often outperform it on smaller datasets.',
-          relevance: 0.78
-        }
-      ];
-
-      setInsights(mockInsights);
-      return mockInsights;
+      setInsights([]);
+      return [];
     }
-  };
+  }, [isOnline]);
 
-  const askGPT = async (selectedText: string, context: string): Promise<string> => {
+  const askGPT = useCallback(async (selectedText: string, context: string): Promise<string> => {
     if (!isOnline) {
       throw new Error('Internet connection required for GPT insights');
     }
 
     try {
-      let headers: HeadersInit = {
-        'Content-Type': 'application/json',
-      };
-      try {
-        const authHeaders = await getAuthHeaders();
-        headers = { ...headers, ...authHeaders };
-      } catch (e) {
-        console.warn('Not authenticated, asking GPT without auth headers');
-      }
-
-      const response = await fetch(`${BACKEND_URL}/api/ask-gpt`, {
-        method: 'POST',
-        headers: headers,
-        body: JSON.stringify({
-          selected_text: selectedText,
-          context: context
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to get GPT response: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      return data.response || 'No response available';
+      const data = await askGPTApi(selectedText, context);
+      const response = isRecord(data) ? data : {};
+      return asString(response.response) || 'No response available';
     } catch (error) {
       console.error('Error asking GPT:', error);
-
-      // Fallback response
-      return `This text discusses ${selectedText.slice(0, 50)}... which is a fundamental concept in the field. It relates to the broader context of the document by providing essential background information.`;
+      throw new Error('Unable to get GPT response right now');
     }
-  };
+  }, [isOnline]);
 
-  // Fetch sorted documents from backend
-  const fetchSortedDocuments = async (sortBy: string = 'upload_date', sortOrder: string = 'desc'): Promise<void> => {
-    try {
-      setIsLoadingDocuments(true);
-      console.log(`📚 Fetching sorted documents: ${sortBy} ${sortOrder}`);
+  const deleteDocument = useCallback(async (documentId: string): Promise<void> => {
+    await deleteDocumentApi(documentId, false);
 
-      const clientId = getClientId();
-      if (!clientId) {
-        console.warn('📚 No client_id found; falling back to unsorted fetch.');
-        await fetchAllDocuments();
-        return;
-      }
+    setDocuments((previousDocuments) => {
+      const nextDocuments = previousDocuments.filter((document) => document.id !== documentId);
+      localStorage.setItem('pdf-documents', JSON.stringify(nextDocuments));
+      return nextDocuments;
+    });
 
-      let headers = {};
-      try {
-        const authHeaders = await getAuthHeaders();
-        headers = { ...authHeaders };
-      } catch (e) {
-        console.warn('Not authenticated, fetching sorted documents without auth headers');
-      }
+    setCurrentDocument((previousDocument) => (
+      previousDocument?.id === documentId ? null : previousDocument
+    ));
+  }, []);
 
-      const response = await fetch(
-        `${BACKEND_URL}/api/documents/sorted/${sortBy}?sort_order=${sortOrder}&client_id=${encodeURIComponent(clientId)}`,
-        { headers: headers }
-      );
+  const deleteAllDocuments = useCallback(async (permanent = false): Promise<void> => {
+    const documentIds = documents.map((document) => document.id);
+    await deleteAllDocumentsApi(documentIds, permanent);
+    persistDocuments([]);
+    setCurrentDocument(null);
+    localStorage.removeItem('documents');
+  }, [documents, persistDocuments]);
 
-      if (response.ok) {
-        const data = await response.json();
-        console.log('📚 Sorted API Response:', data);
-
-        if (data.documents && Array.isArray(data.documents)) {
-          const formattedDocs: PDFDocument[] = data.documents.map((doc: any) => {
-            // Same formatting logic as fetchAllDocuments
-            let uploadDate: Date;
-            let lastOpened: Date | null = null;
-            let lastUploaded: Date | null = null;
-
-            try {
-              uploadDate = new Date(doc.upload_date || doc.uploadDate);
-              if (isNaN(uploadDate.getTime())) uploadDate = new Date();
-            } catch {
-              uploadDate = new Date();
-            }
-
-            try {
-              if (doc.last_opened || doc.last_accessed || doc.lastOpened) {
-                lastOpened = new Date(doc.last_opened || doc.last_accessed || doc.lastOpened);
-                if (isNaN(lastOpened.getTime())) lastOpened = null;
-              }
-            } catch {
-              lastOpened = null;
-            }
-
-            try {
-              if (doc.last_uploaded) {
-                lastUploaded = new Date(doc.last_uploaded);
-                if (isNaN(lastUploaded.getTime())) lastUploaded = null;
-              }
-            } catch {
-              lastUploaded = null;
-            }
-
-            return {
-              id: doc.id,
-              name: doc.original_name || doc.name || doc.filename || 'Unknown Document',
-              uploadDate,
-              lastOpened,
-              lastUploaded: lastUploaded || uploadDate,
-              url: doc.url || `${BACKEND_URL}/api/files/${doc.filename}`,
-              thumbnail: doc.thumbnail,
-              size: doc.file_size || doc.size || 0,
-              validation: doc.validation_result ? {
-                isValid: doc.validation_result.isValid || doc.validation_result.is_valid,
-                issues: doc.validation_result.issues || [],
-                warnings: doc.validation_result.warnings || [],
-                summary: doc.validation_result.summary || 'Unknown status',
-                severity: doc.validation_result.severity || 'success'
-              } : undefined
-            };
-          });
-
-          setDocuments(formattedDocs);
-          console.log(`✅ Sorted documents loaded: ${formattedDocs.length} (${sortBy} ${sortOrder})`);
-          localStorage.removeItem('documents');
-          setIsLoadingDocuments(false);
-          return;
-        }
-      }
-    } catch (error) {
-      console.error('❌ Error fetching sorted documents:', error);
-      // Fall back to regular fetch
-      await fetchAllDocuments();
-    } finally {
-      setIsLoadingDocuments(false);
+  const renameDocument = useCallback(async (documentId: string, newName: string): Promise<void> => {
+    const trimmedName = newName.trim();
+    if (!trimmedName) {
+      throw new Error('Document name cannot be empty');
     }
-  };
 
-  // Fetch all documents from database
-  const fetchAllDocuments = async (): Promise<void> => {
-    try {
-      setIsLoadingDocuments(true);
-      console.log('📚 Fetching all documents from database...');
-      console.log('📚 Backend URL:', BACKEND_URL);
-      console.log('📚 Full URL:', `${BACKEND_URL}/api/documents`);
-
-      const clientId = getClientId();
-      if (!clientId) {
-        console.warn('📚 No client_id found; skipping remote document fetch.');
-        setIsLoadingDocuments(false);
-        return;
-      }
-
-      let headers = {};
-      try {
-        const authHeaders = await getAuthHeaders();
-        headers = { ...authHeaders };
-      } catch (e) {
-        console.warn('Not authenticated, fetching documents without auth headers');
-      }
-
-      const response = await fetch(`${BACKEND_URL}/api/documents?client_id=${encodeURIComponent(clientId)}`, {
-        headers: headers
-      });
-      console.log('📚 Response status:', response.status);
-      console.log('📚 Response headers:', Object.fromEntries(response.headers.entries()));
-
-      // Check if the response is HTML (404 page) instead of JSON
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        console.log('📚 Documents API endpoint not available - Content-Type:', contentType);
-        console.log('📚 Response text:', await response.text());
-        setIsLoadingDocuments(false);
-        return;
-      }
-
-      if (!response.ok) {
-        console.error(`❌ API request failed: ${response.status} ${response.statusText}`);
-        const errorText = await response.text();
-        console.error(`❌ Error response: ${errorText}`);
-        throw new Error(`Failed to fetch documents: ${response.status}`);
-      }
-
-      const data = await response.json();
-      console.log('📚 Raw API Response:', data);
-      console.log('📚 Response type:', typeof data);
-      console.log('📚 Response keys:', Object.keys(data));
-      console.log('📚 Documents array:', data.documents);
-      console.log('📚 Documents count from API:', data.count);
-      console.log('📚 Total count from API:', data.total_count);
-      console.log('📚 Stats from API:', data.stats);
-
-      if (data.documents && Array.isArray(data.documents)) {
-        const formattedDocs: PDFDocument[] = data.documents.map((doc: any) => {
-          // Safe date parsing
-          let uploadDate: Date;
-          let lastOpened: Date | null = null;
-
-          try {
-            // Handle both ISO string and timestamp formats
-            const dateStr = doc.upload_date || doc.uploadDate;
-            uploadDate = new Date(dateStr);
-            if (isNaN(uploadDate.getTime())) {
-              uploadDate = new Date();
-            }
-          } catch {
-            uploadDate = new Date();
-          }
-
-          try {
-            if (doc.last_opened || doc.last_accessed || doc.lastOpened) {
-              lastOpened = new Date(doc.last_opened || doc.last_accessed || doc.lastOpened);
-              if (isNaN(lastOpened.getTime())) {
-                lastOpened = null;
-              }
-            }
-          } catch {
-            lastOpened = null;
-          }
-
-          // Parse last uploaded time
-          let lastUploaded: Date | null = null;
-          try {
-            if (doc.last_uploaded) {
-              lastUploaded = new Date(doc.last_uploaded);
-              if (isNaN(lastUploaded.getTime())) {
-                lastUploaded = null;
-              }
-            }
-          } catch {
-            lastUploaded = null;
-          }
-
-          return {
-            id: doc.id,
-            name: doc.original_name || doc.name || doc.filename || 'Unknown Document',
-            uploadDate,
-            lastOpened,
-            lastUploaded: lastUploaded || uploadDate, // Fallback to upload date
-            url: doc.url || `${BACKEND_URL}/api/files/${doc.filename}`,
-            thumbnail: doc.thumbnail,
-            size: doc.file_size || doc.size || 0,
-            validation: doc.validation_result ? {
-              isValid: doc.validation_result.isValid || doc.validation_result.is_valid,
-              issues: doc.validation_result.issues || [],
-              warnings: doc.validation_result.warnings || [],
-              summary: doc.validation_result.summary || 'Unknown status',
-              severity: doc.validation_result.severity || 'success'
-            } : undefined
-          };
-        });
-
-        setDocuments(formattedDocs);
-        console.log('✅ Documents loaded from database:', formattedDocs.length);
-        console.log('📊 Database stats:', data.stats);
-
-        // Clear localStorage since we're now using database
-        localStorage.removeItem('documents');
-      } else {
-        console.log('📚 No documents found in database');
-        setDocuments([]);
-      }
-    } catch (error) {
-      console.error('❌ Error fetching documents from main API:', error);
-
-      // Try emergency API as fallback
-      try {
-        console.log('🚨 Trying emergency API fallback...');
-        const emergencyResponse = await fetch(`${BACKEND_URL}/emergency/documents`);
-
-        if (emergencyResponse.ok) {
-          const emergencyData = await emergencyResponse.json();
-          console.log('🚨 Emergency API Response:', emergencyData);
-
-          if (emergencyData.documents && Array.isArray(emergencyData.documents)) {
-            const formattedDocs: PDFDocument[] = emergencyData.documents.map((doc: any) => {
-              let uploadDate: Date;
-              try {
-                uploadDate = new Date(doc.upload_date);
-                if (isNaN(uploadDate.getTime())) uploadDate = new Date();
-              } catch {
-                uploadDate = new Date();
-              }
-
-              return {
-                id: doc.id,
-                name: doc.original_name || doc.filename || 'Unknown Document',
-                uploadDate,
-                lastOpened: null,
-                url: doc.url || `${BACKEND_URL}/api/files/${doc.filename}`,
-                thumbnail: doc.thumbnail,
-                size: doc.file_size || 0
-              };
-            });
-
-            setDocuments(formattedDocs);
-            console.log('✅ Documents loaded from emergency API:', formattedDocs.length);
-            setIsLoadingDocuments(false);
-            return;
-          }
-        }
-      } catch (emergencyError) {
-        console.error('❌ Emergency API also failed:', emergencyError);
-      }
-
-      console.log('📚 Falling back to local storage documents');
-      // Don't clear existing documents on error, just log it
-    } finally {
-      setIsLoadingDocuments(false);
+    const existingDocument = documents.find((document) => document.id === documentId);
+    if (!existingDocument) {
+      throw new Error('Document not found');
     }
-  };
 
-  // Delete a document
-  const deleteDocument = async (documentId: string): Promise<void> => {
+    const metadata = {
+      ...(existingDocument.metadata || {}),
+      display_name: trimmedName,
+    };
+
+    const optimisticDocument = { ...existingDocument, name: trimmedName, metadata };
+    mergeAndPersistDocuments([optimisticDocument]);
+
     try {
-      console.log('🗑️ Deleting document:', documentId);
-
-      try {
-        const clientId = getClientId();
-        const url = clientId
-          ? `${BACKEND_URL}/api/documents/${documentId}?client_id=${encodeURIComponent(clientId)}`
-          : `${BACKEND_URL}/api/documents/${documentId}`;
-
-        let headers = {};
-        try {
-          const authHeaders = await getAuthHeaders();
-          headers = { ...authHeaders };
-        } catch (e) {
-          console.warn('Not authenticated, deleting without auth headers');
-        }
-
-        const response = await fetch(url, {
-          method: 'DELETE',
-          headers: headers
-        });
-
-        // Check if the response is HTML (404 page) instead of JSON
-        const contentType = response.headers.get('content-type');
-        if (!contentType || !contentType.includes('application/json')) {
-          console.log('🗑️ Delete API endpoint not available, removing from local state only');
-        } else if (!response.ok) {
-          throw new Error(`Failed to delete document: ${response.status}`);
-        } else {
-          const data = await response.json();
-          console.log('✅ Document deleted from backend:', data.message);
-        }
-      } catch (fetchError) {
-        console.log('🗑️ Backend delete failed, removing from local state only:', fetchError);
-      }
-
-      // Remove from local state regardless of backend response
-      setDocuments(prev => prev.filter(doc => doc.id !== documentId));
-
-      // Clear current document if it was deleted
-      if (currentDocument?.id === documentId) {
-        setCurrentDocument(null);
-      }
-
-      console.log('✅ Document removed from local state');
+      await updateDocumentMetadata(documentId, metadata);
     } catch (error) {
-      console.error('❌ Error deleting document:', error);
-      throw error; // Re-throw to handle in UI
-    }
-  };
-
-  // Delete all documents
-  const deleteAllDocuments = async (permanent: boolean = false): Promise<void> => {
-    try {
-      console.log('🗑️ Deleting all documents, permanent:', permanent);
-
-      try {
-        const clientId = getClientId();
-        const query = new URLSearchParams({
-          permanent: String(permanent),
-        });
-        if (clientId) {
-          query.append('client_id', clientId);
-        }
-
-        let headers = {};
-        try {
-          const authHeaders = await getAuthHeaders();
-          headers = { ...authHeaders };
-        } catch (e) {
-          console.warn('Not authenticated, deleting all without auth headers');
-        }
-
-        const response = await fetch(`${BACKEND_URL}/api/documents?${query.toString()}`, {
-          method: 'DELETE',
-          headers: headers
-        });
-
-        if (!response.ok) {
-          throw new Error(`Failed to delete all documents: ${response.status}`);
-        }
-
-        const data = await response.json();
-        console.log('✅ All documents deleted from backend:', data.message);
-      } catch (fetchError) {
-        console.log('🗑️ Backend delete all failed, clearing local state only:', fetchError);
-      }
-
-      // Clear all documents from local state
-      setDocuments([]);
-      setCurrentDocument(null);
-
-      // Clear localStorage backup
-      localStorage.removeItem('pdf-documents');
-      localStorage.removeItem('documents');
-
-      console.log('✅ All documents removed from local state');
-    } catch (error) {
-      console.error('❌ Error deleting all documents:', error);
+      mergeAndPersistDocuments([existingDocument]);
       throw error;
     }
-  };
+  }, [documents, mergeAndPersistDocuments]);
 
-  // Rename a document
-  const renameDocument = async (documentId: string, newName: string): Promise<void> => {
-    try {
-      console.log('✏️ Renaming document:', documentId, 'to:', newName);
+  const classifyUserIntent = useCallback(async (userInput: string) => (
+    classifyIntentLocally(userInput)
+  ), []);
 
-      // Find the document to get old name for rollback
-      const document = documents.find(doc => doc.id === documentId);
-      if (!document) {
-        throw new Error('Document not found');
-      }
+  const getPersonaJobSuggestions = useCallback(async (userInput: string, topK = 3) => (
+    classifyIntentLocally(userInput).classification.alternatives.jobs.slice(0, topK)
+  ), []);
 
-      const oldName = document.name;
-
-      // Update frontend state immediately for better UX (optimistic update)
-      setDocuments(prev => prev.map(doc =>
-        doc.id === documentId ? { ...doc, name: newName.trim() } : doc
-      ));
-
-      try {
-        const clientId = getClientId();
-        const params = new URLSearchParams({ new_name: newName });
-        if (clientId) {
-          params.append('client_id', clientId);
-        }
-
-        let headers = {};
-        try {
-          const authHeaders = await getAuthHeaders();
-          headers = { ...authHeaders };
-        } catch (e) {
-          console.warn('Not authenticated, renaming without auth headers');
-        }
-
-        const response = await fetch(`${BACKEND_URL}/api/documents/${documentId}/rename?${params.toString()}`, {
-          method: 'PUT',
-          headers: headers
-        });
-
-        if (!response.ok) {
-          throw new Error(`Failed to rename document: ${response.status}`);
-        }
-
-        const data = await response.json();
-        console.log('✅ Document renamed in backend:', data.message);
-
-        // Update with the actual response data if available
-        if (data.document) {
-          const updatedDoc: PDFDocument = {
-            id: data.document.id,
-            name: data.document.original_name || data.document.name,
-            uploadDate: new Date(data.document.upload_date || data.document.uploadDate),
-            lastOpened: data.document.last_opened ? new Date(data.document.last_opened) : null,
-            lastUploaded: data.document.last_uploaded ? new Date(data.document.last_uploaded) : null,
-            url: data.document.url,
-            size: data.document.file_size || data.document.size || 0,
-            validation: data.document.validation_result
-          };
-
-          setDocuments(prev => prev.map(doc =>
-            doc.id === documentId ? updatedDoc : doc
-          ));
-        }
-
-      } catch (fetchError) {
-        console.error('🗑️ Backend rename failed, reverting local state:', fetchError);
-
-        // Revert the optimistic update
-        setDocuments(prev => prev.map(doc =>
-          doc.id === documentId ? { ...doc, name: oldName } : doc
-        ));
-
-        throw fetchError;
-      }
-
-      console.log('✅ Document renamed successfully');
-    } catch (error) {
-      console.error('❌ Error renaming document:', error);
-      throw error;
-    }
-  };
-
-  const classifyUserIntent = async (userInput: string) => {
-    try {
-      let headers: HeadersInit = {
-        'Content-Type': 'application/json',
-      };
-      try {
-        const authHeaders = await getAuthHeaders();
-        headers = { ...headers, ...authHeaders };
-      } catch (e) {
-        console.warn('Not authenticated, classifying intent without auth headers');
-      }
-
-      const response = await fetch(`${BACKEND_URL}/api/classify-intent`, {
-        method: 'POST',
-        headers: headers,
-        body: JSON.stringify({
-          user_input: userInput,
-          include_suggestions: true
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      console.log('🤖 Intent classification result:', data);
-      return data;
-    } catch (error) {
-      console.error('❌ Error classifying user intent:', error);
-      throw error;
-    }
-  };
-
-  const getPersonaJobSuggestions = async (userInput: string, topK: number = 3) => {
-    try {
-      let headers: HeadersInit = {
-        'Content-Type': 'application/json',
-      };
-      try {
-        const authHeaders = await getAuthHeaders();
-        headers = { ...headers, ...authHeaders };
-      } catch (e) {
-        console.warn('Not authenticated, getting suggestions without auth headers');
-      }
-
-      const response = await fetch(`${BACKEND_URL}/api/persona-job-suggestions`, {
-        method: 'POST',
-        headers: headers,
-        body: JSON.stringify({
-          user_input: userInput,
-          top_k: topK
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      console.log('🔍 Persona/job suggestions:', data);
-      return data;
-    } catch (error) {
-      console.error('❌ Error getting suggestions:', error);
-      throw error;
-    }
-  };
+  const value = useMemo<PDFContextType>(() => ({
+    documents,
+    currentDocument,
+    relatedSections,
+    crossDocumentSections,
+    insights,
+    isOnline,
+    isLoadingDocuments,
+    uploadDocument,
+    uploadBulkDocuments,
+    setCurrentDocument,
+    loadDocument,
+    getRelatedSections,
+    getInsights,
+    askGPT,
+    updateDocuments,
+    fetchAllDocuments,
+    fetchSortedDocuments,
+    deleteDocument,
+    deleteAllDocuments,
+    renameDocument,
+    classifyUserIntent,
+    getPersonaJobSuggestions,
+  }), [
+    documents,
+    currentDocument,
+    relatedSections,
+    crossDocumentSections,
+    insights,
+    isOnline,
+    isLoadingDocuments,
+    uploadDocument,
+    uploadBulkDocuments,
+    loadDocument,
+    getRelatedSections,
+    getInsights,
+    askGPT,
+    updateDocuments,
+    fetchAllDocuments,
+    fetchSortedDocuments,
+    deleteDocument,
+    deleteAllDocuments,
+    renameDocument,
+    classifyUserIntent,
+    getPersonaJobSuggestions,
+  ]);
 
   return (
-    <PDFContext.Provider
-      value={{
-        documents,
-        currentDocument,
-        relatedSections,
-        crossDocumentSections,
-        insights,
-        isOnline,
-        isLoadingDocuments,
-        uploadDocument,
-        uploadBulkDocuments,
-        setCurrentDocument,
-        getRelatedSections,
-        getInsights,
-        askGPT,
-        updateDocuments,
-        fetchAllDocuments,
-        fetchSortedDocuments,
-        deleteDocument,
-        deleteAllDocuments,
-        renameDocument,
-        classifyUserIntent,
-        getPersonaJobSuggestions
-      }}
-    >
+    <PDFContext.Provider value={value}>
       {children}
     </PDFContext.Provider>
   );

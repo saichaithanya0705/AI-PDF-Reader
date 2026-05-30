@@ -8,11 +8,22 @@ import json
 import asyncio
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Any
-import openai
 import requests
 from pydantic import BaseModel
-from langchain.chat_models import init_chat_model
-from langchain_core.messages import HumanMessage, SystemMessage
+
+try:
+    from langchain.chat_models import init_chat_model
+    from langchain_core.messages import HumanMessage, SystemMessage
+except ImportError:  # pragma: no cover - optional provider dependency
+    init_chat_model = None
+    HumanMessage = None
+    SystemMessage = None
+
+try:
+    from openai import AsyncAzureOpenAI, AsyncOpenAI
+except ImportError:  # pragma: no cover - only relevant for unsupported SDKs
+    AsyncAzureOpenAI = None
+    AsyncOpenAI = None
 
 # Lazy imports for optional providers
 genai = None
@@ -25,6 +36,100 @@ class LLMResponse(BaseModel):
     content: str
     usage: Optional[Dict[str, Any]] = None
     model: str
+
+
+def _usage_to_dict(usage: Any) -> Optional[Dict[str, Any]]:
+    if usage is None:
+        return None
+    if isinstance(usage, dict):
+        return usage
+    if hasattr(usage, "model_dump"):
+        return usage.model_dump()
+    if hasattr(usage, "dict"):
+        return usage.dict()
+    return {
+        key: getattr(usage, key)
+        for key in ("prompt_tokens", "completion_tokens", "total_tokens")
+        if hasattr(usage, key)
+    } or None
+
+
+def _chat_completion_content(response: Any) -> str:
+    choice = response.choices[0]
+    message = choice.message
+    if isinstance(message, dict):
+        return message.get("content") or ""
+    return getattr(message, "content", None) or ""
+
+
+def _parse_json_list(content: str) -> List[Dict[str, Any]]:
+    cleaned = content.strip()
+    if cleaned.startswith("```json"):
+        cleaned = cleaned[7:]
+    if cleaned.startswith("```"):
+        cleaned = cleaned[3:]
+    if cleaned.endswith("```"):
+        cleaned = cleaned[:-3]
+    try:
+        payload = json.loads(cleaned.strip())
+    except json.JSONDecodeError:
+        return []
+    return payload if isinstance(payload, list) else []
+
+
+async def _generate_snippets_with_model(provider, selected_text: str, related_sections: List[Dict], persona: str, job: str) -> List[Dict[str, Any]]:
+    sections_content = [
+        f"Section: {section.get('content', '')[:500]}"
+        for section in related_sections[:5]
+    ]
+    prompt = f"""
+You are an AI assistant for Adobe's PDF Intelligence System helping a {persona} with: {job}
+
+Based on the selected text and related sections, generate 2-4 concise, informative snippets.
+Each snippet must be grounded in the supplied selected text or related sections.
+
+Selected Text: {selected_text}
+
+Related Sections:
+{chr(10).join(sections_content)}
+
+Return ONLY valid JSON:
+[
+  {{"type": "context", "title": "Context Title", "content": "2-4 sentence grounded explanation"}},
+  {{"type": "insight", "title": "Key Insight", "content": "2-4 sentence grounded insight"}}
+]
+"""
+    response = await provider.generate_text(prompt, max_tokens=800)
+    return _parse_json_list(response.content)
+
+
+async def _find_connections_with_model(provider, selected_text: str, all_sections: List[Dict], persona: str, job: str) -> List[Dict[str, Any]]:
+    section_lines = []
+    current_doc = None
+    for section in all_sections[:10]:
+        doc_name = section.get('document_name', 'Unknown')
+        if doc_name != current_doc:
+            section_lines.append(f"Document: {doc_name}")
+            current_doc = doc_name
+        section_lines.append(f"Section: {section.get('content', '')[:300]}")
+
+    prompt = f"""
+You are an AI assistant for Adobe's PDF Intelligence System helping a {persona} with: {job}
+
+Find cross-document connections for the selected text using only the supplied sections.
+
+Selected Text: {selected_text}
+
+Available Sections:
+{chr(10).join(section_lines)}
+
+Return ONLY valid JSON:
+[
+  {{"type": "theme", "title": "Common Theme", "content": "Grounded description", "documents": ["doc1", "doc2"]}}
+]
+"""
+    response = await provider.generate_text(prompt, max_tokens=1000)
+    return _parse_json_list(response.content)
 
 
 class LLMProvider(ABC):
@@ -83,13 +188,15 @@ class GeminiProvider(LLMProvider):
 
         # Initialize fallback provider (Anthropic) via LangChain
         self.fallback_model = None
-        if os.getenv('ANTHROPIC_API_KEY'):
+        if os.getenv('ANTHROPIC_API_KEY') and init_chat_model is not None:
             try:
                 fallback_name = os.getenv('ANTHROPIC_MODEL', 'claude-3-haiku-20240307')
                 self.fallback_model = init_chat_model(fallback_name, model_provider="anthropic")
                 print(f"✅ Fallback provider (Anthropic) initialized: {fallback_name}")
             except Exception as e:
                 print(f"⚠️ Failed to initialize fallback provider: {e}")
+        elif os.getenv('ANTHROPIC_API_KEY'):
+            print("⚠️ LangChain is not installed, Anthropic fallback will not be available")
 
         # Keep raw imports for PDF-specific multimodal features if needed
         # (Legacy support for generate_insights_from_pdf)
@@ -134,14 +241,20 @@ class GeminiProvider(LLMProvider):
             langchain_messages = []
             for msg in messages:
                 if isinstance(msg, dict):
+                    if HumanMessage is None or SystemMessage is None:
+                        langchain_messages.append(msg)
+                        continue
                     if msg.get("role") == "user":
                         langchain_messages.append(HumanMessage(content=msg.get("content", "")))
                     elif msg.get("role") == "system":
                         langchain_messages.append(SystemMessage(content=msg.get("content", "")))
                     elif msg.get("role") == "assistant":
                         # LangChain doesn't have a simple "AssistantMessage" alias in core but AIMessage exists
-                        from langchain_core.messages import AIMessage
-                        langchain_messages.append(AIMessage(content=msg.get("content", "")))
+                        try:
+                            from langchain_core.messages import AIMessage
+                            langchain_messages.append(AIMessage(content=msg.get("content", "")))
+                        except ImportError:
+                            langchain_messages.append(msg)
                 else:
                     # Assume it's already a LangChain message/object
                     langchain_messages.append(msg)
@@ -384,9 +497,7 @@ class GeminiProvider(LLMProvider):
             except:
                 return [{"type": "key-insight", "title": "Analysis", "content": response.content, "relevance": 0.8}]
         except Exception as e:
-            if self.fallback_provider:
-                print(f"❌ Gemini error: {e}. 🔄 Trying fallback to Anthropic...")
-                return await self.fallback_provider.generate_insights(content, persona, job)
+            print(f"❌ Gemini insight generation failed after configured fallbacks: {e}")
             raise e
 
     async def generate_snippets(self, selected_text: str, related_sections: List[Dict], persona: str, job: str) -> List[Dict[str, Any]]:
@@ -424,12 +535,7 @@ class GeminiProvider(LLMProvider):
                 snippets = json.loads(response.content)
                 return snippets if isinstance(snippets, list) else []
             except json.JSONDecodeError:
-                # Fallback if JSON parsing fails
-                return [
-                    {"type": "context", "title": "Context", "content": "Related information about the selected text."},
-                    {"type": "insight", "title": "Insight", "content": "Key insight from the document analysis."},
-                    {"type": "connection", "title": "Connection", "content": "Connection to other parts of the document."}
-                ]
+                return []
 
         except Exception as e:
             print(f"Error generating snippets: {e}")
@@ -475,12 +581,7 @@ class GeminiProvider(LLMProvider):
                 connections = json.loads(response.content)
                 return connections if isinstance(connections, list) else []
             except json.JSONDecodeError:
-                # Fallback if JSON parsing fails
-                return [
-                    {"type": "theme", "title": "Related Theme", "content": "Common themes found across documents.", "documents": ["Multiple Documents"]},
-                    {"type": "concept", "title": "Shared Concept", "content": "Concepts that appear in multiple documents.", "documents": ["Cross-Document"]},
-                    {"type": "reference", "title": "Cross Reference", "content": "Information that builds upon each other across documents.", "documents": ["Related Documents"]}
-                ]
+                return []
 
         except Exception as e:
             print(f"Error finding cross-document connections: {e}")
@@ -496,27 +597,40 @@ class AzureOpenAIProvider(LLMProvider):
         
         if not all([self.api_key, self.api_base]):
             raise ValueError("Azure OpenAI credentials not provided")
-        
-        openai.api_type = "azure"
-        openai.api_key = self.api_key
-        openai.api_base = self.api_base
-        openai.api_version = self.api_version
+
+        if AsyncAzureOpenAI is None:
+            raise ValueError("OpenAI Python SDK 1.x with AsyncAzureOpenAI is required")
+
+        self.client = AsyncAzureOpenAI(
+            api_key=self.api_key,
+            azure_endpoint=self.api_base,
+            api_version=self.api_version,
+        )
     
     async def generate_text(self, prompt: str, max_tokens: int = 1000) -> LLMResponse:
         try:
-            response = await asyncio.to_thread(
-                openai.ChatCompletion.create,
-                engine=self.deployment_name,
+            response = await self.client.chat.completions.create(
+                model=self.deployment_name,
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=max_tokens
             )
             return LLMResponse(
-                content=response.choices[0].message.content,
-                usage=response.usage,
+                content=_chat_completion_content(response),
+                usage=_usage_to_dict(getattr(response, "usage", None)),
                 model=self.deployment_name
             )
         except Exception as e:
             raise Exception(f"Azure OpenAI API error: {str(e)}")
+
+    async def generate_chat_response(self, messages: List[Dict[str, str]]) -> str:
+        try:
+            response = await self.client.chat.completions.create(
+                model=self.deployment_name,
+                messages=messages,
+            )
+            return _chat_completion_content(response)
+        except Exception as e:
+            raise Exception(f"Azure OpenAI chat API error: {str(e)}")
     
     async def generate_insights(self, content: str, persona: str, job: str) -> List[Dict[str, Any]]:
         prompt = f"""
@@ -543,16 +657,11 @@ class AzureOpenAIProvider(LLMProvider):
 
     async def generate_snippets(self, selected_text: str, related_sections: List[Dict], persona: str, job: str) -> List[Dict[str, Any]]:
         """Generate 2-4 sentence snippets from related sections"""
-        return [
-            {"type": "context", "title": "Context", "content": "Related information about the selected text."},
-            {"type": "insight", "title": "Insight", "content": "Key insight from the document analysis."}
-        ]
+        return await _generate_snippets_with_model(self, selected_text, related_sections, persona, job)
 
     async def find_cross_document_connections(self, selected_text: str, all_sections: List[Dict], persona: str, job: str) -> List[Dict[str, Any]]:
         """Find semantically related sections across documents"""
-        return [
-            {"type": "theme", "title": "Related Theme", "content": "Common themes found across documents.", "documents": ["Multiple Documents"]}
-        ]
+        return await _find_connections_with_model(self, selected_text, all_sections, persona, job)
 
 
 class OpenAIProvider(LLMProvider):
@@ -562,24 +671,36 @@ class OpenAIProvider(LLMProvider):
         
         if not self.api_key:
             raise ValueError("OpenAI API key not provided")
-        
-        openai.api_key = self.api_key
+
+        if AsyncOpenAI is None:
+            raise ValueError("OpenAI Python SDK 1.x with AsyncOpenAI is required")
+
+        self.client = AsyncOpenAI(api_key=self.api_key)
     
     async def generate_text(self, prompt: str, max_tokens: int = 1000) -> LLMResponse:
         try:
-            response = await asyncio.to_thread(
-                openai.ChatCompletion.create,
+            response = await self.client.chat.completions.create(
                 model=self.model_name,
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=max_tokens
             )
             return LLMResponse(
-                content=response.choices[0].message.content,
-                usage=response.usage,
+                content=_chat_completion_content(response),
+                usage=_usage_to_dict(getattr(response, "usage", None)),
                 model=self.model_name
             )
         except Exception as e:
             raise Exception(f"OpenAI API error: {str(e)}")
+
+    async def generate_chat_response(self, messages: List[Dict[str, str]]) -> str:
+        try:
+            response = await self.client.chat.completions.create(
+                model=self.model_name,
+                messages=messages,
+            )
+            return _chat_completion_content(response)
+        except Exception as e:
+            raise Exception(f"OpenAI chat API error: {str(e)}")
     
     async def generate_insights(self, content: str, persona: str, job: str) -> List[Dict[str, Any]]:
         prompt = f"""
@@ -606,16 +727,11 @@ class OpenAIProvider(LLMProvider):
 
     async def generate_snippets(self, selected_text: str, related_sections: List[Dict], persona: str, job: str) -> List[Dict[str, Any]]:
         """Generate 2-4 sentence snippets from related sections"""
-        return [
-            {"type": "context", "title": "Context", "content": "Related information about the selected text."},
-            {"type": "insight", "title": "Insight", "content": "Key insight from the document analysis."}
-        ]
+        return await _generate_snippets_with_model(self, selected_text, related_sections, persona, job)
 
     async def find_cross_document_connections(self, selected_text: str, all_sections: List[Dict], persona: str, job: str) -> List[Dict[str, Any]]:
         """Find semantically related sections across documents"""
-        return [
-            {"type": "theme", "title": "Related Theme", "content": "Common themes found across documents.", "documents": ["Multiple Documents"]}
-        ]
+        return await _find_connections_with_model(self, selected_text, all_sections, persona, job)
 
 
 class OllamaProvider(LLMProvider):
@@ -643,6 +759,14 @@ class OllamaProvider(LLMProvider):
             )
         except Exception as e:
             raise Exception(f"Ollama API error: {str(e)}")
+
+    async def generate_chat_response(self, messages: List[Dict[str, str]]) -> str:
+        prompt = "\n".join(
+            f"{message.get('role', 'user')}: {message.get('content', '')}"
+            for message in messages
+        )
+        response = await self.generate_text(prompt, max_tokens=1000)
+        return response.content
     
     async def generate_insights(self, content: str, persona: str, job: str) -> List[Dict[str, Any]]:
         prompt = f"""
@@ -679,16 +803,11 @@ class OllamaProvider(LLMProvider):
 
     async def generate_snippets(self, selected_text: str, related_sections: List[Dict], persona: str, job: str) -> List[Dict[str, Any]]:
         """Generate 2-4 sentence snippets from related sections"""
-        return [
-            {"type": "context", "title": "Context", "content": "Related information about the selected text."},
-            {"type": "insight", "title": "Insight", "content": "Key insight from the document analysis."}
-        ]
+        return await _generate_snippets_with_model(self, selected_text, related_sections, persona, job)
 
     async def find_cross_document_connections(self, selected_text: str, all_sections: List[Dict], persona: str, job: str) -> List[Dict[str, Any]]:
         """Find semantically related sections across documents"""
-        return [
-            {"type": "theme", "title": "Related Theme", "content": "Common themes found across documents.", "documents": ["Multiple Documents"]}
-        ]
+        return await _find_connections_with_model(self, selected_text, all_sections, persona, job)
 
 
 def get_llm_provider() -> LLMProvider:

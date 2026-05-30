@@ -1,6 +1,6 @@
 import React from 'react';
 import { Lightbulb, Brain, AlertTriangle, Link } from 'lucide-react';
-import { usePDF } from '../context/PDFContext';
+import { usePDF } from '../context/usePDF';
 
 const InsightsPanel: React.FC = () => {
   const { insights, isOnline } = usePDF();

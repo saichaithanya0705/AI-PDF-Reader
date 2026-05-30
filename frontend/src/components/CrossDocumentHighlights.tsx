@@ -11,9 +11,7 @@ interface CrossDocumentHighlightsProps {
 
 const CrossDocumentHighlights: React.FC<CrossDocumentHighlightsProps> = ({
   crossDocumentSections,
-  onOpenDocument,
-  currentPage,
-  documentId
+  onOpenDocument
 }) => {
   const getRelevanceColor = (relevance: number) => {
     if (relevance >= 0.8) return 'border-green-400 bg-green-400/10';
@@ -140,4 +138,3 @@ const CrossDocumentHighlights: React.FC<CrossDocumentHighlightsProps> = ({
 };
 
 export default CrossDocumentHighlights;
-

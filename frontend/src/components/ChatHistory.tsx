@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { X, Clock, Trash2, MessageSquare, ChevronRight } from 'lucide-react';
-import { API_URL } from '../config';
+import { apiRequest } from '../lib/api';
 
 interface ChatSession {
     id: string;
@@ -11,45 +11,40 @@ interface ChatSession {
 }
 
 interface ChatHistoryProps {
-    userId?: string;
     onLoadSession: (sessionId: string) => void;
     onClose: () => void;
 }
 
-const ChatHistory: React.FC<ChatHistoryProps> = ({ userId, onLoadSession, onClose }) => {
+const ChatHistory: React.FC<ChatHistoryProps> = ({ onLoadSession, onClose }) => {
     const [sessions, setSessions] = useState<ChatSession[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    useEffect(() => {
-        loadSessions();
-    }, [userId]);
-
-    const loadSessions = async () => {
+    const loadSessions = useCallback(async () => {
         setLoading(true);
         setError(null);
 
         try {
-            const params = new URLSearchParams();
-            if (userId) {
-                params.append('client_id', userId);
-            }
-
-            const response = await fetch(`${API_URL}/api/chat/sessions?${params}`);
-
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-
-            const data = await response.json();
-            setSessions(data.sessions || []);
+            const data = await apiRequest<Record<string, unknown>>('/api/chat/sessions');
+            const nextSessions = Array.isArray(data.sessions)
+                ? data.sessions.filter((session): session is ChatSession => (
+                    typeof session === 'object' &&
+                    session !== null &&
+                    typeof (session as ChatSession).id === 'string'
+                ))
+                : [];
+            setSessions(nextSessions);
         } catch (err) {
             console.error('Error loading chat sessions:', err);
             setError('Failed to load chat history');
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
+
+    useEffect(() => {
+        loadSessions();
+    }, [loadSessions]);
 
     const deleteSession = async (sessionId: string, event: React.MouseEvent) => {
         event.stopPropagation(); // Prevent triggering load session
@@ -59,18 +54,9 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({ userId, onLoadSession, onClos
         }
 
         try {
-            const params = new URLSearchParams();
-            if (userId) {
-                params.append('client_id', userId);
-            }
-
-            const response = await fetch(`${API_URL}/api/chat/sessions/${sessionId}?${params}`, {
+            await apiRequest(`/api/chat/sessions/${sessionId}`, {
                 method: 'DELETE'
             });
-
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
 
             // Remove from list
             setSessions(sessions.filter(s => s.id !== sessionId));

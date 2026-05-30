@@ -1,7 +1,14 @@
 import { FormEvent, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Loader2, Lock, Mail, ShieldCheck } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/useAuth';
+
+type LoginLocationState = {
+  from?: {
+    pathname?: string;
+  };
+  message?: string;
+};
 
 const LoginPage = () => {
   const navigate = useNavigate();
@@ -13,8 +20,9 @@ const LoginPage = () => {
   const [formError, setFormError] = useState<string | null>(null);
 
   // Get the page user was trying to access before being redirected to login
-  const from = (location.state as any)?.from?.pathname || '/library';
-  const successMessage = (location.state as any)?.message;
+  const locationState = location.state as LoginLocationState | null;
+  const from = locationState?.from?.pathname || '/library';
+  const successMessage = locationState?.message;
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();

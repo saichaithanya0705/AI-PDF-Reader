@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Lightbulb, Brain, AlertTriangle, Link, X, Minimize2, Maximize2, MessageCircle, Target, Search, Clock, TrendingUp, Key, Info } from 'lucide-react';
-import { usePDF } from '../context/PDFContext';
+import { Lightbulb, Brain, AlertTriangle, Link, X, Minimize2, Maximize2, Target, Search, Clock, TrendingUp, Key, Info } from 'lucide-react';
+import { usePDF } from '../context/usePDF';
 
 interface FloatingInsightsPanelProps {
   isVisible: boolean;
@@ -25,7 +25,7 @@ const FloatingInsightsPanel: React.FC<FloatingInsightsPanelProps> = ({
       // Auto-load insights when panel opens
       getInsights(currentDocument.id, 1, 'Student', 'Research');
     }
-  }, [isVisible, currentDocument]);
+  }, [currentDocument, getInsights, insights.length, isVisible]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (e.target === e.currentTarget || (e.target as HTMLElement).classList.contains('drag-handle')) {

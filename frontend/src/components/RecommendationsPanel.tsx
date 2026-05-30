@@ -1,26 +1,30 @@
 import React, { useState } from 'react';
 import { ExternalLink, FileText, Zap, RefreshCw, Loader2, MessageCircle, Lightbulb } from 'lucide-react';
-import { usePDF } from '../context/PDFContext';
+import { usePDF } from '../context/usePDF';
 
 interface RecommendationsPanelProps {
   onOpenInsights?: () => void;
+  onNavigateToSection?: (section: { documentId: string; page: number }) => void;
 }
 
-const RecommendationsPanel: React.FC<RecommendationsPanelProps> = ({ onOpenInsights }) => {
+const RecommendationsPanel: React.FC<RecommendationsPanelProps> = ({
+  onOpenInsights,
+  onNavigateToSection,
+}) => {
   const { relatedSections, currentDocument, getRelatedSections } = usePDF();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const handleSectionClick = (section: any) => {
-    // Navigate to the specific document and page
-    if (section.documentId !== currentDocument?.id) {
-      // Cross-document navigation
-      console.log('Navigating to different document:', section.documentId, 'page:', section.page);
-      // TODO: Implement cross-document navigation
-    } else {
-      // Same document navigation
-      console.log('Navigating to page:', section.page);
-      // TODO: Implement page navigation within current document
+  const handleSectionClick = (section: { documentId?: string; page?: number }) => {
+    const documentId = section.documentId ?? currentDocument?.id;
+    const page = section.page ?? 1;
+    if (!documentId) return;
+    if (onNavigateToSection) {
+      onNavigateToSection({ documentId, page });
+      return;
     }
+    window.dispatchEvent(
+      new CustomEvent('pdf-navigate', { detail: { documentId, page } })
+    );
   };
 
   const handleRefresh = async () => {

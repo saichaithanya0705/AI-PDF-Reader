@@ -11,15 +11,17 @@ from jose import jwt, JWTError, jwk
 from typing import Optional
 import logging
 
+from .auth_config import auth_bypass_enabled, development_user
+
 logger = logging.getLogger(__name__)
 
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 security_optional = HTTPBearer(auto_error=False)
 
 # Env vars
 SUPABASE_URL = os.getenv("VITE_SUPABASE_URL") or os.getenv("SUPABASE_URL")
 SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET")
-SUPABASE_API_KEY = os.getenv("VITE_SUPABASE_ANON_KEY") or os.getenv("SUPABASE_SERVICE_KEY")
+SUPABASE_API_KEY = os.getenv("VITE_SUPABASE_ANON_KEY") or os.getenv("SUPABASE_ANON_KEY")
 
 JWKS_CACHE = None
 
@@ -52,8 +54,15 @@ def get_supabase_jwks():
     print("❌ Failed to fetch JWKS from any endpoint")
     return None
 
-def get_current_user(credentials: HTTPAuthorizationCredentials = Security(security)) -> dict:
-    print("DEBUG: get_current_user called")
+def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] = Security(security)) -> dict:
+    logger.debug("get_current_user called")
+    if auth_bypass_enabled():
+        logger.info("Using development auth bypass user")
+        return development_user()
+
+    if not credentials:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
     try:
         token = credentials.credentials
         
@@ -61,8 +70,8 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Security(securi
         try:
             header = jwt.get_unverified_header(token)
             alg = header.get("alg")
-            print(f"DEBUG: Token Algo: {alg}")
-        except:
+            logger.debug("Token algorithm: %s", alg)
+        except JWTError:
             alg = "HS256"
 
         jwt_key = SUPABASE_JWT_SECRET
@@ -104,9 +113,14 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Security(securi
             
         return {
             "sub": user_id,
+            "user_id": user_id,
             "email": payload.get("email"),
-            "role": payload.get("role", "authenticated")
+            "role": payload.get("role", "authenticated"),
+            "authenticated": True,
+            "auth_bypassed": False,
         }
+    except HTTPException:
+        raise
     except JWTError as e:
         print(f"❌ JWT verification failed: {e}")
         raise HTTPException(status_code=401, detail="Invalid authentication token")
@@ -119,7 +133,10 @@ def get_optional_user(credentials: Optional[HTTPAuthorizationCredentials] = Secu
     """
     Optional authentication - returns None if no token provided
     """
-    print(f"DEBUG: get_optional_user called. Credentials present: {bool(credentials)}")
+    logger.debug("get_optional_user called; credentials present=%s", bool(credentials))
+    if auth_bypass_enabled():
+        return development_user()
+
     if not credentials:
         return None
     

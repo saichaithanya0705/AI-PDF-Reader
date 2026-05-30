@@ -27,7 +27,7 @@ export const checkAdobeAPIAvailability = async (): Promise<boolean> => {
     }
 
     // Try to load Adobe PDF Embed API
-    const response = await fetch('https://documentservices.adobe.com/view-sdk/viewer.js', {
+    await fetch('https://documentservices.adobe.com/view-sdk/viewer.js', {
       method: 'HEAD',
       mode: 'no-cors',
       cache: 'no-cache'

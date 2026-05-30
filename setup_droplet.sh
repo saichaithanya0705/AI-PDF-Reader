@@ -15,11 +15,16 @@ fi
 echo "📦 Installing system packages..."
 apt update
 apt upgrade -y
-apt install -y python3 python3-venv python3-pip nginx certbot python3-certbot-nginx git curl
+apt install -y python3 python3-venv python3-pip nginx certbot python3-certbot-nginx git curl ca-certificates gnupg
 
 # Install Node.js 20.x
 echo "📦 Installing Node.js..."
-curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+install -d -m 0755 /etc/apt/keyrings
+curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key -o /tmp/nodesource.gpg.key
+gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg /tmp/nodesource.gpg.key
+chmod 0644 /etc/apt/keyrings/nodesource.gpg
+echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" > /etc/apt/sources.list.d/nodesource.list
+apt update
 apt install -y nodejs
 
 # Create application user

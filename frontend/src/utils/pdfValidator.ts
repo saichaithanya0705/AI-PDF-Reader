@@ -186,7 +186,7 @@ export class PDFValidator {
           result.warnings.push('PDF version not detected in header');
         }
       }
-    } catch (error) {
+    } catch {
       result.warnings.push('Cannot fully read PDF header - will attempt to process anyway');
     }
   }
@@ -247,7 +247,7 @@ export class PDFValidator {
               foundObjects = true;
               break;
             }
-          } catch (e) {
+          } catch {
             // Continue checking other positions
           }
         }
@@ -257,7 +257,7 @@ export class PDFValidator {
         }
       }
 
-    } catch (error) {
+    } catch {
       result.warnings.push('Cannot validate PDF structure completely - will attempt to process anyway');
     }
   }

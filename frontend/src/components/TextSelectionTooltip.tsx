@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Copy, MessageCircle, X, Check, Brain, ExternalLink, Lightbulb, Loader2, Sparkles } from 'lucide-react';
-import { usePDF } from '../context/PDFContext';
+import { usePDF } from '../context/usePDF';
+import { analyzeTextSelection, askGeminiSelection } from '../lib/api';
 
 interface TextSelectionTooltipProps {
   text: string;
@@ -9,6 +10,28 @@ interface TextSelectionTooltipProps {
   documentId?: string;
   currentPage?: number;
   onClose: () => void;
+}
+
+interface AnalysisSection {
+  document_name?: string;
+  snippet?: string;
+  relevance_score?: number;
+}
+
+interface InsightBulb {
+  title?: string;
+  content?: string;
+}
+
+interface SelectionAnalysis {
+  text_insights?: {
+    explanation?: string;
+  };
+  cross_document_sections?: AnalysisSection[];
+  insights_bulb?: InsightBulb[];
+  metadata?: {
+    total_cross_document?: number;
+  };
 }
 
 const TextSelectionTooltip: React.FC<TextSelectionTooltipProps> = ({
@@ -24,7 +47,7 @@ const TextSelectionTooltip: React.FC<TextSelectionTooltipProps> = ({
   const [gptResponse, setGPTResponse] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [analysisData, setAnalysisData] = useState<any>(null);
+  const [analysisData, setAnalysisData] = useState<SelectionAnalysis | null>(null);
   const [showAnalysis, setShowAnalysis] = useState(false);
   const [geminiResponse, setGeminiResponse] = useState<string>('');
   const [showGeminiResponse, setShowGeminiResponse] = useState(false);
@@ -62,27 +85,8 @@ const TextSelectionTooltip: React.FC<TextSelectionTooltipProps> = ({
       const persona = localStorage.getItem('lastPersona') || 'Student';
       const job = localStorage.getItem('lastJob') || 'Learning and Research';
 
-      const response = await fetch(`${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/text-selection-analysis`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          selected_text: text,
-          document_id: documentId,
-          page: currentPage,
-          persona,
-          job,
-          include_cross_document: true
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to analyze selection');
-      }
-
-      const data = await response.json();
-      setAnalysisData(data);
+      const data = await analyzeTextSelection(text, documentId, currentPage, persona, job, true);
+      setAnalysisData(data as SelectionAnalysis);
       setShowAnalysis(true);
     } catch (error) {
       console.error('Failed to analyze selection:', error);
@@ -98,26 +102,11 @@ const TextSelectionTooltip: React.FC<TextSelectionTooltipProps> = ({
     setShowGeminiResponse(true);
 
     try {
-      // Get context around the selected text for better accuracy
-      const response = await fetch('/api/ask-gemini-selection', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          document_id: documentId,
-          selected_text: text,
-          page: currentPage,
-          context_chars: 500 // Get 500 chars before and after for context
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to get Gemini response');
-      }
-
-      const data = await response.json();
-      setGeminiResponse(data.explanation || 'No explanation available');
+      const data = await askGeminiSelection(documentId, text, currentPage, 500);
+      const explanation = data && typeof data === 'object'
+        ? (data as { explanation?: unknown }).explanation
+        : undefined;
+      setGeminiResponse(typeof explanation === 'string' ? explanation : 'No explanation available');
     } catch (error) {
       console.error('Failed to ask Gemini:', error);
       setGeminiResponse('Sorry, I could not analyze this text at the moment. Please try again.');
@@ -310,11 +299,11 @@ const TextSelectionTooltip: React.FC<TextSelectionTooltipProps> = ({
                     Related Documents ({analysisData.cross_document_sections.length})
                   </h4>
                   <div className="space-y-2">
-                    {analysisData.cross_document_sections.slice(0, 3).map((section: any, index: number) => (
+                    {analysisData.cross_document_sections.slice(0, 3).map((section, index) => (
                       <div key={index} className="text-xs">
                         <div className="text-slate-400 font-medium">{section.document_name}</div>
                         <div className="text-slate-300">{section.snippet}</div>
-                        <div className="text-green-400 text-xs">Relevance: {(section.relevance_score * 100).toFixed(0)}%</div>
+                        <div className="text-green-400 text-xs">Relevance: {(((section.relevance_score ?? 0) * 100).toFixed(0))}%</div>
                       </div>
                     ))}
                   </div>
@@ -329,10 +318,10 @@ const TextSelectionTooltip: React.FC<TextSelectionTooltipProps> = ({
                     AI Insights
                   </h4>
                   <div className="space-y-2">
-                    {analysisData.insights_bulb.slice(0, 2).map((insight: any, index: number) => (
+                    {analysisData.insights_bulb.slice(0, 2).map((insight, index) => (
                       <div key={index} className="text-xs">
-                        <div className="text-amber-300 font-medium">{insight.title}</div>
-                        <div className="text-slate-300">{insight.content}</div>
+                        <div className="text-amber-300 font-medium">{insight.title || 'Insight'}</div>
+                        <div className="text-slate-300">{insight.content || ''}</div>
                       </div>
                     ))}
                   </div>

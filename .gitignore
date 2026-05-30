@@ -3,8 +3,6 @@
 .env.*
 !.env.example
 !.env.local.example
-!deploy_stage/backend/.env.example
-
 # Python caches
 __pycache__/
 *.py[cod]
@@ -14,6 +12,12 @@ __pycache__/
 backend/*.log
 backend/*_heartbeat.txt
 *_heartbeat.txt
+
+# Graphify outputs (keep policy: ignore generated artifacts, allow report if needed)
+graphify-out/.graphify_*
+graphify-out/cost.json
+.graphify_*.json
+_graphify_build.py
 
 # Local data and generated artifacts
 backend/data/
