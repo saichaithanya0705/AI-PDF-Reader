@@ -1,23 +1,24 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { X, Clock, Trash2, MessageSquare, ChevronRight } from 'lucide-react';
-import { apiRequest } from '../lib/api';
-
-interface ChatSession {
-    id: string;
-    title: string;
-    context_type: 'library' | 'pdf_viewer';
-    created_at: string;
-    updated_at: string;
-}
+import { deleteChatSession, listChatSessions, type ChatSessionSummary } from '../lib/api';
 
 interface ChatHistoryProps {
-    onLoadSession: (sessionId: string) => void;
+    onLoadSession: (sessionId: string) => Promise<void>;
     onClose: () => void;
+    activeSessionId?: string | null;
+    onDeleteSession?: (sessionId: string) => void;
 }
 
-const ChatHistory: React.FC<ChatHistoryProps> = ({ onLoadSession, onClose }) => {
-    const [sessions, setSessions] = useState<ChatSession[]>([]);
+const ChatHistory: React.FC<ChatHistoryProps> = ({
+    onLoadSession,
+    onClose,
+    activeSessionId = null,
+    onDeleteSession,
+}) => {
+    const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadingSessionId, setLoadingSessionId] = useState<string | null>(null);
+    const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
 
     const loadSessions = useCallback(async () => {
@@ -25,15 +26,8 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({ onLoadSession, onClose }) => 
         setError(null);
 
         try {
-            const data = await apiRequest<Record<string, unknown>>('/api/chat/sessions');
-            const nextSessions = Array.isArray(data.sessions)
-                ? data.sessions.filter((session): session is ChatSession => (
-                    typeof session === 'object' &&
-                    session !== null &&
-                    typeof (session as ChatSession).id === 'string'
-                ))
-                : [];
-            setSessions(nextSessions);
+            const data = await listChatSessions();
+            setSessions(data.sessions);
         } catch (err) {
             console.error('Error loading chat sessions:', err);
             setError('Failed to load chat history');
@@ -46,25 +40,35 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({ onLoadSession, onClose }) => 
         loadSessions();
     }, [loadSessions]);
 
-    const deleteSession = async (sessionId: string, event: React.MouseEvent) => {
-        event.stopPropagation(); // Prevent triggering load session
+    const handleLoadSession = useCallback(async (sessionId: string) => {
+        setLoadingSessionId(sessionId);
+        try {
+            await onLoadSession(sessionId);
+            onClose();
+        } catch (err) {
+            console.error('Error loading session from history:', err);
+        } finally {
+            setLoadingSessionId(null);
+        }
+    }, [onClose, onLoadSession]);
 
+    const handleDeleteSession = useCallback(async (sessionId: string) => {
         if (!confirm('Are you sure you want to delete this chat session?')) {
             return;
         }
 
         try {
-            await apiRequest(`/api/chat/sessions/${sessionId}`, {
-                method: 'DELETE'
-            });
-
-            // Remove from list
-            setSessions(sessions.filter(s => s.id !== sessionId));
+            setDeletingSessionId(sessionId);
+            await deleteChatSession(sessionId);
+            setSessions((currentSessions) => currentSessions.filter((session) => session.id !== sessionId));
+            onDeleteSession?.(sessionId);
         } catch (err) {
             console.error('Error deleting session:', err);
             alert('Failed to delete session');
+        } finally {
+            setDeletingSessionId(null);
         }
-    };
+    }, [onDeleteSession]);
 
     const formatDate = (dateString: string) => {
         const date = new Date(dateString);
@@ -136,15 +140,20 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({ onLoadSession, onClose }) => 
                     {!loading && !error && sessions.length > 0 && (
                         <div className="space-y-3">
                             {sessions.map((session) => (
-                                <button
+                                <div
                                     key={session.id}
-                                    onClick={() => {
-                                        onLoadSession(session.id);
-                                        onClose();
-                                    }}
-                                    className="w-full bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl p-4 transition-all duration-200 hover:scale-[1.01] group text-left"
+                                    className={`group flex items-stretch gap-3 rounded-xl border p-2 transition-all duration-200 ${
+                                        activeSessionId === session.id
+                                            ? 'border-cyan-500 bg-slate-800/95'
+                                            : 'border-slate-700 bg-slate-800 hover:bg-slate-700'
+                                    }`}
                                 >
-                                    <div className="flex items-start justify-between gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={() => void handleLoadSession(session.id)}
+                                        disabled={Boolean(loadingSessionId || deletingSessionId)}
+                                        className="flex flex-1 items-start justify-between gap-3 rounded-lg p-2 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-70"
+                                    >
                                         <div className="flex-1 min-w-0">
                                             <div className="flex items-center gap-2 mb-1">
                                                 <MessageSquare className="w-4 h-4 text-cyan-400 flex-shrink-0" />
@@ -156,26 +165,27 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({ onLoadSession, onClose }) => 
                                             <div className="flex items-center gap-3 text-xs text-slate-400">
                                                 <span className="flex items-center gap-1">
                                                     <Clock className="w-3 h-3" />
-                                                    {formatDate(session.updated_at)}
+                                                    {loadingSessionId === session.id ? 'Loading...' : formatDate(session.updated_at)}
                                                 </span>
                                                 <span className="px-2 py-0.5 bg-slate-700 rounded text-slate-300">
                                                     {session.context_type === 'library' ? '📚 Library' : '📄 PDF'}
                                                 </span>
                                             </div>
                                         </div>
-
                                         <div className="flex items-center gap-2 flex-shrink-0">
-                                            <button
-                                                onClick={(e) => deleteSession(session.id, e)}
-                                                className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
-                                                title="Delete session"
-                                            >
-                                                <Trash2 className="w-4 h-4" />
-                                            </button>
                                             <ChevronRight className="w-5 h-5 text-slate-500 group-hover:text-cyan-400 transition-colors" />
                                         </div>
-                                    </div>
-                                </button>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => void handleDeleteSession(session.id)}
+                                        disabled={Boolean(loadingSessionId || deletingSessionId)}
+                                        className="self-center rounded-lg p-3 text-slate-400 transition-colors hover:bg-red-400/10 hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-60"
+                                        title="Delete session"
+                                    >
+                                        <Trash2 className="w-4 h-4" />
+                                    </button>
+                                </div>
                             ))}
                         </div>
                     )}

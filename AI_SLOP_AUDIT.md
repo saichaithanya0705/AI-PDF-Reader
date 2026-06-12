@@ -1,62 +1,69 @@
 **Verdict**
-Score: 31/100, Low slop risk for the scoped auth-bypass and retrieval-cache/BM25 changes after repair
+Score: 16/100, Minimal slop risk for the scoped authenticated chat-history/session changes after repair
 Confidence: Medium
 
 **Why**
-- Graphify was read first. The relevant graph hubs for this pass were `DocumentDatabase`, `RAGService`, `apiRequest()`, and the auth/document-route communities around `get_current_user`, `DocumentDatabase`, and frontend API calls.
-- The required Graphify scanner reported 35/100 graph-only triage risk and 80/100 source-augmented whole-repo triage risk. The source-wide score is high because the repo still has broad error masking, secret-risk examples, and indirection hotspots, but this hook pass was scoped to code changed in this prompt plus directly connected auth/config architecture.
-- Source inspection confirmed one scoped slop-like risk before repair: a development auth bypass could become a production security hole or a partial backend-only shortcut if it were implemented as scattered conditionals.
-- Repairs were root-cause changes: one backend auth policy module, production-deny behavior for bypass config, matching frontend development bypass, and tests for the production guard.
+- Graphify was read first. The relevant graph targets for this pass were `apiRequest()` as a frontend hub plus Communities 1 and 17, which cover chat-session routes and `ChatHistoryManager`.
+- The required Graphify scanner still reports severe whole-repo triage risk, but that result is dominated by unrelated broad exception masking, secret examples, and large pre-existing hotspots outside this prompt. This audit is scoped to the chat-history changes made in this prompt and the directly connected backend/frontend session contract.
+- Source inspection confirmed that the touched chat flow had low-trust AI-slop patterns before repair: duplicated session contract definitions, unvalidated payload boundaries, dead compatibility transport, and a stale-session reuse path after deletion.
+- The repairs were root-cause fixes rather than patches: explicit backend response models, centralized frontend response parsing, stricter request validation, removal of unused transport fields, and regression tests for authenticated session ownership and schema enforcement.
 
 **Evidence**
-| Signal | Graph Evidence | Source Evidence | Classification | Fix |
-|---|---|---|---|---|
-| Dev auth bypass could become a production auth hole if implemented ad hoc | Community 1/17 route/auth clusters use `get_current_user`; `apiRequest()` is a frontend hub. | Active protected routes depend on `backend/app/auth_middleware.py`; frontend `ProtectedRoute` and `api.ts` also enforce Supabase session checks. | Confirmed slop signal | Added centralized backend policy in `backend/app/auth_config.py`, wired active auth in `backend/app/auth_middleware.py`, and added tests that production refuses bypass even when `AUTH_BYPASS_ENABLED=true`. |
-| Duplicate auth helpers had inconsistent environment semantics | Graphify shows auth/session endpoints as a low-cohesion route cluster; source has both `backend/app/auth_middleware.py` and `backend/app/middleware/auth.py`. | Legacy `require_auth_for_production()` defaulted missing env to development-like behavior. | Confirmed slop signal | Shared `auth_config` from both auth modules and changed production helper to default to `production`. |
-| Backend-only bypass would leave frontend login friction and encourage another workaround | `apiRequest()` is a graph hub and protected frontend routes gate the main app. | `frontend/src/context/AuthContext.tsx` required Supabase user, and `frontend/src/lib/api.ts` threw when no Supabase session existed. | Confirmed slop signal | Added `frontend/src/lib/devAuth.ts`; `AuthContext` supplies a deterministic dev user and `api.ts` omits auth headers only in Vite dev with `VITE_APP_ENV=development` and `VITE_AUTH_BYPASS_ENABLED=true`. |
-| Retrieval changes from the prompt needed anti-slop verification | `RAGService` and `DocumentDatabase` are graph god nodes. | BM25 retrieval now lives at the database/index boundary and cache exact-hit lookup happens before DB/vector access. | Healthy architecture signal | Tests cover exact cache-before-DB behavior, BM25 tenant filters, BM25-only candidate merge, and revision bump stale-hit prevention. |
+| Signal | Graph Evidence | Source Evidence | Classification | Likely Root Cause | Permanent Fix | Prevention Gate |
+|---|---|---|---|---|---|---|
+| Chat-session contract was duplicated and weakly typed across backend routes and frontend consumers | Community 1 contains `create_chat_session_endpoint()`, `list_chat_sessions_endpoint()`, `get_chat_session_endpoint()`, and `delete_chat_session_endpoint()`; Community 17 centers `ChatHistoryManager`; `apiRequest()` is a top frontend hub. | `backend/app/document_routes.py:275`, `backend/app/document_routes.py:308`, `backend/app/document_routes.py:342`, and `backend/app/document_routes.py:378` used generic `Dict[str, Any]` response models; `frontend/src/lib/api.ts:320` and `frontend/src/lib/api.ts:332` now centralize contract parsing that was previously scattered in UI components. | Confirmed slop signal | Solution-first edits added typed-looking annotations without a single validating owner for the session payload. | Added explicit FastAPI response models for chat-session routes and centralized frontend parsers for list/detail/delete responses. | Keep backend chat-session responses on named Pydantic models and keep all frontend chat-session parsing in `api.ts`. |
+| The chat send path still carried dead compatibility transport and stale request indirection | `apiRequest()` is a graph god node, so extra chat transport fields spread review burden quickly. | `frontend/src/lib/api.ts:356` and `frontend/src/lib/api.ts:486` now define a single `sendChatMessage()` contract and no longer send `document_context`; the source guard at `frontend/tests/pdf-context-source.test.mjs:89` verifies that stale transport stays removed. | Confirmed slop signal | Fear of breaking callers led to a compatibility shim even though no active caller used it. | Removed the overloaded legacy helper path and the backend-unused `document_context` payload field. | Do not preserve transport fields or overloads without an active caller or a verified backend consumer. |
+| Request validation on the chat boundary allowed drift between frontend assumptions and backend acceptance | Community 1 is the authenticated route cluster; Graphify marks it low-cohesion, which raises the value of explicit contract enforcement. | `backend/app/main.py:1636` now constrains `context_type` with `Literal["library", "pdf_viewer"]` and uses `Field(default_factory=list)` for `conversation_history`; `backend/tests/test_document_security_routes.py:290` verifies invalid `context_type` returns `422`. | Confirmed slop signal | The original request model used a free-form string and mutable default list, which makes API drift easy and failures harder to localize. | Tightened request schema with `Literal` and `Field(default_factory=list)`. | Treat chat request fields as an API contract, not a permissive bag of values. |
+| Deleted or unauthorized sessions could remain active in the client flow | Graphify’s inferred edge `chat_endpoint() -> get_chat_history_manager()` made the session lifecycle boundary worth verifying in source. | `backend/app/main.py:1677` revalidates `request.session_id` against the authenticated user before reuse; `frontend/src/components/SimpleChatbot.tsx:271` and `frontend/src/components/SimpleChatbot.tsx:280` reset client state when the active session is deleted; `backend/tests/test_document_security_routes.py:237` verifies authenticated list/load/delete ownership. | Confirmed slop signal | The UI and chat endpoint both assumed the session identifier remained valid after history mutations. | Revalidated `session_id` server-side and cleared stale active-session state client-side after delete. | Any stateful chat identifier must be rechecked at the backend boundary and invalidated in the UI when ownership changes. |
 
 **Aggressive Review Targets**
-- Repo-wide triage still reports high source-augmented risk, especially broad exception masking in large service modules and credential examples in local `.env`. Those were outside this scoped prompt and should be handled in a separate pass.
-- Two auth modules still exist. They now share policy, but long-term cleanup should consolidate route dependencies onto one active auth module and remove the legacy helper once call sites are proven absent.
-- `ALLOW_CLIENT_ID_FALLBACK` remains a separate dev-only identity escape hatch. It is not used by the new bypass, but it should eventually be folded into the same auth policy or removed.
+- The whole-repo scanner still reports broad exception masking and secret-risk hits in unrelated modules. Those are real review targets, but they are outside this prompt’s chat-session scope.
+- `backend/app/main.py` remains a large hub and still deserves a separate architectural decomposition pass. This repair only tightened the chat request/session boundary inside that file.
+- `frontend/src/lib/api.ts` is still a broad client hub. The new chat parsing is centralized there intentionally, but a later cleanup could split domain-specific helpers into a dedicated authenticated chat API module if the repo adopts that pattern consistently.
 
 **Healthy Signals**
-- Development bypass is opt-in and requires both development environment and an explicit bypass flag.
-- Production ignores bypass flags and returns `401` without credentials.
-- The bypass account is deterministic: `ysaichaithu2005@gmail.com` by default, overridable by explicit dev env.
-- Frontend and backend use matching env names and both default to production-safe values.
+- Chat-session ownership is now tested end-to-end on the authenticated routes.
+- Invalid `context_type` is rejected by the backend instead of being normalized heuristically in the UI.
+- The frontend no longer re-validates session payloads ad hoc inside `ChatHistory` and `SimpleChatbot`; the boundary now has one parsing owner.
+- Deleting the active chat session no longer leaves the chatbot pinned to a stale `sessionId`.
+
+**Workflow Gaps**
+- The Graphify report is dated `2026-05-17`, so the structural graph view predates these repairs.
+- The repository still relies heavily on source-inspection tests on the frontend. They are useful as architecture guards, but they do not replace runtime component tests.
 
 **Highest-Risk Clusters**
-- Auth/config boundary: user identity flows into document ownership and RAG tenant filters. Root cause risk was split policy; repair centralizes backend policy and mirrors only the UI/session affordance in the frontend.
-- Retrieval/cache boundary: prior prompt touched graph god nodes. The repaired state keeps BM25 in `DocumentDatabase`, cache policy in `SemanticSearchCache`, and ranking/merge logic in `RAGService`.
+- Authenticated chat-session boundary: backend route schema, chat endpoint reuse, and frontend session consumers all touched the same identity-bearing payloads. The root cause was contract duplication without one validating owner.
+- Frontend transport hub: `api.ts` is a shared boundary, so stale fields and weak parsing there become repo-wide maintenance risk quickly.
+
+**Likely Root Causes**
+- Context starvation during earlier chat-history work: route additions, UI fixes, and session-state changes were made in separate files without consolidating the shared contract first.
+- Over-trust in typed annotations: `Dict[str, Any]` and interface annotations made the flow look structured even when the runtime boundary was still permissive.
+- Compatibility bias: stale fields and overloads were kept “just in case” instead of being proven necessary.
 
 **Permanent Fixes**
-- Added `backend/app/auth_config.py` as the single backend policy owner for `APP_ENV`, `AUTH_BYPASS_ENABLED`, `DEV_AUTH_EMAIL`, and `DEV_AUTH_USER_ID`.
-- Updated active backend auth to accept missing credentials only when the development bypass is explicitly enabled.
-- Updated legacy auth helper to share the same bypass and production-default policy.
-- Added frontend `devAuth` helper so local protected routes and API calls bypass Supabase only in Vite dev and only when explicitly enabled.
-- Documented backend/frontend production and development auth envs in `.env.example`, frontend env examples, and `README.md`.
-- Added regression tests for development bypass, production denial, and optional auth.
+- Added named response models for authenticated chat-session routes in `backend/app/document_routes.py`.
+- Tightened `ChatRequest` in `backend/app/main.py` with `Literal` context typing and `Field(default_factory=list)` for history.
+- Centralized chat-session and chat-response parsing in `frontend/src/lib/api.ts`.
+- Removed the backend-unused `document_context` chat transport field and the unused overload-based `sendChatMessage` compatibility shim.
+- Simplified `ChatHistory` and `SimpleChatbot` so they consume validated chat payloads instead of reinterpreting raw API shapes.
+- Added regression coverage for route ownership, invalid `context_type`, and the new frontend architecture guards.
 
 **Anti-Slop Gates**
-- Never add route-level auth bypass conditionals; use `auth_config.auth_bypass_enabled()`.
-- Any identity shortcut must prove production-deny behavior with a test.
-- Frontend bypass must remain gated by `import.meta.env.DEV` plus `VITE_APP_ENV=development`.
-- Do not use `client_id` query parameters as a substitute for authenticated user identity outside explicitly gated development paths.
+- Do not return `Dict[str, Any}` for authenticated chat endpoints when the payload shape is stable enough to model explicitly.
+- Do not add UI-level payload normalization when the shared API layer can own that validation once.
+- Remove stale transport fields as soon as no verified backend consumer exists.
+- Add a test whenever a chat-state mutation changes ownership, identifier lifetime, or schema guarantees.
 
 **Validation**
 - Read `graphify-out/GRAPH_REPORT.md` before raw source inspection.
 - Ran required triage: `python C:/Users/SAI/.codex/skills/audit-ai-slop/scripts/graphify_slop_scan.py --graphify-out graphify-out --source-root . --format markdown`.
-- Red tests observed before implementation: `python -m pytest backend\tests\test_auth_middleware.py` failed for missing dev bypass behavior.
-- Validation after fixes:
-  - `python -m pytest backend\tests\test_auth_middleware.py` -> 4 passed
-  - `python -m pytest backend\tests` -> 43 passed
-  - `python -m compileall backend\app` -> passed
-  - `cd frontend && npm test` -> 7 passed
-  - `cd frontend && npm run build` -> passed, with existing chunk-size/Browserslist warnings
-- Process hygiene: checked running recent shell/node processes; no task-created stale terminal or server process remained.
-- Residual risk: Graphify output is dated 2026-05-17 and predates these repairs, so confidence remains Medium until the graph is regenerated.
+- Validation after repair:
+  - `python -m pytest backend/tests/test_document_security_routes.py backend/tests/test_chat_history.py` -> 10 passed
+  - `cd frontend && npm test` -> 12 passed
+  - `cd frontend && npm run build` -> passed, with existing Browserslist and chunk-size warnings
+- Residual risk:
+  - The whole-repo Graphify scanner still reports high unrelated risk outside this prompt.
+  - The graph snapshot predates these repairs, so confidence is Medium rather than High until Graphify is regenerated.
 
 ---
 

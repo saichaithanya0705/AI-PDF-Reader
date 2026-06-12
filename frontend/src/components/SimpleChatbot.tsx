@@ -3,7 +3,7 @@ import { MessageSquare, Send, X, Loader2, Bot, User, Minimize2, History, FileTex
 import { useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import ChatHistory from './ChatHistory';
-import { apiRequest } from '../lib/api';
+import { getChatSession, sendChatMessage } from '../lib/api';
 
 interface RelatedDocument {
   id: string;
@@ -33,15 +33,13 @@ interface SimpleChatbotProps {
   variant?: 'floating' | 'docked';
 }
 
-interface ChatMessageRecord {
-  role?: unknown;
-  content?: unknown;
-  created_at?: unknown;
-  metadata?: {
-    sources?: unknown;
-    search_results?: unknown;
-  };
-}
+const buildWelcomeMessage = (documentContext?: string): Message => ({
+  role: 'assistant',
+  content: documentContext
+    ? 'Hi! I can help you understand this document. Ask me anything about it!'
+    : 'Hi! I\'m your AI assistant. How can I help you today?',
+  timestamp: new Date(),
+});
 
 const SimpleChatbot: React.FC<SimpleChatbotProps> = ({
   documentId,
@@ -55,15 +53,7 @@ const SimpleChatbot: React.FC<SimpleChatbotProps> = ({
   variant = 'floating'
 }) => {
   const navigate = useNavigate();
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: 'assistant',
-      content: documentContext
-        ? 'Hi! I can help you understand this document. Ask me anything about it!'
-        : 'Hi! I\'m your AI assistant. How can I help you today?',
-      timestamp: new Date()
-    }
-  ]);
+  const [messages, setMessages] = useState<Message[]>(() => [buildWelcomeMessage(documentContext)]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -196,23 +186,20 @@ const SimpleChatbot: React.FC<SimpleChatbotProps> = ({
     setIsLoading(true);
 
     try {
-      const data = await apiRequest<Record<string, unknown>>('/api/chat', {
-        method: 'POST',
-        body: JSON.stringify({
-          message: inputMessage,
-          document_id: documentId,
-          current_page: currentPage,
-          context_type: viewType || (documentId ? 'pdf_viewer' : 'library'),
-          session_id: sessionId,  // NEW: Include session ID for history tracking
-          conversation_history: messages.slice(-5).map(m => ({
-            role: m.role,
-            content: m.content
-          }))
-        }),
+      const data = await sendChatMessage({
+        message: inputMessage,
+        documentId,
+        currentPage,
+        contextType: viewType || (documentId ? 'pdf_viewer' : 'library'),
+        sessionId,
+        conversationHistory: messages.slice(-5).map((message) => ({
+          role: message.role,
+          content: message.content,
+        })),
       });
 
       // Update session ID if it was created
-      if (typeof data.session_id === 'string' && !sessionId) {
+      if (typeof data.session_id === 'string' && data.session_id !== sessionId) {
         setSessionId(data.session_id);
       }
 
@@ -226,9 +213,7 @@ const SimpleChatbot: React.FC<SimpleChatbotProps> = ({
 
       const assistantMessage: Message = {
         role: 'assistant',
-        content: typeof data.response === 'string'
-          ? data.response
-          : 'I apologize, but I encountered an issue processing your request.',
+        content: data.response,
         timestamp: new Date(),
         relatedDocuments: relatedDocs
       };
@@ -258,25 +243,30 @@ const SimpleChatbot: React.FC<SimpleChatbotProps> = ({
 
   const loadSession = async (sessionIdToLoad: string) => {
     try {
-      const data = await apiRequest<Record<string, unknown>>(`/api/chat/sessions/${sessionIdToLoad}`);
-      const historyMessages = Array.isArray(data.messages) ? data.messages : [];
+      const data = await getChatSession(sessionIdToLoad);
+      const loadedMessages: Message[] = data.messages.map((message) => ({
+        role: message.role,
+        content: message.content,
+        timestamp: new Date(message.created_at),
+        relatedDocuments: normalizeRelatedDocuments(message.metadata?.sources || message.metadata?.search_results),
+      }));
 
-      // Convert messages from history format to Message format
-      const loadedMessages: Message[] = historyMessages
-        .filter((message): message is ChatMessageRecord => typeof message === 'object' && message !== null)
-        .map((message) => ({
-          role: message.role === 'user' ? 'user' : 'assistant',
-          content: typeof message.content === 'string' ? message.content : '',
-          timestamp: typeof message.created_at === 'string' ? new Date(message.created_at) : new Date(),
-          relatedDocuments: normalizeRelatedDocuments(message.metadata?.sources || message.metadata?.search_results),
-        }));
-
-      setMessages(loadedMessages);
+      setMessages(loadedMessages.length > 0 ? loadedMessages : [buildWelcomeMessage(documentContext)]);
       setSessionId(sessionIdToLoad);
     } catch (error) {
       console.error('Error loading session:', error);
       alert('Failed to load chat session');
+      throw error;
     }
+  };
+
+  const handleSessionDeleted = (deletedSessionId: string) => {
+    if (deletedSessionId !== sessionId) {
+      return;
+    }
+
+    setSessionId(null);
+    setMessages([buildWelcomeMessage(documentContext)]);
   };
 
   const handleNavigateToDocument = (docId: string, page: number) => {
@@ -534,6 +524,8 @@ const SimpleChatbot: React.FC<SimpleChatbotProps> = ({
       {/* Chat History Modal */}
       {showHistory && (
         <ChatHistory
+          activeSessionId={sessionId}
+          onDeleteSession={handleSessionDeleted}
           onLoadSession={loadSession}
           onClose={() => setShowHistory(false)}
         />

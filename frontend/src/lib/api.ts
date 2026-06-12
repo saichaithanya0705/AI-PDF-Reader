@@ -67,6 +67,10 @@ const handleAuthFailure = async (): Promise<never> => {
   throw new ApiError('Session expired. Please login again.', 401);
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> => (
+  typeof value === 'object' && value !== null
+);
+
 export const getDevClientIdParam = (clientId?: string): URLSearchParams => {
   const params = new URLSearchParams();
   if (isDevAuthBypassEnabled() && clientId?.trim()) {
@@ -198,6 +202,198 @@ export async function getDocument<T = unknown>(documentId: string) {
   return apiRequest<T>(`/api/documents/${encodeURIComponent(documentId)}`);
 }
 
+export type ChatContextType = 'library' | 'pdf_viewer';
+export type ChatMessageRole = 'user' | 'assistant';
+
+export interface ChatSessionSummary {
+  id: string;
+  title: string;
+  context_type: ChatContextType;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ChatSessionMessage {
+  id: string;
+  session_id: string;
+  role: ChatMessageRole;
+  content: string;
+  created_at: string;
+  metadata?: {
+    sources?: unknown;
+    search_results?: unknown;
+  } | null;
+}
+
+export interface ChatSessionDetailResponse {
+  status: string;
+  session: ChatSessionSummary;
+  messages: ChatSessionMessage[];
+  count: number;
+}
+
+export interface ChatSessionListResponse {
+  status: string;
+  sessions: ChatSessionSummary[];
+  count: number;
+}
+
+export interface SendChatMessageInput {
+  message: string;
+  documentId?: string;
+  currentPage?: number;
+  contextType?: ChatContextType;
+  sessionId?: string | null;
+  conversationHistory?: Array<{ role: ChatMessageRole; content: string }>;
+}
+
+export interface SendChatMessageResponse {
+  response: string;
+  related_documents?: unknown;
+  sources?: unknown;
+  context?: unknown;
+  session_id?: string;
+}
+
+export interface DeleteChatSessionResponse {
+  status: string;
+  message: string;
+}
+
+const isChatContextType = (value: unknown): value is ChatContextType => (
+  value === 'library' || value === 'pdf_viewer'
+);
+
+const isChatMessageRole = (value: unknown): value is ChatMessageRole => (
+  value === 'user' || value === 'assistant'
+);
+
+const parseChatSessionSummary = (value: unknown, responseName: string): ChatSessionSummary => {
+  if (!isRecord(value)) {
+    throw new ApiError(`Malformed ${responseName}: expected session object.`, 500, value);
+  }
+
+  const { id, title, context_type, created_at, updated_at } = value;
+  if (
+    typeof id !== 'string' ||
+    typeof title !== 'string' ||
+    !isChatContextType(context_type) ||
+    typeof created_at !== 'string' ||
+    typeof updated_at !== 'string'
+  ) {
+    throw new ApiError(`Malformed ${responseName}: invalid session fields.`, 500, value);
+  }
+
+  return { id, title, context_type, created_at, updated_at };
+};
+
+const parseChatSessionMessage = (value: unknown): ChatSessionMessage => {
+  if (!isRecord(value)) {
+    throw new ApiError('Malformed chat session detail response: expected message object.', 500, value);
+  }
+
+  const { id, session_id, role, content, created_at, metadata } = value;
+  if (
+    typeof id !== 'string' ||
+    typeof session_id !== 'string' ||
+    !isChatMessageRole(role) ||
+    typeof content !== 'string' ||
+    typeof created_at !== 'string'
+  ) {
+    throw new ApiError('Malformed chat session detail response: invalid message fields.', 500, value);
+  }
+
+  if (metadata !== undefined && metadata !== null && !isRecord(metadata)) {
+    throw new ApiError('Malformed chat session detail response: invalid message metadata.', 500, value);
+  }
+
+  return {
+    id,
+    session_id,
+    role,
+    content,
+    created_at,
+    metadata: metadata ?? null,
+  };
+};
+
+const parseChatSessionListResponse = (value: unknown): ChatSessionListResponse => {
+  if (!isRecord(value) || !Array.isArray(value.sessions) || typeof value.count !== 'number') {
+    throw new ApiError('Malformed chat session list response.', 500, value);
+  }
+
+  return {
+    status: typeof value.status === 'string' ? value.status : 'success',
+    sessions: value.sessions.map((session) => parseChatSessionSummary(session, 'chat session list response')),
+    count: value.count,
+  };
+};
+
+const parseChatSessionDetailResponse = (value: unknown): ChatSessionDetailResponse => {
+  if (!isRecord(value) || !Array.isArray(value.messages) || typeof value.count !== 'number') {
+    throw new ApiError('Malformed chat session detail response.', 500, value);
+  }
+
+  return {
+    status: typeof value.status === 'string' ? value.status : 'success',
+    session: parseChatSessionSummary(value.session, 'chat session detail response'),
+    messages: value.messages.map(parseChatSessionMessage),
+    count: value.count,
+  };
+};
+
+const parseDeleteChatSessionResponse = (value: unknown): DeleteChatSessionResponse => {
+  if (!isRecord(value) || typeof value.status !== 'string' || typeof value.message !== 'string') {
+    throw new ApiError('Malformed delete chat session response.', 500, value);
+  }
+
+  return {
+    status: value.status,
+    message: value.message,
+  };
+};
+
+const parseSendChatMessageResponse = (value: unknown): SendChatMessageResponse => {
+  if (!isRecord(value) || typeof value.response !== 'string') {
+    throw new ApiError('Malformed chat response.', 500, value);
+  }
+
+  if (value.session_id !== undefined && typeof value.session_id !== 'string') {
+    throw new ApiError('Malformed chat response: invalid session identifier.', 500, value);
+  }
+
+  return {
+    response: value.response,
+    related_documents: value.related_documents,
+    sources: value.sources,
+    context: value.context,
+    session_id: value.session_id,
+  };
+}
+
+export async function listChatSessions(limit = 50) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  const response = await apiRequest<unknown>(toEndpointWithParams('/api/chat/sessions', params));
+  return parseChatSessionListResponse(response);
+}
+
+export async function getChatSession(sessionId: string) {
+  const response = await apiRequest<unknown>(
+    `/api/chat/sessions/${encodeURIComponent(sessionId)}`
+  );
+  return parseChatSessionDetailResponse(response);
+}
+
+export async function deleteChatSession(sessionId: string) {
+  const response = await apiRequest<unknown>(
+    `/api/chat/sessions/${encodeURIComponent(sessionId)}`,
+    {
+      method: 'DELETE',
+    }
+  );
+  return parseDeleteChatSessionResponse(response);
+}
+
 export async function uploadDocument<T = unknown>(
   file: File,
   clientId?: string,
@@ -285,21 +481,19 @@ export async function getInsights(
   return apiRequest(`/api/insights/${encodeURIComponent(documentId)}?${params}`);
 }
 
-export async function sendChatMessage(
-  message: string,
-  documentId?: string,
-  documentContext?: string,
-  conversationHistory: Array<{ role: string; content: string }> = []
-) {
-  return apiRequest('/api/chat', {
+export async function sendChatMessage(payload: SendChatMessageInput) {
+  const response = await apiRequest<unknown>('/api/chat', {
     method: 'POST',
     body: JSON.stringify({
-      message,
-      document_id: documentId,
-      document_context: documentContext,
-      conversation_history: conversationHistory,
+      message: payload.message,
+      document_id: payload.documentId,
+      current_page: payload.currentPage,
+      context_type: payload.contextType,
+      session_id: payload.sessionId ?? undefined,
+      conversation_history: payload.conversationHistory ?? [],
     }),
   });
+  return parseSendChatMessageResponse(response);
 }
 
 export async function analyzeTextSelection(

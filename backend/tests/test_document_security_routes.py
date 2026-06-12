@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 import sys
 import types
@@ -5,6 +6,7 @@ import types
 import pytest
 from fastapi.testclient import TestClient
 
+from backend.app.chat_history import ChatHistoryManager
 from backend.app.database import DocumentDatabase
 
 
@@ -230,6 +232,70 @@ def test_pdf_serving_requires_owned_document_and_omits_wildcard_cors(secured_app
     assert served.status_code == 200
     assert served.headers.get("content-type") == "application/pdf"
     assert served.headers.get("access-control-allow-origin") is None
+
+
+def test_chat_history_routes_require_owned_authenticated_sessions(secured_app, monkeypatch, tmp_path):
+    _main, _database, _docs_dir, client = secured_app
+    import backend.app.chat_history as chat_history
+
+    manager = ChatHistoryManager(tmp_path / "chat_history.db")
+    monkeypatch.setattr(chat_history, "_chat_history_manager", manager)
+
+    owned_session_id = asyncio.run(
+        manager.create_session(USER_ID, title="Owned session", context_type="library")
+    )
+    asyncio.run(
+        manager.save_message(
+            user_id=USER_ID,
+            session_id=owned_session_id,
+            role="user",
+            content="hello from owner",
+        )
+    )
+
+    other_session_id = asyncio.run(
+        manager.create_session(OTHER_USER_ID, title="Other session", context_type="pdf_viewer")
+    )
+    asyncio.run(
+        manager.save_message(
+            user_id=OTHER_USER_ID,
+            session_id=other_session_id,
+            role="user",
+            content="hello from other user",
+        )
+    )
+
+    listed = client.get("/api/chat/sessions", headers=AUTH_HEADERS)
+
+    assert listed.status_code == 200
+    assert [session["id"] for session in listed.json()["sessions"]] == [owned_session_id]
+
+    loaded = client.get(f"/api/chat/sessions/{owned_session_id}", headers=AUTH_HEADERS)
+
+    assert loaded.status_code == 200
+    assert loaded.json()["session"]["id"] == owned_session_id
+    assert loaded.json()["messages"][0]["content"] == "hello from owner"
+
+    denied = client.get(f"/api/chat/sessions/{other_session_id}", headers=AUTH_HEADERS)
+
+    assert denied.status_code == 404
+
+    deleted = client.delete(f"/api/chat/sessions/{owned_session_id}", headers=AUTH_HEADERS)
+
+    assert deleted.status_code == 200
+    assert asyncio.run(manager.get_session(owned_session_id, USER_ID)) is None
+    assert asyncio.run(manager.get_session_history(owned_session_id)) == []
+
+
+def test_chat_session_creation_rejects_unknown_context_type(secured_app):
+    _main, _database, _docs_dir, client = secured_app
+
+    response = client.post(
+        "/api/chat/sessions?context_type=invalid",
+        headers=AUTH_HEADERS,
+    )
+
+    assert response.status_code == 422
 
 
 def test_audio_and_podcast_require_owned_document(secured_app, monkeypatch):

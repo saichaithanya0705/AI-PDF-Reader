@@ -12,6 +12,8 @@ const pdfJsSource = readFileSync(new URL('../src/utils/pdfJsInitializer.ts', imp
 const simpleViewerSource = readFileSync(new URL('../src/components/SimplePDFViewer.tsx', import.meta.url), 'utf8');
 const readerPageSource = readFileSync(new URL('../src/pages/ReaderPage.tsx', import.meta.url), 'utf8');
 const simpleChatbotSource = readFileSync(new URL('../src/components/SimpleChatbot.tsx', import.meta.url), 'utf8');
+const chatHistorySource = readFileSync(new URL('../src/components/ChatHistory.tsx', import.meta.url), 'utf8');
+const apiSource = readFileSync(new URL('../src/lib/api.ts', import.meta.url), 'utf8');
 
 const loadTypeScriptModule = (relativePath) => {
   const fileUrl = new URL(relativePath, import.meta.url);
@@ -68,6 +70,24 @@ test('ReaderPage renders only one chatbot variant per viewport', () => {
 test('SimpleChatbot does not use timeout-based focus band-aids', () => {
   assert.equal(simpleChatbotSource.includes('setTimeout(() => inputRef.current?.focus'), false);
   assert.equal(simpleChatbotSource.includes('inputRef.current?.focus();\n      },'), false);
+});
+
+test('chat history flow uses centralized authenticated helpers instead of raw session fetch strings', () => {
+  assert.equal(chatHistorySource.includes("apiRequest<Record<string, unknown>>('/api/chat/sessions')"), false);
+  assert.equal(chatHistorySource.includes('setSessions(nextSessions)'), false);
+  assert.equal(chatHistorySource.includes('listChatSessions()'), true);
+  assert.equal(chatHistorySource.includes('deleteChatSession(sessionId)'), true);
+  assert.equal(simpleChatbotSource.includes("apiRequest<Record<string, unknown>>(`/api/chat/sessions/${sessionIdToLoad}`)"), false);
+  assert.equal(simpleChatbotSource.includes('getChatSession(sessionIdToLoad)'), true);
+  assert.equal(simpleChatbotSource.includes('sendChatMessage({'), true);
+});
+
+test('chat api validates session payloads centrally and drops stale document_context transport', () => {
+  assert.equal(apiSource.includes('parseChatSessionListResponse'), true);
+  assert.equal(apiSource.includes('parseChatSessionDetailResponse'), true);
+  assert.equal(apiSource.includes('parseSendChatMessageResponse'), true);
+  assert.equal(apiSource.includes('document_context:'), false);
+  assert.equal(apiSource.includes('inputOrMessage: SendChatMessageInput | string'), false);
 });
 
 test('PDFContext validates upload response shape before storing documents', () => {

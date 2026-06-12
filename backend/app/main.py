@@ -17,9 +17,9 @@ try:
     import asyncio
     import uuid
     from pathlib import Path
-    from typing import List, Dict, Any, Optional
+    from typing import List, Dict, Any, Optional, Literal
     from fastapi import FastAPI, UploadFile, File, Form, BackgroundTasks, WebSocket, WebSocketDisconnect, HTTPException, Query, Request, Depends
-    from pydantic import BaseModel
+    from pydantic import BaseModel, Field
     from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
     from fastapi.staticfiles import StaticFiles
     from fastapi.middleware.cors import CORSMiddleware
@@ -1636,10 +1636,10 @@ async def get_library_statistics(current_user: dict = Depends(get_current_user))
 class ChatRequest(BaseModel):
     message: str
     document_id: Optional[str] = None
-    current_page: Optional[int] = None  # NEW: Current page number in PDF viewer
-    context_type: str = "library"  # NEW: "library" or "pdf_viewer"
-    conversation_history: Optional[List[Dict[str, str]]] = []
-    session_id: Optional[str] = None  # NEW: Chat session ID for history tracking
+    current_page: Optional[int] = None
+    context_type: Literal["library", "pdf_viewer"] = "library"
+    conversation_history: List[Dict[str, str]] = Field(default_factory=list)
+    session_id: Optional[str] = None
 
 @app.post("/api/chat")
 async def chat_endpoint(
@@ -1673,8 +1673,14 @@ async def chat_endpoint(
         # Initialize chat history manager
         chat_mgr = get_chat_history_manager()
         
-        # Create or get session
+        # Revalidate the requested session against the authenticated user.
         session_id = request.session_id
+        if session_id:
+            existing_session = await chat_mgr.get_session(session_id, user_id)
+            if not existing_session:
+                print(f"⚠️ Session {session_id} missing or unauthorized for user {user_id}; creating a new session")
+                session_id = None
+
         if not session_id:
             print("🆕 Creating new chat session...")
             session_id = await chat_mgr.create_session(

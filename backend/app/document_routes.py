@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException, Query, Path, Depends
 from pydantic import BaseModel
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Literal
 from pathlib import Path as FilePath
 from datetime import datetime
 import json
@@ -15,6 +15,49 @@ from .database import db, Document
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["documents"])
+
+ChatContextType = Literal["library", "pdf_viewer"]
+
+
+class ChatSessionPayload(BaseModel):
+    id: str
+    title: str
+    context_type: ChatContextType
+    created_at: str
+    updated_at: str
+
+
+class ChatMessagePayload(BaseModel):
+    id: str
+    session_id: str
+    role: str
+    content: str
+    metadata: Optional[Dict[str, Any]] = None
+    created_at: str
+
+
+class CreateChatSessionResponse(BaseModel):
+    status: str
+    session_id: str
+    message: str
+
+
+class ListChatSessionsResponse(BaseModel):
+    status: str
+    sessions: List[ChatSessionPayload]
+    count: int
+
+
+class GetChatSessionResponse(BaseModel):
+    status: str
+    session: ChatSessionPayload
+    messages: List[ChatMessagePayload]
+    count: int
+
+
+class DeleteChatSessionResponse(BaseModel):
+    status: str
+    message: str
 
 
 @router.get("/documents", response_model=Dict[str, Any])
@@ -228,10 +271,10 @@ async def health_check():
 # Chat History Endpoints (SQLite records, Supabase-authenticated user)
 # ==============================================================================
 
-@router.post("/chat/sessions", response_model=Dict[str, Any])
+@router.post("/chat/sessions", response_model=CreateChatSessionResponse)
 async def create_chat_session_endpoint(
     title: Optional[str] = Query(None, description="Session title"),
-    context_type: str = Query("library", description="Context type: library or pdf_viewer"),
+    context_type: ChatContextType = Query("library", description="Context type: library or pdf_viewer"),
     current_user: dict = Depends(get_current_user)
 ):
     """
@@ -262,7 +305,7 @@ async def create_chat_session_endpoint(
         raise HTTPException(status_code=500, detail=f"Failed to create session: {str(e)}")
 
 
-@router.get("/chat/sessions", response_model=Dict[str, Any])
+@router.get("/chat/sessions", response_model=ListChatSessionsResponse)
 async def list_chat_sessions_endpoint(
     limit: int = Query(50, ge=1, le=100, description="Maximum sessions to return"),
     current_user: dict = Depends(get_current_user)
@@ -296,7 +339,7 @@ async def list_chat_sessions_endpoint(
         raise HTTPException(status_code=500, detail=f"Failed to list sessions: {str(e)}")
 
 
-@router.get("/chat/sessions/{session_id}", response_model=Dict[str, Any])
+@router.get("/chat/sessions/{session_id}", response_model=GetChatSessionResponse)
 async def get_chat_session_endpoint(
     session_id: str = Path(..., description="Session ID"),
     current_user: dict = Depends(get_current_user)
@@ -332,7 +375,7 @@ async def get_chat_session_endpoint(
         raise HTTPException(status_code=500, detail=f"Failed to get session: {str(e)}")
 
 
-@router.delete("/chat/sessions/{session_id}", response_model=Dict[str, Any])
+@router.delete("/chat/sessions/{session_id}", response_model=DeleteChatSessionResponse)
 async def delete_chat_session_endpoint(
     session_id: str = Path(..., description="Session ID"),
     current_user: dict = Depends(get_current_user)
