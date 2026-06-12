@@ -12,6 +12,11 @@ import {
   uploadContextFiles,
   uploadDocument as uploadDocumentApi,
 } from '../lib/api';
+import {
+  getBulkUploadedDocumentSeeds,
+  normalizeBulkUploadResponse,
+  type BulkUploadResult,
+} from './bulkUploadContract';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -67,17 +72,13 @@ export interface Insight {
   relevance: number;
 }
 
-interface BulkUploadFileResult {
-  job_id?: string;
-  filename?: string;
-  file_url?: string;
-  status?: string;
-  is_duplicate?: boolean;
-}
-
 interface ActiveUploadResult {
   job_id: string;
   file_url?: string;
+}
+
+export interface BulkUploadContextResult extends BulkUploadResult {
+  documents: PDFDocument[];
 }
 
 interface PDFContextType {
@@ -89,7 +90,7 @@ interface PDFContextType {
   isOnline: boolean;
   isLoadingDocuments: boolean;
   uploadDocument: (file: File, clientId: string, persona?: string, job?: string) => Promise<string>;
-  uploadBulkDocuments: (files: File[], clientId: string, persona?: string, job?: string, considerPrevious?: boolean) => Promise<string[]>;
+  uploadBulkDocuments: (files: File[], clientId: string, persona?: string, job?: string, considerPrevious?: boolean) => Promise<BulkUploadContextResult>;
   setCurrentDocument: (doc: PDFDocument | null) => void;
   loadDocument: (documentId: string) => Promise<PDFDocument | null>;
   getRelatedSections: (documentId: string, currentPage: number) => Promise<RelatedSection[]>;
@@ -417,39 +418,6 @@ const parseActiveUploadResult = (data: unknown): ActiveUploadResult => {
   };
 };
 
-const normalizeBulkUploadResults = (data: unknown, files: File[]): BulkUploadFileResult[] => {
-  if (!isRecord(data)) {
-    throw new Error('Bulk upload response was not a valid object');
-  }
-
-  if (Array.isArray(data.files)) {
-    return data.files
-      .filter(isRecord)
-      .map((result) => ({
-        job_id: asString(result.job_id),
-        filename: asString(result.filename),
-        file_url: asString(result.file_url),
-        status: asString(result.status),
-        is_duplicate: typeof result.is_duplicate === 'boolean' ? result.is_duplicate : undefined,
-      }));
-  }
-
-  const legacyJobIds = data.job_ids;
-  if (Array.isArray(legacyJobIds)) {
-    const legacyFileUrls = Array.isArray(data.file_urls) ? data.file_urls : [];
-
-    return files.map((file, index) => ({
-      job_id: asString(legacyJobIds[index]),
-      filename: file.name,
-      file_url: asString(legacyFileUrls[index]),
-      status: 'queued',
-      is_duplicate: false,
-    }));
-  }
-
-  throw new Error('Bulk upload response did not include uploaded file records');
-};
-
 export const PDFProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [documents, setDocuments] = useState<PDFDocument[]>([]);
   const [currentDocument, setCurrentDocument] = useState<PDFDocument | null>(null);
@@ -525,33 +493,34 @@ export const PDFProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     persona?: string,
     job?: string,
     considerPrevious?: boolean
-  ): Promise<string[]> => {
+  ): Promise<BulkUploadContextResult> => {
     const data = await uploadContextFiles(files, clientId, persona, job, considerPrevious);
-    const fileResults = normalizeBulkUploadResults(data, files);
+    const uploadResult = normalizeBulkUploadResponse(data, files);
 
-    const newDocuments: PDFDocument[] = fileResults
-      .map((result, index) => {
-        if (!result.job_id) return null;
-        const sourceFile = files[index];
-        const fallbackName = sourceFile?.name || result.filename || 'Document';
-        const fallbackSize = sourceFile?.size || 0;
+    const newDocuments: PDFDocument[] = getBulkUploadedDocumentSeeds(uploadResult, files)
+      .map((seed) => {
+        const fallbackUrl = seed.fileUrl
+          ? ''
+          : typeof File !== 'undefined' && seed.sourceFile instanceof File
+            ? URL.createObjectURL(seed.sourceFile)
+            : '';
 
         return {
-          id: result.job_id,
-          name: result.filename || fallbackName,
+          id: seed.id,
+          name: seed.name,
           uploadDate: new Date(),
           lastUploaded: new Date(),
-          url: normalizeBackendUrl(result.file_url, undefined, sourceFile ? URL.createObjectURL(sourceFile) : ''),
-          size: fallbackSize,
+          url: normalizeBackendUrl(seed.fileUrl, undefined, fallbackUrl),
+          size: seed.size,
         };
-      })
-      .filter((document): document is PDFDocument => Boolean(document));
+      });
 
     mergeAndPersistDocuments(newDocuments);
 
-    return fileResults
-      .map((result) => result.job_id)
-      .filter((jobId): jobId is string => Boolean(jobId));
+    return {
+      ...uploadResult,
+      documents: newDocuments,
+    };
   }, [mergeAndPersistDocuments]);
 
   const updateDocuments = useCallback((newDocs: PDFDocument[]) => {

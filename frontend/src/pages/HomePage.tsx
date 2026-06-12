@@ -418,11 +418,15 @@ const HomePage: React.FC = () => {
       }
 
       try {
-        const jobIds = await uploadBulkDocuments(files, clientId, currentPersona, currentJob, considerPrevious);
-        console.log('Bulk Job IDs:', jobIds);
+        const result = await uploadBulkDocuments(files, clientId, currentPersona, currentJob, considerPrevious);
+        const failedCount = result.files.filter((file) => file.status === 'failed' || file.error).length;
+        console.log('Bulk upload result:', result);
         setShowBulkUpload(false); // Hide upload zone after successful upload
-        // Show success message
-        alert(`Successfully uploaded ${files.length} valid documents to your intelligent library!`);
+        alert(
+          failedCount > 0
+            ? `Added ${result.documents.length} document(s) to your intelligent library. ${failedCount} file(s) failed.`
+            : `Successfully uploaded ${result.documents.length} document(s) to your intelligent library!`
+        );
       } catch (error) {
         console.error('Bulk upload error:', error);
         alert('Upload failed. Please try again.');

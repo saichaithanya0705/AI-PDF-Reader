@@ -1,12 +1,42 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { test } from 'node:test';
+import vm from 'node:vm';
+import ts from 'typescript';
 
+const require = createRequire(import.meta.url);
 const source = readFileSync(new URL('../src/context/PDFContext.tsx', import.meta.url), 'utf8');
+const bulkUploadContractSource = readFileSync(new URL('../src/context/bulkUploadContract.ts', import.meta.url), 'utf8');
 const pdfJsSource = readFileSync(new URL('../src/utils/pdfJsInitializer.ts', import.meta.url), 'utf8');
 const simpleViewerSource = readFileSync(new URL('../src/components/SimplePDFViewer.tsx', import.meta.url), 'utf8');
 const readerPageSource = readFileSync(new URL('../src/pages/ReaderPage.tsx', import.meta.url), 'utf8');
 const simpleChatbotSource = readFileSync(new URL('../src/components/SimpleChatbot.tsx', import.meta.url), 'utf8');
+
+const loadTypeScriptModule = (relativePath) => {
+  const fileUrl = new URL(relativePath, import.meta.url);
+  const moduleSource = readFileSync(fileUrl, 'utf8');
+  const output = ts.transpileModule(moduleSource, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2020,
+    },
+  }).outputText;
+  const module = { exports: {} };
+
+  vm.runInNewContext(output, {
+    module,
+    exports: module.exports,
+    require,
+  }, { filename: fileUrl.pathname });
+
+  return module.exports;
+};
+
+const {
+  getBulkUploadedDocumentSeeds,
+  normalizeBulkUploadResponse,
+} = loadTypeScriptModule('../src/context/bulkUploadContract.ts');
 
 test('PDFContext does not ship mock related-section fallback content', () => {
   assert.equal(source.includes('Fallback to mock data'), false);
@@ -42,6 +72,105 @@ test('SimpleChatbot does not use timeout-based focus band-aids', () => {
 
 test('PDFContext validates upload response shape before storing documents', () => {
   assert.equal(source.includes('parseActiveUploadResult'), true);
-  assert.equal(source.includes('normalizeBulkUploadResults'), true);
+  assert.equal(source.includes('normalizeBulkUploadResponse'), true);
+  assert.equal(source.includes('getBulkUploadedDocumentSeeds(uploadResult, files)'), true);
+  assert.equal(source.includes('mergeAndPersistDocuments(newDocuments)'), true);
+  assert.equal(source.includes('documents: newDocuments'), true);
   assert.equal(source.includes('Upload response did not include a valid document id'), true);
+});
+
+test('PDFContext bulk upload flow does not depend on legacy parallel arrays', () => {
+  assert.equal(source.includes('data.job_ids'), false);
+  assert.equal(source.includes('data.file_urls'), false);
+  assert.equal(bulkUploadContractSource.includes('collection_job_id'), true);
+  assert.equal(bulkUploadContractSource.includes('entry.job_id'), true);
+  assert.equal(bulkUploadContractSource.includes('entry.file_url'), true);
+});
+
+test('bulk upload contract maps backend files into library document seeds', () => {
+  const sourceFiles = [
+    { name: 'alpha.pdf', size: 100 },
+    { name: 'beta.pdf', size: 200 },
+  ];
+  const result = normalizeBulkUploadResponse({
+    detail: 'Accepted 2 new file(s) for multi-PDF ingestion',
+    collection_job_id: 'collection-1',
+    files: [
+      {
+        job_id: 'doc-alpha',
+        filename: 'alpha.pdf',
+        status: 'queued',
+        file_url: '/api/files/doc-alpha_alpha.pdf',
+        is_duplicate: false,
+      },
+      {
+        job_id: 'doc-beta',
+        filename: 'beta.pdf',
+        status: 'duplicate',
+        file_url: '/api/files/doc-beta_beta.pdf',
+        is_duplicate: true,
+      },
+    ],
+  }, sourceFiles);
+
+  assert.equal(result.collectionJobId, 'collection-1');
+  assert.deepEqual(result.files.map((file) => file.jobId), ['doc-alpha', 'doc-beta']);
+  assert.deepEqual(result.files.map((file) => file.fileUrl), [
+    '/api/files/doc-alpha_alpha.pdf',
+    '/api/files/doc-beta_beta.pdf',
+  ]);
+  assert.deepEqual(result.files.map((file) => file.isDuplicate), [false, true]);
+
+  assert.deepEqual(JSON.parse(JSON.stringify(getBulkUploadedDocumentSeeds(result, sourceFiles))), [
+    {
+      id: 'doc-alpha',
+      name: 'alpha.pdf',
+      fileUrl: '/api/files/doc-alpha_alpha.pdf',
+      sourceFile: sourceFiles[0],
+      size: 100,
+    },
+    {
+      id: 'doc-beta',
+      name: 'beta.pdf',
+      fileUrl: '/api/files/doc-beta_beta.pdf',
+      sourceFile: sourceFiles[1],
+      size: 200,
+    },
+  ]);
+});
+
+test('bulk upload contract keeps failed files out of library document seeds', () => {
+  const sourceFiles = [
+    { name: 'alpha.pdf', size: 100 },
+    { name: 'broken.pdf', size: 20 },
+    { name: 'gamma.pdf', size: 300 },
+  ];
+  const result = normalizeBulkUploadResponse({
+    files: [
+      {
+        job_id: 'doc-alpha',
+        filename: 'alpha.pdf',
+        status: 'queued',
+        file_url: '/api/files/doc-alpha_alpha.pdf',
+      },
+      {
+        filename: 'broken.pdf',
+        status: 'failed',
+        error: 'Invalid PDF file',
+      },
+      {
+        job_id: 'doc-gamma',
+        filename: 'gamma.pdf',
+        status: 'queued',
+        file_url: '/api/files/doc-gamma_gamma.pdf',
+      },
+    ],
+  }, sourceFiles);
+
+  assert.equal(result.files.length, 3);
+  assert.equal(result.files[1].error, 'Invalid PDF file');
+  assert.deepEqual(getBulkUploadedDocumentSeeds(result, sourceFiles).map((seed) => seed.id), [
+    'doc-alpha',
+    'doc-gamma',
+  ]);
 });
