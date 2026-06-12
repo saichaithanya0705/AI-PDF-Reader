@@ -184,3 +184,71 @@ Confidence: Medium
 - Residual risk:
   - Whole-repo source-augmented scanner risk remains high outside this scoped prompt.
   - Dirty generated Python `__pycache__` files remain in the worktree and were intentionally not reverted or committed.
+
+---
+
+## Scoped AI Slop Audit - Protected PDF Rendering Boundary (2026-06-12)
+
+**Verdict**
+Score: 12/100, Minimal slop risk for the scoped protected-PDF rendering fix after repair
+Confidence: Medium
+
+**Why**
+- Graphify was read first. The relevant graph targets were Community 13 (`PDFProvider`, `ReaderPage`), Community 25 (PDF.js initialization), Community 8 (`apiRequest()` and authenticated API helpers), and the deployment nginx config outside the graph.
+- The required Graphify scanner still reports severe whole-repo source-augmented triage risk, but those findings are dominated by pre-existing backend hubs, local environment secret-risk hits, broad exception masking, and unrelated generated/static assets outside this prompt.
+- Source and production evidence showed the user-visible "Unable to load the protected PDF" was not an ownership failure: the authenticated document metadata and `/api/files/...` request succeeded, while the PDF.js worker failed because `.mjs` was served with the wrong MIME type.
+- The repair keeps security intact by preserving backend ownership checks, moving the PDF binary fetch through the authenticated API client, serving the worker as JavaScript, and deleting a stale unused PDF.js initializer that could attract future fixes into the wrong module.
+
+**Evidence**
+| Signal | Graph Evidence | Source Evidence | Classification | Likely Root Cause | Permanent Fix | Prevention Gate |
+|---|---|---|---|---|---|---|
+| Protected PDF rendering failed after successful auth because the PDF.js worker module was not importable | Community 25 isolates PDF.js initialization, while Community 13 owns reader rendering; the failure crossed reader and deployment boundaries. | `nginx_ssl.conf:32` now has a dedicated `.mjs` static location and `nginx_ssl.conf:35` maps `mjs` to `application/javascript`; production header validation returned `Content-Type: application/javascript`. | Confirmed slop signal, repaired | Frontend bundle output changed to `.mjs`, but nginx still used default `application/octet-stream` for that extension. | Added a scoped `.mjs` nginx location before the SPA fallback and reloaded validated nginx config. | Production deploy checks must validate module-worker MIME headers, not only that the JS bundle exists. |
+| The viewer previously delegated protected PDF binary transport to React-PDF/PDF.js header plumbing | Community 8 contains the authenticated API helper hub; Community 13 contains the active reader/viewer surface. | `frontend/src/lib/api.ts:174` centralizes authenticated blob fetches; `frontend/src/lib/api.ts:188` exposes `fetchAuthenticatedBytes()`; `frontend/src/components/SimplePDFViewer.tsx:72` fetches bytes through that API client; `frontend/src/components/SimplePDFViewer.tsx:313` passes `{ data }` via `file={pdfFile}`. | Confirmed slop signal, repaired | Auth and rendering concerns were coupled inside library transport, making failures look like ownership errors and hiding the actual worker failure. | Split the boundary: app-owned authenticated fetch first, PDF.js render of already-fetched `Uint8Array` second. | Protected binary endpoints should be fetched through `apiFetch`; rendering libraries should consume validated bytes or explicit object URLs only after the app owns auth errors. |
+| A stale PDF.js initializer module duplicated worker setup and pointed at the old non-module worker path | Graphify Community 25 lists `initializePDFJS()`, `loadPDFDocument()`, and `testUrlAccessibility()` as a separate PDF.js cluster, but source search found no production imports. | `frontend/src/utils/pdfJsInitializer.ts` was deleted; `frontend/tests/pdf-context-source.test.mjs:54` now guards the active `SimplePDFViewer` worker setup instead of reading the dead initializer. | Confirmed slop signal, repaired | Earlier PDF.js fallback work left an unused abstraction with stale assumptions, and the test suite kept asserting dead code. | Deleted the unused initializer and removed its source-only test, making `SimplePDFViewer` the sole active PDF.js worker owner. | Do not keep tests that preserve unused integration modules; source guards should target active runtime boundaries. |
+
+**Aggressive Review Targets**
+- `frontend/tests/pdf-context-source.test.mjs` still contains several source-inspection guards. They are useful architecture sentinels in this repo, but executable component tests would provide stronger evidence for reader behavior.
+- The whole-repo scanner still reports unrelated severe triage risk around secrets, broad exception masking, backend god nodes, and generated/static PDF assets. Those are outside this protected-PDF pass.
+- The Graphify snapshot is dated `2026-05-17`, so confidence remains Medium until graph output is regenerated after these repairs.
+
+**Healthy Signals**
+- The backend `/api/files/{filename}` route remains authenticated and ownership-filtered; the fix did not weaken auth for older PDFs.
+- Production verification showed the target PDF rendering as `1 / 1` with extracted text visible and voiceover enabled.
+- The stale PDF.js initializer is gone, so future worker/MIME fixes have one active owner.
+
+**Workflow Gaps**
+- The deploy pipeline did not validate MIME types for emitted ES module assets.
+- The frontend test stack does not currently run a browser/component test that exercises React-PDF end to end.
+
+**Highest-Risk Clusters**
+- PDF rendering boundary: viewer, authenticated binary fetch, worker asset MIME, and nginx SPA fallback all need to stay aligned. The previous failure looked like auth but was actually a worker module delivery problem.
+
+**Likely Root Causes**
+- Context split between frontend rendering and deployment config: the code fix focused on auth headers before the worker asset response was inspected.
+- Dead-integration residue: an unused PDF.js initializer with stale worker assumptions remained available as a false repair target.
+- Missing deploy-time asset checks: production validation covered login and route health but not module-worker MIME.
+
+**Permanent Fixes**
+- Added authenticated byte fetching via `fetchAuthenticatedBytes()` and rendered PDFs from `Uint8Array` data.
+- Added React-PDF load-error handling so worker/parser errors surface instead of collapsing into a generic protected-file message.
+- Added nginx `.mjs` MIME handling before the SPA fallback.
+- Added a worker URL cache-bust for the bad MIME migration window.
+- Deleted unused `frontend/src/utils/pdfJsInitializer.ts` and removed the test that kept it alive.
+
+**Anti-Slop Gates**
+- Validate emitted worker/module asset MIME headers after production builds.
+- Keep PDF.js worker ownership in one active module.
+- Prefer app-owned authenticated binary fetches for protected files.
+- Remove unused integration fallback modules instead of updating them speculatively.
+
+**Validation**
+- Read `graphify-out/GRAPH_REPORT.md` before raw source inspection.
+- Ran required triage: `python C:/Users/SAI/.codex/skills/audit-ai-slop/scripts/graphify_slop_scan.py --graphify-out graphify-out --source-root . --format markdown`.
+- Validation after repair:
+  - `cd frontend && npm test` -> 17 passed
+  - `cd frontend && npm run build` -> passed, with existing Browserslist, plugin timing, and chunk-size warnings
+  - Production nginx header check for `pdf.worker.min-*.mjs?v=20260612-mjs` -> `Content-Type: application/javascript`
+  - Production reader verification -> target PDF rendered as `1 / 1` with visible PDF text
+- Residual risk:
+  - Whole-repo source-augmented scanner risk remains high outside this scoped prompt.
+  - Dirty generated Python `__pycache__` files remain in the worktree and were intentionally not reverted or committed.
