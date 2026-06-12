@@ -2,6 +2,7 @@ import { FormEvent, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Loader2, Lock, Mail, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
+import { toAuthErrorMessage } from '../lib/authErrors';
 
 type LoginLocationState = {
   from?: {
@@ -40,11 +41,7 @@ const LoginPage = () => {
       // Redirect to the page they were trying to access, or library by default
       navigate(from, { replace: true });
     } catch (err) {
-      if (err instanceof Error) {
-        setFormError(err.message);
-      } else {
-        setFormError('Unable to sign in. Try again shortly.');
-      }
+      setFormError(toAuthErrorMessage(err));
     } finally {
       setIsSubmitting(false);
     }

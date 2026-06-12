@@ -2,6 +2,7 @@ import { FormEvent, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, BadgeCheck, Loader2, Mail, Shield, UserCog } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
+import { toAuthErrorMessage } from '../lib/authErrors';
 
 const SignupPage = () => {
   const navigate = useNavigate();
@@ -44,11 +45,7 @@ const SignupPage = () => {
         } 
       });
     } catch (err) {
-      if (err instanceof Error) {
-        setFormError(err.message);
-      } else {
-        setFormError('Unable to create account. Try again later.');
-      }
+      setFormError(toAuthErrorMessage(err));
     } finally {
       setIsSubmitting(false);
     }
