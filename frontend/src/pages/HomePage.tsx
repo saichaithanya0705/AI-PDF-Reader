@@ -39,6 +39,24 @@ type StoredDocument = {
   name?: string;
 };
 
+type UploadProgressStatus = 'progress' | 'complete' | 'error';
+
+type UploadProgressEntry = {
+  percent: number;
+  message: string;
+  status: UploadProgressStatus;
+};
+
+type UploadProgressState = Record<string, UploadProgressEntry>;
+
+type UploadSocketMessageType = 'progress' | 'complete' | 'processing_complete' | 'error';
+
+type UploadSocketMessage = {
+  type: UploadSocketMessageType;
+  jobId?: string;
+  progress: UploadProgressEntry;
+};
+
 interface MergeResult {
   merged_document?: {
     source_documents?: number;
@@ -56,6 +74,55 @@ interface SplitResult {
 const getErrorMessage = (error: unknown, fallback = 'Unexpected error') => (
   error instanceof Error ? error.message : fallback
 );
+
+const isRecord = (value: unknown): value is Record<string, unknown> => (
+  typeof value === 'object' && value !== null
+);
+
+const clampProgressPercent = (value: unknown, fallback: number): number => {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(100, Math.max(0, Math.round(parsed)));
+};
+
+const getUploadProgressMessage = (type: UploadSocketMessageType, data: Record<string, unknown>): string => {
+  const message = data.message;
+  if (typeof message === 'string' && message.trim()) {
+    return message;
+  }
+
+  if (type === 'error') return 'Processing failed';
+  if (type === 'complete' || type === 'processing_complete') return 'Processing complete';
+  return 'Processing...';
+};
+
+const normalizeUploadSocketMessage = (message: unknown): UploadSocketMessage | null => {
+  if (!isRecord(message)) return null;
+  const type = message.type;
+  if (type !== 'progress' && type !== 'complete' && type !== 'processing_complete' && type !== 'error') {
+    return null;
+  }
+
+  const data = isRecord(message.data) ? message.data : {};
+  const jobId = typeof message.job_id === 'string' && message.job_id.trim()
+    ? message.job_id
+    : undefined;
+  const status: UploadProgressStatus = type === 'error'
+    ? 'error'
+    : type === 'progress'
+      ? 'progress'
+      : 'complete';
+
+  return {
+    type,
+    jobId,
+    progress: {
+      percent: clampProgressPercent(data.percent, type === 'progress' ? 0 : 100),
+      message: getUploadProgressMessage(type, data),
+      status,
+    },
+  };
+};
 
 const getStoredPageCount = (metadata: unknown, fallback = 10): number => {
   if (!metadata || typeof metadata !== 'object') {
@@ -132,6 +199,7 @@ const HomePage: React.FC = () => {
 
   const [clientId, setClientId] = useState<string>('');
   const [wsStatus, setWsStatus] = useState<'connecting' | 'connected' | 'disconnected' | 'error'>('disconnected');
+  const [uploadProgress, setUploadProgress] = useState<UploadProgressState>({});
 
   // Generate clientId on mount and load saved persona/job
   useEffect(() => {
@@ -180,6 +248,15 @@ const HomePage: React.FC = () => {
     let ws: WebSocket | null = null;
     let isComponentMounted = true;
 
+    const clearUploadProgress = (jobId: string) => {
+      setUploadProgress((previousProgress) => {
+        if (!(jobId in previousProgress)) return previousProgress;
+        const nextProgress = { ...previousProgress };
+        delete nextProgress[jobId];
+        return nextProgress;
+      });
+    };
+
     const connectWebSocket = () => {
       if (!isComponentMounted) return;
 
@@ -202,15 +279,38 @@ const HomePage: React.FC = () => {
           try {
             const message = JSON.parse(event.data);
             console.log('📨 WebSocket message received:', message);
+            const uploadMessage = normalizeUploadSocketMessage(message);
 
-            switch (message.type) {
-              case 'processing_complete':
+            if (uploadMessage) {
+              const { type, jobId, progress } = uploadMessage;
+
+              if (jobId) {
+                setUploadProgress((previousProgress) => ({
+                  ...previousProgress,
+                  [jobId]: progress,
+                }));
+              }
+
+              if (type === 'complete' || type === 'processing_complete') {
                 console.log('✅ Document processing completed:', message.data);
-                setTimeout(() => fetchAllDocuments(), 1000);
-                break;
-              default:
-                console.log('📄 WebSocket message:', message.type);
+                window.setTimeout(() => {
+                  if (!isComponentMounted) return;
+                  if (jobId) clearUploadProgress(jobId);
+                  fetchAllDocuments();
+                }, 1000);
+              }
+
+              if (type === 'error' && jobId) {
+                window.setTimeout(() => {
+                  if (!isComponentMounted) return;
+                  clearUploadProgress(jobId);
+                }, 5000);
+              }
+
+              return;
             }
+
+            console.log('📄 WebSocket message:', isRecord(message) ? message.type : 'unknown');
           } catch (parseError) {
             console.warn('⚠️ Failed to parse WebSocket message:', parseError);
           }
@@ -1001,7 +1101,13 @@ const HomePage: React.FC = () => {
                     {Object.entries(uploadProgress).map(([jobId, progress]) => (
                       <div key={jobId} className="bg-slate-800/50 rounded-lg p-3 border border-slate-600">
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-white text-sm font-medium">Processing...</span>
+                          <span className="text-white text-sm font-medium">
+                            {progress.status === 'error'
+                              ? 'Processing failed'
+                              : progress.status === 'complete'
+                                ? 'Processing complete'
+                                : 'Processing...'}
+                          </span>
                           <span className="text-cyan-400 text-sm">{progress.percent}%</span>
                         </div>
                         <div className="w-full bg-slate-700 rounded-full h-2">
