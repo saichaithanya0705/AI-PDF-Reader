@@ -124,3 +124,63 @@ Confidence: Medium
   - `cd frontend && npm test` -> 14 passed
   - `cd frontend && npm run build` -> passed, with existing Browserslist, plugin timing, and chunk-size warnings
   - `cd frontend && npx tsc -p tsconfig.app.json --noEmit` -> failed on pre-existing unrelated strict-mode issues in `AIPersonaJobForm.tsx`, `ErrorBoundary.tsx`, `FloatingInsightsPanel.tsx`, `HomePage.tsx` fallback-localStorage code, `networkDetection.ts`, and `pdfJsInitializer.ts`; no reported errors were in the bulk-upload contract files.
+
+---
+
+## Scoped AI Slop Audit - Production Login and Upload Progress Runtime Fixes (2026-06-12)
+
+**Verdict**
+Score: 14/100, Minimal slop risk for the scoped production login and upload-progress fixes after repair
+Confidence: Medium
+
+**Why**
+- Graphify was read first. The relevant graph targets for this pass were `apiRequest()` and frontend API helpers in Community 8, auth UI flows in Community 18, and the `HomePage` upload surface connected to document processing.
+- The required Graphify scanner still reports severe whole-repo source-augmented triage risk, but the broad hits are dominated by unrelated backend hubs, local environment secret-risk findings, broad exception masking, and pre-existing frontend hotspots outside this prompt's production-login/upload-progress scope.
+- Source inspection confirmed two slop-like risks in the changed surface: upload WebSocket protocol parsing lived inside a broad page component with shallow source-string tests, and auth network failures were surfaced as raw provider/browser text instead of a stable auth-boundary message.
+- The repair was root-cause oriented: upload progress now has a single pure parser module with executable contract tests, and login/signup share one auth error translation boundary instead of duplicating catch-block interpretation.
+
+**Evidence**
+| Signal | Graph Evidence | Source Evidence | Classification | Likely Root Cause | Permanent Fix | Prevention Gate |
+|---|---|---|---|---|---|---|
+| Upload progress rendering previously depended on an undeclared state variable and page-local WebSocket parsing | Graphify marks `frontend/src/pages/HomePage.tsx` as part of a large frontend surface and flags `apiRequest()`/frontend helpers as hubs; large page-level protocol code increases review risk. | `frontend/src/pages/HomePage.tsx:30` now imports the parser/type from `frontend/src/lib/uploadProgress.ts`; `frontend/src/pages/HomePage.tsx:136` declares `uploadProgress`; `frontend/src/pages/HomePage.tsx:216` consumes `normalizeUploadSocketMessage(message)`. | Confirmed slop signal, repaired | A UI edit added progress rendering without first establishing a durable state/protocol owner. | Declared `UploadProgressState` and moved backend WebSocket normalization into `frontend/src/lib/uploadProgress.ts`. | Keep backend message parsing in a pure boundary module; page components should render normalized state, not define protocol contracts inline. |
+| Upload WebSocket contract coverage was shallow and source-string based | Scanner reported shallow-test/mock and verification-debt patterns repo-wide; this prompt added a source-inspection test in that risk category. | `frontend/tests/homepage-upload-progress.test.mjs:32` loads the parser directly; `frontend/tests/homepage-upload-progress.test.mjs:53`, `:75`, and `:94` execute progress, completion-alias, unknown-event, and error payload cases. | Confirmed slop signal, repaired | The first regression test guarded implementation text rather than backend payload behavior. | Added executable parser tests using the repo's existing TypeScript transpile/VM test pattern. | Boundary tests must execute normalization logic and include malformed-but-plausible payloads. |
+| Raw auth/network failures were shown directly to users during login/signup | Graphify Community 18 covers `signIn`, `signUp`, `ProtectedRoute`, and login submit flows, making duplicated catch-block behavior a contract risk. | `frontend/src/lib/authErrors.ts:8` defines the stable auth service outage message; `frontend/src/pages/LoginPage.tsx:44` and `frontend/src/pages/SignupPage.tsx:48` both call `toAuthErrorMessage(err)`. | Confirmed slop signal, repaired | Provider/browser errors were treated as user-facing copy, so production config outages surfaced as "Failed to fetch". | Centralized auth error translation and reused it from both login and signup submit flows. | Auth UI catch blocks should call the shared translator; do not surface raw network/provider messages directly. |
+| Production `/config` could be masked by SPA fallback if nginx did not proxy it before static routing | Community 8 includes config/API helpers that depend on runtime backend config; production routing must preserve that boundary. | `nginx_ssl.conf:22` proxies `/config` to the backend before the static `location /` block at `nginx_ssl.conf:31`. | Confirmed deployment-boundary issue, repaired | Runtime config was treated like frontend static routing instead of a backend API boundary. | Added a dedicated `/config` proxy location and validated nginx syntax during deployment. | Keep runtime config endpoints out of SPA fallback routing and validate nginx config before reload. |
+
+**Aggressive Review Targets**
+- `frontend/src/pages/HomePage.tsx` remains a broad page component. This pass removed upload protocol parsing from it, but a later `useUploadProgressSocket` hook could further isolate WebSocket lifecycle concerns.
+- Whole-repo scanner findings around local environment secrets, broad exception masking, and backend god nodes remain unresolved outside this scoped pass. Secret values were not reproduced in this report.
+- The Graphify snapshot is dated before these repairs, so structural confidence remains Medium until Graphify is regenerated.
+
+**Healthy Signals**
+- Production login was tested against the deployed HTTPS site after redeployment and redirected to `/library` without the `uploadProgress is not defined` runtime error.
+- Auth outage messaging now has one owner instead of separate login/signup catch-block text.
+- Upload progress parser behavior is now executable in tests and clamps/normalizes backend percent, completion aliases, unknown events, and error payloads.
+
+**Workflow Gaps**
+- Frontend tests still include several source-inspection guards in other files. This pass fixed the new upload-progress test because it was in the changed surface.
+- `npm run build` still reports existing Browserslist/plugin timing/chunk-size warnings. They are not regressions from this pass, but chunking deserves a separate performance cleanup.
+
+**Permanent Fixes**
+- Added `frontend/src/lib/uploadProgress.ts` as the single upload WebSocket progress parser.
+- Updated `HomePage` to import the parser and keep only UI/WebSocket lifecycle responsibilities.
+- Converted the upload-progress regression coverage from string-only checks to direct parser behavior tests.
+- Added `frontend/src/lib/authErrors.ts` and wired login/signup to the shared auth error translator.
+- Added the production nginx `/config` proxy before the SPA static fallback.
+
+**Anti-Slop Gates**
+- Do not add page-local protocol parsers for backend event streams when a pure boundary module can own validation.
+- Do not add source-only tests for new contract code when the module can be executed by the existing test runner.
+- Do not expose raw provider/browser network errors as final user-facing auth messages.
+- Do not route runtime backend config through frontend SPA fallback.
+
+**Validation**
+- Read `graphify-out/GRAPH_REPORT.md` before raw source inspection.
+- Ran required triage: `python C:/Users/SAI/.codex/skills/audit-ai-slop/scripts/graphify_slop_scan.py --graphify-out graphify-out --source-root . --format markdown`.
+- Validation after repair:
+  - `cd frontend && npm test` -> 17 passed
+  - `cd frontend && npm run build` -> passed, with existing Browserslist, plugin timing, and chunk-size warnings
+  - Production HTTPS login with the provided account -> redirected to `/library`; no console errors and no `uploadProgress is not defined`
+- Residual risk:
+  - Whole-repo source-augmented scanner risk remains high outside this scoped prompt.
+  - Dirty generated Python `__pycache__` files remain in the worktree and were intentionally not reverted or committed.

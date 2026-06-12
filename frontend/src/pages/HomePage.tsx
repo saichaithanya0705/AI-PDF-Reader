@@ -27,6 +27,7 @@ import AIPersonaJobForm from '../components/AIPersonaJobForm';
 import SimpleChatbot from '../components/SimpleChatbot';
 import { PDFValidationResult } from '../utils/pdfValidator';
 import { mergeDocuments, splitDocument } from '../lib/api';
+import { normalizeUploadSocketMessage, type UploadProgressState } from '../lib/uploadProgress';
 
 type FileWithValidation = File & {
   validationResult?: PDFValidationResult;
@@ -37,24 +38,6 @@ type StoredDocument = {
   lastOpened?: string | Date | null;
   lastUploaded?: string | Date | null;
   name?: string;
-};
-
-type UploadProgressStatus = 'progress' | 'complete' | 'error';
-
-type UploadProgressEntry = {
-  percent: number;
-  message: string;
-  status: UploadProgressStatus;
-};
-
-type UploadProgressState = Record<string, UploadProgressEntry>;
-
-type UploadSocketMessageType = 'progress' | 'complete' | 'processing_complete' | 'error';
-
-type UploadSocketMessage = {
-  type: UploadSocketMessageType;
-  jobId?: string;
-  progress: UploadProgressEntry;
 };
 
 interface MergeResult {
@@ -74,55 +57,6 @@ interface SplitResult {
 const getErrorMessage = (error: unknown, fallback = 'Unexpected error') => (
   error instanceof Error ? error.message : fallback
 );
-
-const isRecord = (value: unknown): value is Record<string, unknown> => (
-  typeof value === 'object' && value !== null
-);
-
-const clampProgressPercent = (value: unknown, fallback: number): number => {
-  const parsed = typeof value === 'number' ? value : Number(value);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.min(100, Math.max(0, Math.round(parsed)));
-};
-
-const getUploadProgressMessage = (type: UploadSocketMessageType, data: Record<string, unknown>): string => {
-  const message = data.message;
-  if (typeof message === 'string' && message.trim()) {
-    return message;
-  }
-
-  if (type === 'error') return 'Processing failed';
-  if (type === 'complete' || type === 'processing_complete') return 'Processing complete';
-  return 'Processing...';
-};
-
-const normalizeUploadSocketMessage = (message: unknown): UploadSocketMessage | null => {
-  if (!isRecord(message)) return null;
-  const type = message.type;
-  if (type !== 'progress' && type !== 'complete' && type !== 'processing_complete' && type !== 'error') {
-    return null;
-  }
-
-  const data = isRecord(message.data) ? message.data : {};
-  const jobId = typeof message.job_id === 'string' && message.job_id.trim()
-    ? message.job_id
-    : undefined;
-  const status: UploadProgressStatus = type === 'error'
-    ? 'error'
-    : type === 'progress'
-      ? 'progress'
-      : 'complete';
-
-  return {
-    type,
-    jobId,
-    progress: {
-      percent: clampProgressPercent(data.percent, type === 'progress' ? 0 : 100),
-      message: getUploadProgressMessage(type, data),
-      status,
-    },
-  };
-};
 
 const getStoredPageCount = (metadata: unknown, fallback = 10): number => {
   if (!metadata || typeof metadata !== 'object') {
@@ -310,7 +244,10 @@ const HomePage: React.FC = () => {
               return;
             }
 
-            console.log('📄 WebSocket message:', isRecord(message) ? message.type : 'unknown');
+            const messageType = typeof message === 'object' && message !== null && 'type' in message
+              ? String((message as { type?: unknown }).type)
+              : 'unknown';
+            console.log('📄 WebSocket message:', messageType);
           } catch (parseError) {
             console.warn('⚠️ Failed to parse WebSocket message:', parseError);
           }
