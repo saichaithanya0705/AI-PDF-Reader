@@ -171,7 +171,7 @@ export async function uploadFile<T = unknown>(
   });
 }
 
-export async function fetchAuthenticatedBlobUrl(endpoint: string): Promise<string> {
+export async function fetchAuthenticatedBlob(endpoint: string): Promise<Blob> {
   const response = await apiFetch(endpoint);
   if (!response.ok) {
     const errorData = await parseErrorPayload(response);
@@ -182,7 +182,16 @@ export async function fetchAuthenticatedBlobUrl(endpoint: string): Promise<strin
     );
   }
 
-  const blob = await response.blob();
+  return response.blob();
+}
+
+export async function fetchAuthenticatedBytes(endpoint: string): Promise<Uint8Array> {
+  const blob = await fetchAuthenticatedBlob(endpoint);
+  return new Uint8Array(await blob.arrayBuffer());
+}
+
+export async function fetchAuthenticatedBlobUrl(endpoint: string): Promise<string> {
+  const blob = await fetchAuthenticatedBlob(endpoint);
   return URL.createObjectURL(blob);
 }
 

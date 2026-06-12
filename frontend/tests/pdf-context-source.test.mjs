@@ -59,6 +59,16 @@ test('PDF.js initializer does not load remote or embedded executable scripts', (
 test('SimplePDFViewer uses bundled PDF.js worker instead of a CDN worker', () => {
   assert.equal(simpleViewerSource.includes('cdnjs.cloudflare.com'), false);
   assert.equal(simpleViewerSource.includes('pdf.worker.min.js`'), false);
+  assert.equal(simpleViewerSource.includes('pdfWorkerSrc'), true);
+  assert.equal(simpleViewerSource.includes('?v=20260612-mjs'), true);
+});
+
+test('SimplePDFViewer loads protected PDFs through the authenticated API client', () => {
+  assert.equal(simpleViewerSource.includes('fetchAuthenticatedBytes(pdfUrl)'), true);
+  assert.equal(simpleViewerSource.includes('file={pdfFile}'), true);
+  assert.equal(simpleViewerSource.includes('data: authenticatedPdfData'), true);
+  assert.equal(simpleViewerSource.includes('httpHeaders: pdfHeaders'), false);
+  assert.equal(simpleViewerSource.includes('getAuthHeaders'), false);
 });
 
 test('ReaderPage renders only one chatbot variant per viewport', () => {

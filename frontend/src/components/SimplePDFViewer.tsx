@@ -3,15 +3,17 @@ import { Document, Page, pdfjs } from 'react-pdf';
 import type { PDFPageProxy } from 'pdfjs-dist/types/src/display/api';
 import { PDFDocument } from '../context/PDFContext';
 import { API_URL } from '../config';
-import { fetchAuthenticatedBlobUrl, generateAudio, getAuthHeaders } from '../lib/api';
+import { fetchAuthenticatedBlobUrl, fetchAuthenticatedBytes, generateAudio } from '../lib/api';
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Loader2, MessageSquare, Copy, Volume2, Check } from 'lucide-react';
 import 'react-pdf/dist/Page/TextLayer.css';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 
-pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+const pdfWorkerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
   import.meta.url
 ).toString();
+
+pdfjs.GlobalWorkerOptions.workerSrc = `${pdfWorkerSrc}?v=20260612-mjs`;
 
 interface SimplePDFViewerProps {
   document: PDFDocument;
@@ -43,19 +45,14 @@ const SimplePDFViewer: React.FC<SimplePDFViewerProps> = ({
   const [pageVoiceGenerating, setPageVoiceGenerating] = useState(false);
   const [currentPageText, setCurrentPageText] = useState<string>('');
   const [currentAudio, setCurrentAudio] = useState<HTMLAudioElement | null>(null);
-  const [pdfHeaders, setPdfHeaders] = useState<Record<string, string> | null>(null);
+  const [authenticatedPdfData, setAuthenticatedPdfData] = useState<Uint8Array | null>(null);
   const [pdfLoadError, setPdfLoadError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const audioObjectUrlRef = useRef<string | null>(null);
   const pdfUrl = pdfDocument.url?.startsWith('http') ? pdfDocument.url : `${API_URL}${pdfDocument.url}`;
-  const pdfOptions = useMemo(() => (
-    pdfHeaders
-      ? {
-          httpHeaders: pdfHeaders,
-          withCredentials: false,
-        }
-      : undefined
-  ), [pdfHeaders]);
+  const pdfFile = useMemo(() => (
+    authenticatedPdfData ? { data: authenticatedPdfData } : null
+  ), [authenticatedPdfData]);
 
   useEffect(() => {
     return () => {
@@ -69,19 +66,19 @@ const SimplePDFViewer: React.FC<SimplePDFViewerProps> = ({
 
   useEffect(() => {
     let cancelled = false;
-    setPdfHeaders(null);
+    setAuthenticatedPdfData(null);
     setPdfLoadError(null);
 
-    getAuthHeaders()
-      .then((headers) => {
+    fetchAuthenticatedBytes(pdfUrl)
+      .then((pdfData) => {
         if (!cancelled) {
-          setPdfHeaders(headers);
+          setAuthenticatedPdfData(pdfData);
         }
       })
       .catch((error) => {
         if (!cancelled) {
-          console.error('Failed to prepare PDF authentication headers:', error);
-          setPdfLoadError('Unable to authenticate the protected PDF file.');
+          console.error('Failed to load protected PDF file:', error);
+          setPdfLoadError('Unable to load the protected PDF file.');
         }
       });
 
@@ -130,7 +127,13 @@ const SimplePDFViewer: React.FC<SimplePDFViewerProps> = ({
   );
 
   const onDocumentLoadSuccess = useCallback(({ numPages }: { numPages: number }) => {
+    setPdfLoadError(null);
     setNumPages(numPages);
+  }, []);
+
+  const onDocumentLoadError = useCallback((error: Error) => {
+    console.error('React-PDF failed to render authenticated PDF data:', error);
+    setPdfLoadError(error.message || 'Unable to render the protected PDF file.');
   }, []);
 
   // Handle text selection
@@ -303,13 +306,13 @@ const SimplePDFViewer: React.FC<SimplePDFViewerProps> = ({
             <p className="font-medium">Could not load this PDF</p>
             <p className="text-sm text-red-200/80">{pdfLoadError}</p>
           </div>
-        ) : !pdfOptions ? (
+        ) : !pdfFile ? (
           <Loader2 className="w-8 h-8 animate-spin text-cyan-400" />
         ) : (
           <Document
-            file={pdfUrl}
-            options={pdfOptions}
+            file={pdfFile}
             onLoadSuccess={onDocumentLoadSuccess}
+            onLoadError={onDocumentLoadError}
             loading={<Loader2 className="w-8 h-8 animate-spin text-cyan-400" />}
             error={
               <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-100">
