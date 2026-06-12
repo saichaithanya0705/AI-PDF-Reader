@@ -154,8 +154,9 @@ test('bulk upload contract keeps failed files out of library document seeds', ()
         file_url: '/api/files/doc-alpha_alpha.pdf',
       },
       {
+        job_id: 'doc-broken',
         filename: 'broken.pdf',
-        status: 'failed',
+        status: 'FAILED',
         error: 'Invalid PDF file',
       },
       {
@@ -169,6 +170,7 @@ test('bulk upload contract keeps failed files out of library document seeds', ()
 
   assert.equal(result.files.length, 3);
   assert.equal(result.files[1].error, 'Invalid PDF file');
+  assert.equal(result.files[1].status, 'failed');
   assert.deepEqual(getBulkUploadedDocumentSeeds(result, sourceFiles).map((seed) => seed.id), [
     'doc-alpha',
     'doc-gamma',

@@ -40,6 +40,14 @@ const asBoolean = (value: unknown, fallback = false): boolean => (
   typeof value === 'boolean' ? value : fallback
 );
 
+const normalizeStatus = (value: unknown, fallback: string): string => (
+  asString(value)?.toLowerCase() || fallback
+);
+
+const isFailedUploadResult = (result: BulkUploadFileResult): boolean => (
+  result.status === 'failed' || result.status === 'error' || Boolean(result.error)
+);
+
 export const normalizeBulkUploadResponse = (
   data: unknown,
   sourceFiles: BulkUploadSourceFile[],
@@ -73,7 +81,7 @@ export const normalizeBulkUploadResponse = (
         jobId: asString(entry.job_id),
         filename: asString(entry.filename) || sourceFile?.name || 'Document',
         fileUrl: asString(entry.file_url),
-        status: asString(entry.status) || (error ? 'failed' : 'queued'),
+        status: normalizeStatus(entry.status, error ? 'failed' : 'queued'),
         isDuplicate: asBoolean(entry.is_duplicate),
         error,
       };
@@ -87,7 +95,7 @@ export const getBulkUploadedDocumentSeeds = (
 ): BulkUploadedDocumentSeed[] => (
   uploadResult.files
     .map((result, index): BulkUploadedDocumentSeed | null => {
-      if (!result.jobId) return null;
+      if (!result.jobId || isFailedUploadResult(result)) return null;
 
       const sourceFile = sourceFiles[index];
       const seed: BulkUploadedDocumentSeed = {

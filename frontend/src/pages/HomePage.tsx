@@ -419,7 +419,9 @@ const HomePage: React.FC = () => {
 
       try {
         const result = await uploadBulkDocuments(files, clientId, currentPersona, currentJob, considerPrevious);
-        const failedCount = result.files.filter((file) => file.status === 'failed' || file.error).length;
+        const failedCount = result.files.filter((file) => (
+          file.status === 'failed' || file.status === 'error' || file.error
+        )).length;
         console.log('Bulk upload result:', result);
         setShowBulkUpload(false); // Hide upload zone after successful upload
         alert(
