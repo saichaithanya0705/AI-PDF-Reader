@@ -2,6 +2,7 @@ import { FormEvent, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, BadgeCheck, Loader2, Mail, Shield, UserCog } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
+import PasswordInput from '../components/PasswordInput';
 import { toAuthErrorMessage } from '../lib/authErrors';
 
 const SignupPage = () => {
@@ -145,12 +146,10 @@ const SignupPage = () => {
                 <label className="text-sm font-medium text-white" htmlFor="signup-password">
                   Password
                 </label>
-                <input
+                <PasswordInput
                   id="signup-password"
-                  type="password"
                   value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-slate-500 focus:border-brand-400 focus:bg-slate-900 focus:outline-none"
+                  onValueChange={setPassword}
                   placeholder="Create a strong password"
                   autoComplete="new-password"
                   required
@@ -160,12 +159,10 @@ const SignupPage = () => {
                 <label className="text-sm font-medium text-white" htmlFor="signup-password-confirm">
                   Confirm password
                 </label>
-                <input
+                <PasswordInput
                   id="signup-password-confirm"
-                  type="password"
                   value={confirmPassword}
-                  onChange={(event) => setConfirmPassword(event.target.value)}
-                  className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-slate-500 focus:border-brand-400 focus:bg-slate-900 focus:outline-none"
+                  onValueChange={setConfirmPassword}
                   placeholder="Re-enter your password"
                   autoComplete="new-password"
                   required

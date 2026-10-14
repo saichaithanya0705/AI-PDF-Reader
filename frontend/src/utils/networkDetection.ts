@@ -22,7 +22,7 @@ export const checkOnlineStatus = (): boolean => {
 export const checkAdobeAPIAvailability = async (): Promise<boolean> => {
   try {
     // Check if Adobe DC View is loaded
-    if (typeof window !== 'undefined' && window.AdobeDC) {
+    if (typeof window !== 'undefined' && (window as Window & { AdobeDC?: unknown }).AdobeDC) {
       return true;
     }
 

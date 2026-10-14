@@ -2,6 +2,7 @@ import importlib
 import asyncio
 from types import SimpleNamespace
 
+from backend.app.reranker_service import RerankScore
 from backend.app.semantic_cache import SemanticCacheContext, SemanticSearchCache
 
 
@@ -286,6 +287,49 @@ def test_format_retrieval_result_keeps_vector_similarity_distinct_from_rerank(mo
     assert formatted["rerank_score"] == 3.25
     assert formatted["section_title"] == "Important section"
     assert formatted["text"].endswith("...")
+
+
+def test_rerank_results_uses_hosted_nvidia_scores(monkeypatch):
+    rag_module = import_rag_service_with_sqlite(monkeypatch)
+    service = object.__new__(rag_module.RAGService)
+
+    class FakeReranker:
+        def rerank(self, query, passages):
+            assert query == "pricing renewal"
+            assert passages == ["weak match", "strong match"]
+            return [
+                RerankScore(index=1, logit=5.0),
+                RerankScore(index=0, logit=1.0),
+            ]
+
+    service.reranker = FakeReranker()
+    results = [
+        SimpleNamespace(chunk_text="weak match", similarity_score=0.4, metadata={}),
+        SimpleNamespace(chunk_text="strong match", similarity_score=0.7, metadata={}),
+    ]
+
+    ranked = service.rerank_results("pricing renewal", results, top_k=2)
+
+    assert [result.chunk_text for result in ranked] == ["strong match", "weak match"]
+    assert ranked[0].metadata["rerank_score"] == 5.0
+    assert ranked[0].metadata["vector_similarity"] == 0.7
+
+
+def test_rerank_provider_failure_preserves_hybrid_retrieval_order(monkeypatch):
+    rag_module = import_rag_service_with_sqlite(monkeypatch)
+    service = object.__new__(rag_module.RAGService)
+
+    class FailingReranker:
+        def rerank(self, _query, _passages):
+            raise rag_module.RerankerServiceUnavailableError("provider unavailable")
+
+    service.reranker = FailingReranker()
+    results = [
+        SimpleNamespace(chunk_text="first", similarity_score=0.8, metadata={}),
+        SimpleNamespace(chunk_text="second", similarity_score=0.7, metadata={}),
+    ]
+
+    assert service.rerank_results("pricing", results, top_k=2) == results
 
 
 def test_semantic_cache_exact_hit_skips_embedding_and_vector_search(monkeypatch):

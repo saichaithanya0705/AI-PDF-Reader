@@ -126,9 +126,16 @@ const SimplePDFViewer: React.FC<SimplePDFViewerProps> = ({
     [currentAudio, pageNumber, pdfDocument.id]
   );
 
+  // Follow external page requests (e.g. a related-section link to ?page=N).
+  useEffect(() => {
+    setPageNumber(initialPage);
+  }, [initialPage]);
+
   const onDocumentLoadSuccess = useCallback(({ numPages }: { numPages: number }) => {
     setPdfLoadError(null);
     setNumPages(numPages);
+    // A deep link may point past the end of a shorter PDF.
+    setPageNumber((page) => Math.min(Math.max(page, 1), numPages));
   }, []);
 
   const onDocumentLoadError = useCallback((error: Error) => {

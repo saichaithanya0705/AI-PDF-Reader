@@ -1,4 +1,5 @@
 import asyncio
+import json
 from pathlib import Path
 import sys
 import types
@@ -66,6 +67,7 @@ def fake_fitz_open(*args, **kwargs):
 
 @pytest.fixture()
 def secured_app(monkeypatch, tmp_path):
+    import backend.app.document_storage as document_storage
     import backend.app.document_routes as document_routes
     import backend.app.main as main
     import backend.app.rag_service as rag_service
@@ -77,6 +79,8 @@ def secured_app(monkeypatch, tmp_path):
 
     monkeypatch.setattr(main, "DATA_DIR", data_dir)
     monkeypatch.setattr(main, "DOCS_DIR", docs_dir)
+    monkeypatch.setattr(document_storage, "DOCS_DIR", docs_dir)
+    monkeypatch.setattr(document_storage, "_storage", None)
     monkeypatch.setattr(main.fitz, "open", fake_fitz_open)
     monkeypatch.setattr(main, "db", database)
     monkeypatch.setattr(document_routes, "db", database)
@@ -306,6 +310,14 @@ def test_audio_and_podcast_require_owned_document(secured_app, monkeypatch):
     other_audio_name = f"podcast_{other_document.id}_1_123.wav"
     (audio_dir / other_audio_name).write_bytes(b"RIFFfake")
 
+    # Configure TTS up front so the denial below is the ownership check, not a
+    # 503 from TTS being unconfigured in the test environment.
+    class FakeTTS:
+        async def generate_podcast(self, _content, _title):
+            return b"RIFFowned"
+
+    monkeypatch.setattr(main, "tts_service", FakeTTS())
+
     denied_audio = client.get(f"/api/audio/{other_audio_name}", headers=AUTH_HEADERS)
     denied_podcast = client.post(
         "/api/generate-podcast",
@@ -320,11 +332,6 @@ def test_audio_and_podcast_require_owned_document(secured_app, monkeypatch):
     assert denied_audio.status_code == 404
     assert denied_podcast.status_code == 404
 
-    class FakeTTS:
-        async def generate_podcast(self, _content, _title):
-            return b"RIFFowned"
-
-    monkeypatch.setattr(main, "tts_service", FakeTTS())
     owned_document = create_pdf(database, docs_dir, client_id=USER_ID, filename="owned-audio.pdf")
     created = client.post(
         "/api/generate-podcast",
@@ -374,3 +381,48 @@ def test_rag_delete_route_verifies_owner_before_deleting(secured_app, monkeypatc
 
     assert allowed.status_code == 200
     assert calls == [(owned_document.id, USER_ID)]
+
+
+def test_eval_reports_require_auth_and_serve_latest_report(secured_app, monkeypatch, tmp_path):
+    _main, _database, _docs_dir, client = secured_app
+    from backend.app import eval_routes
+
+    history = tmp_path / "history"
+    history.mkdir()
+    report = {
+        "run_id": "20261013T000000Z", "mode": "offline", "passed": True,
+        "variants": {"hybrid": {"summary": {"mrr": 0.9}}},
+    }
+    latest = tmp_path / "latest.json"
+    latest.write_text(json.dumps(report), encoding="utf-8")
+    (history / "20261013T000000Z-offline.json").write_text(json.dumps(report), encoding="utf-8")
+    monkeypatch.setattr(eval_routes, "LATEST_PATH", latest)
+    monkeypatch.setattr(eval_routes, "HISTORY_DIR", history)
+
+    assert client.get("/api/evals/latest").status_code == 401
+    assert client.get("/api/evals/latest", headers=AUTH_HEADERS).json()["run_id"] == report["run_id"]
+    runs = client.get("/api/evals/history", headers=AUTH_HEADERS).json()
+    assert runs[0]["hybrid"] == {"mrr": 0.9}
+
+    latest.unlink()
+    assert client.get("/api/evals/latest", headers=AUTH_HEADERS).status_code == 404
+
+
+def test_spa_catch_all_rejects_unknown_api_paths_and_traversal(secured_app, monkeypatch, tmp_path):
+    main, _database, _docs_dir, client = secured_app
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    (dist / "index.html").write_text("<html>spa</html>", encoding="utf-8")
+    (dist / "app.js").write_text("console.log(1)", encoding="utf-8")
+    (tmp_path / "secret.env").write_text("SUPABASE_SERVICE_KEY=leak", encoding="utf-8")
+    monkeypatch.setattr(main, "FRONTEND_DIST_DIR", dist)
+
+    unknown_api = client.get("/api/definitely-not-a-route")
+    assert unknown_api.status_code == 404
+    assert unknown_api.headers["content-type"].startswith("application/json")
+
+    assert client.get("/app.js").text == "console.log(1)"
+
+    for probe in ("/..%2fsecret.env", "/%2e%2e/secret.env", "/..\secret.env"):
+        response = client.get(probe)
+        assert "leak" not in response.text

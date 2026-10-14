@@ -1,5 +1,5 @@
 # Obsolete Azure App Service workflow.
-# Canonical deployment lives in .github/workflows/deploy.yml.
+# Canonical deployment is provider-managed from render.yaml and frontend/vercel.json.
 
 name: Obsolete Azure Web App Deploy - disabled
 
@@ -16,4 +16,4 @@ jobs:
       - name: Deployment disabled
         run: |
           echo "This workflow is intentionally manual-only and non-deploying."
-          echo "Use .github/workflows/deploy.yml for the canonical deployment path."
+          echo "Use docs/DEPLOY_RENDER_VERCEL.md for the canonical deployment path."

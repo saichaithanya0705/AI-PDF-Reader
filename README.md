@@ -33,9 +33,10 @@ FastAPI backend
   -> TTS providers for audio and podcast generation
 
 Storage and services
-  -> Supabase for authentication and production document metadata paths
-  -> Local runtime data under backend/data for generated files and indexes
-  -> FAISS / vector-store metadata for retrieval workflows
+  -> Supabase Auth for user sessions
+  -> Private Supabase Storage for uploaded and generated PDF documents
+  -> Supabase Postgres + pgvector for document metadata, chunks, and vectors
+  -> Local runtime data only for processing cache and generated audio
 ```
 
 ## Repository Layout
@@ -62,6 +63,7 @@ Storage and services
 - Python 3.10 or newer is recommended.
 - Node.js 20 or newer is recommended for the Vite frontend.
 - Supabase project credentials for production-style auth and storage paths.
+- An NVIDIA API key for hosted RAG embeddings and advanced reranking (`NVIDIA_API_KEY`).
 - At least one LLM provider key or local provider:
   - Gemini via `GOOGLE_API_KEY`
   - Azure OpenAI via Azure OpenAI environment variables
@@ -76,7 +78,7 @@ Storage and services
    copy .env.example .env
    ```
 
-   Fill in Supabase credentials and one LLM provider. For local development, set:
+   Fill in Supabase credentials, `NVIDIA_API_KEY`, and one LLM provider. For local development, set:
 
    ```env
    APP_ENV=development
@@ -170,13 +172,20 @@ Important backend values:
 | Variable | Notes |
 | --- | --- |
 | `APP_ENV` | Use `development` locally and `production` in deployed environments. |
-| `USE_SUPABASE` | Enables Supabase-backed production paths. |
+| `PERSISTENCE_BACKEND` | Use `supabase` in production or `sqlite` for a local-only stack. |
 | `SUPABASE_URL` | Supabase project URL. |
-| `SUPABASE_SERVICE_KEY` | Server-only service role key. Never expose this to the frontend. |
-| `SUPABASE_JWT_SECRET` | Used for JWT verification. |
+| `SUPABASE_ANON_KEY` | Public/anon key used by the backend when fetching auth metadata. |
+| `SUPABASE_SECRET_KEY` | Server-only secret key for Postgres and Storage. Never expose this to the frontend. |
+| `SUPABASE_STORAGE_BUCKET` | Private PDF bucket; defaults to `documents`. |
+| `SUPABASE_JWT_SECRET` | Needed for legacy HS256 tokens; ES256 tokens use JWKS. |
 | `CORS_ORIGINS` | Comma-separated frontend origins allowed by the API. |
 | `LLM_PROVIDER` | One of `gemini`, `azure`, `openai`, or `ollama`. |
 | `GOOGLE_API_KEY` | Gemini API key when `LLM_PROVIDER=gemini`. |
+| `NVIDIA_API_KEY` | Server-only key for NVIDIA hosted embeddings; required for RAG ingestion and search. |
+| `NVIDIA_EMBEDDING_MODEL` | Hosted retrieval model, defaulting to `nvidia/nemotron-3-embed-1b`. |
+| `NVIDIA_EMBEDDING_DIMENSION` | pgvector/FAISS dimension for that hosted model; changing it requires a schema migration and full re-index. |
+| `NVIDIA_RERANK_MODEL` | Hosted advanced-RAG reranker, defaulting to `nvidia/llama-nemotron-rerank-vl-1b-v2`. |
+| `NVIDIA_RERANK_ENDPOINT` | HTTPS endpoint for the NVIDIA reranking model. |
 | `TTS_PROVIDER` | Optional TTS provider, such as `azure` or local fallback. |
 | `AUTH_BYPASS_ENABLED` | Development-only auth bypass; ignored outside development. |
 | `ALLOW_CLIENT_ID_FALLBACK` | Development-only upload fallback; keep disabled in production. |
@@ -226,7 +235,7 @@ python backend\test_upload.py
 
 ## Deployment Notes
 
-The repository includes deployment helpers for DigitalOcean, Render-style backend hosting, Netlify-style frontend hosting, Nginx, and a systemd backend service. Treat `.env.example`, `frontend/.env.example`, `DEPLOY_DIGITALOCEAN.md`, `deploy_backend.sh`, `deploy_frontend.sh`, `nginx.conf`, and `pdfapp-backend.service` as deployment references rather than one universal production path.
+The preferred GitHub-connected production path is the Dockerized backend on Render and the Vite frontend on Vercel. Follow [`docs/DEPLOY_RENDER_VERCEL.md`](docs/DEPLOY_RENDER_VERCEL.md); `render.yaml`, `backend/Dockerfile`, and `frontend/vercel.json` are the provider configuration sources of truth. The older DigitalOcean, Nginx, systemd, and Netlify-style helpers remain legacy deployment references rather than the current production path.
 
 Production checklist:
 
@@ -234,9 +243,11 @@ Production checklist:
 - Keep `AUTH_BYPASS_ENABLED=false` and `VITE_AUTH_BYPASS_ENABLED=false`.
 - Keep `ALLOW_CLIENT_ID_FALLBACK=false`.
 - Configure exact deployed frontend origins in `CORS_ORIGINS`.
-- Store service role keys only in backend secrets.
+- Store `SUPABASE_SECRET_KEY` only in Render backend secrets.
+- Store `NVIDIA_API_KEY` only in backend secrets; reprocess uploaded PDFs once after this migration so the NVIDIA vector index is populated and test an advanced-RAG query to verify hosted reranking.
 - Use the Supabase anon key only in frontend environment variables.
-- Verify file storage, generated audio paths, and RAG index persistence for the chosen host.
+- Verify Supabase PDF, metadata, and RAG persistence after a Render restart;
+  generated audio remains ephemeral until separately moved to object storage.
 
 ## Development Notes
 

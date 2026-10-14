@@ -3,12 +3,16 @@ from __future__ import annotations
 
 import time
 import logging
+import uuid
 from collections import defaultdict
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
 from .chunking_service import DocumentChunk, chunking_service
-from .database import Document, db
+from .database import Document
+from .document_storage import get_document_storage
+from .persistence import db
 from .embedding_service import get_embedding_service
 from .vector_store import get_vector_store
 
@@ -39,7 +43,7 @@ class DocumentIngestionService:
 
         ingestion_cleared = False
         try:
-            self._validate_document_file(document)
+            local_path = self._local_document_path(document)
             db.update_document(
                 document.id,
                 client_id=user_id,
@@ -48,10 +52,10 @@ class DocumentIngestionService:
             )
 
             ingestion_cleared = True
-            self._clear_existing_ingestion(document.id)
+            self._clear_existing_ingestion(document.id, user_id)
 
             chunks = self.chunking_service.chunk_document(
-                pdf_path=document.file_path,
+                pdf_path=str(local_path),
                 document_id=document.id,
                 document_name=self._document_name(document),
                 mode=mode,
@@ -102,7 +106,7 @@ class DocumentIngestionService:
 
         except Exception as exc:
             if ingestion_cleared:
-                self._cleanup_failed_ingestion(document.id)
+                self._cleanup_failed_ingestion(document.id, user_id)
             db.update_document(
                 document.id,
                 client_id=user_id,
@@ -142,7 +146,8 @@ class DocumentIngestionService:
         cleared_document_ids = set()
         try:
             for document in documents:
-                self._validate_document_file(document)
+                local_path = self._local_document_path(document)
+                document = replace(document, file_path=str(local_path))
                 db.update_document(
                     document.id,
                     client_id=user_id,
@@ -150,7 +155,7 @@ class DocumentIngestionService:
                     status="uploaded",
                 )
                 cleared_document_ids.add(document.id)
-                self._clear_existing_ingestion(document.id)
+                self._clear_existing_ingestion(document.id, user_id)
 
             chunks = self.chunking_service.chunk_collection(
                 documents=documents,
@@ -210,7 +215,7 @@ class DocumentIngestionService:
 
         except Exception as exc:
             for document_id in cleared_document_ids:
-                self._cleanup_failed_ingestion(document_id)
+                self._cleanup_failed_ingestion(document_id, user_id)
             for document in documents:
                 db.update_document(
                     document.id,
@@ -240,19 +245,7 @@ class DocumentIngestionService:
             show_progress=True,
         )
 
-        chunk_ids: List[str] = []
-        for chunk, embedding in zip(chunks, embeddings):
-            chunk_id = db.store_chunk(
-                document_id=document.id,
-                chunk_text=chunk.text,
-                chunk_index=chunk.chunk_index,
-                page_number=chunk.page_number,
-                embedding=embedding,
-                char_count=chunk.metadata.get("char_count"),
-                word_count=chunk.metadata.get("word_count"),
-            )
-            chunk_ids.append(chunk_id)
-
+        chunk_ids = [str(uuid.uuid4()) for _ in chunks]
         metadatas = [
             self._vector_metadata(
                 document=document,
@@ -262,6 +255,20 @@ class DocumentIngestionService:
             )
             for chunk_id, chunk in zip(chunk_ids, chunks)
         ]
+
+        for chunk_id, chunk, embedding, metadata in zip(chunk_ids, chunks, embeddings, metadatas):
+            db.store_chunk(
+                document_id=document.id,
+                chunk_text=chunk.text,
+                chunk_index=chunk.chunk_index,
+                page_number=chunk.page_number,
+                embedding=embedding,
+                char_count=chunk.metadata.get("char_count"),
+                word_count=chunk.metadata.get("word_count"),
+                client_id=user_id,
+                chunk_id=chunk_id,
+                metadata=metadata,
+            )
         vector_ids = self.vector_store.add_documents(embeddings, metadatas)
 
         return {
@@ -326,13 +333,13 @@ class DocumentIngestionService:
 
         return "\n".join([*context_parts, "", chunk.text])
 
-    def _clear_existing_ingestion(self, document_id: str) -> None:
-        db.delete_chunks_by_document(document_id)
+    def _clear_existing_ingestion(self, document_id: str, user_id: str) -> None:
+        db.delete_chunks_by_document(document_id, client_id=user_id)
         self.vector_store.remove_document(document_id)
 
-    def _cleanup_failed_ingestion(self, document_id: str) -> None:
+    def _cleanup_failed_ingestion(self, document_id: str, user_id: str) -> None:
         try:
-            db.delete_chunks_by_document(document_id)
+            db.delete_chunks_by_document(document_id, client_id=user_id)
         except Exception as exc:
             logger.warning("Failed to clean partial chunks for %s: %s", document_id, exc)
 
@@ -341,10 +348,11 @@ class DocumentIngestionService:
         except Exception as exc:
             logger.warning("Failed to clean partial vectors for %s: %s", document_id, exc)
 
-    def _validate_document_file(self, document: Document) -> None:
-        path = Path(document.file_path)
+    def _local_document_path(self, document: Document) -> Path:
+        path = get_document_storage().ensure_local(document.file_path)
         if not path.exists():
             raise FileNotFoundError(f"Document file not found: {path}")
+        return path
 
     def _merge_metadata(self, existing: Optional[Dict[str, Any]], new_metadata: Dict[str, Any]) -> Dict[str, Any]:
         merged = dict(existing or {})

@@ -1,0 +1,80 @@
+{
+  "name": "pdf-reader-rag-golden-v1",
+  "description": "Hand-labelled corpus and queries for the PDF reader RAG pipeline. Two topic pairs (biology/nutrition, cloud/distributed systems) share concepts so cross-document recommendations have known correct answers. Relevance is labelled at (document, page) granularity, matching what the reader UI navigates to.",
+  "documents": [
+    {
+      "id": "doc-cell-biology",
+      "topic": "life-science",
+      "name": "Cell Biology Primer.pdf",
+      "pages": [
+        "Protein synthesis begins in the nucleus, where a gene is transcribed into messenger RNA. The mRNA strand leaves through nuclear pores and binds to a ribosome in the cytoplasm. During translation the ribosome reads the mRNA three bases at a time; each codon is matched by a transfer RNA carrying a specific amino acid. Peptide bonds link the amino acids into a growing polypeptide chain, which then folds into a functional protein. Chaperone proteins assist folding, and misfolded chains are tagged with ubiquitin and degraded by the proteasome.",
+        "Mitochondria are the power plants of the cell. Glucose is first split by glycolysis in the cytoplasm, then pyruvate enters the mitochondrion and feeds the citric acid cycle. Electrons carried by NADH flow down the electron transport chain on the inner membrane, pumping protons into the intermembrane space. The proton gradient drives ATP synthase, a rotary enzyme that produces most of the cell's adenosine triphosphate. Without oxygen as the final electron acceptor, cells fall back on fermentation and yield far less ATP per glucose molecule.",
+        "The plasma membrane is a phospholipid bilayer that separates the cell from its surroundings. Small nonpolar molecules diffuse across it freely, but ions such as sodium and potassium require channel proteins or pumps. The sodium-potassium pump spends ATP to move three sodium ions out and two potassium ions in, maintaining the resting membrane potential. Osmosis moves water toward regions of higher solute concentration through aquaporins, so cells placed in a hypertonic solution shrink while cells in a hypotonic solution swell."
+      ]
+    },
+    {
+      "id": "doc-sports-nutrition",
+      "topic": "life-science",
+      "name": "Sports Nutrition Guide.pdf",
+      "pages": [
+        "Athletes need more dietary protein than sedentary adults because training damages muscle fibres that must be rebuilt. Current guidance recommends 1.6 to 2.2 grams of protein per kilogram of body weight per day, split across meals of roughly 20 to 40 grams. Leucine-rich sources such as whey, eggs and lean meat most strongly stimulate muscle protein synthesis. Consuming protein within a few hours after resistance training supports recovery and adaptation.",
+        "Carbohydrate is the main fuel for high-intensity exercise. It is stored as glycogen in muscle and liver, and depleted glycogen is a leading cause of fatigue in endurance events. Before a marathon, carbohydrate loading of 8 to 12 grams per kilogram per day for two days tops up these stores. During efforts longer than an hour, 30 to 60 grams of carbohydrate per hour delays exhaustion, because muscles can keep regenerating the energy currency they need to contract.",
+        "Hydration affects both performance and safety. Losing more than two percent of body mass through sweat measurably reduces endurance and concentration. Sweat also carries electrolytes, chiefly sodium, so athletes in long events should replace salt as well as water. Drinking large volumes of plain water without sodium can dilute blood sodium and cause hyponatremia, a dangerous condition in which cells swell as water moves into them."
+      ]
+    },
+    {
+      "id": "doc-cloud-infra",
+      "topic": "computing",
+      "name": "Cloud Infrastructure Handbook.pdf",
+      "pages": [
+        "Autoscaling adjusts the number of running instances to match demand. A horizontal autoscaler watches metrics such as CPU utilisation or request latency and adds instances when a threshold is crossed, then removes them after a cool-down period. Instances sit behind a load balancer that distributes incoming requests using round-robin or least-connections routing and stops sending traffic to nodes that fail health checks. Scaling out on a schedule ahead of predictable peaks avoids cold-start delays.",
+        "Caching reduces latency and database load by keeping frequently read data close to the client. A content delivery network caches static assets at edge locations around the world. Application caches such as Redis store computed results in memory. Every cached entry needs an expiry policy: a time-to-live (TTL) bounds how stale data can become, while explicit invalidation on write keeps hot keys fresh. A cache stampede occurs when many requests miss simultaneously after an entry expires.",
+        "Database replication copies data to multiple servers for availability and read scaling. In leader-follower replication, writes go to a single primary that streams its log to read replicas. Asynchronous replication is fast but a replica may lag, so a read immediately after a write can return old data. Synchronous replication waits for replicas to acknowledge each write, trading latency for durability. If the primary fails, a replica is promoted during failover."
+      ]
+    },
+    {
+      "id": "doc-distributed-systems",
+      "topic": "computing",
+      "name": "Distributed Systems Notes.pdf",
+      "pages": [
+        "Consensus lets a cluster of machines agree on a single sequence of operations even when some nodes crash. The Raft algorithm elects a leader by randomised timeouts; the leader appends client commands to its log and replicates them to followers, committing an entry once a majority has stored it. If the leader stops sending heartbeats, followers start a new election with a higher term number. Majority quorums guarantee that any two quorums overlap, so committed entries are never lost.",
+        "The CAP theorem states that during a network partition a distributed store must choose between consistency and availability. Systems that favour availability accept eventual consistency, where replicas converge once updates stop. Read-your-writes and monotonic-read guarantees offer weaker but practical session consistency. Caches in front of a store introduce the same trade-off: a cached value may be stale until it expires or is invalidated, so designers must decide how much staleness clients can tolerate.",
+        "Load balancing spreads work across servers so no single node becomes a bottleneck. Consistent hashing maps keys onto a ring so that adding or removing a server only remaps a small fraction of keys, which makes elastic scaling cheap. Health-checked pools remove failed servers automatically. Backpressure and rate limiting protect services when demand exceeds capacity, signalling clients to slow down instead of letting queues grow without bound."
+      ]
+    }
+  ],
+  "queries": [
+    {"id": "q01", "category": "factual", "query": "What does the ribosome do during translation?", "relevant": [["doc-cell-biology", 1]], "answer_terms": ["ribosome", "codon", "amino acid"]},
+    {"id": "q02", "category": "factual", "query": "How much protein per kilogram should athletes eat each day?", "relevant": [["doc-sports-nutrition", 1]], "answer_terms": ["1.6", "2.2", "kilogram"]},
+    {"id": "q03", "category": "factual", "query": "What is carbohydrate loading before a marathon?", "relevant": [["doc-sports-nutrition", 2]], "answer_terms": ["glycogen", "8 to 12"]},
+    {"id": "q04", "category": "factual", "query": "How does leader-follower database replication work?", "relevant": [["doc-cloud-infra", 3]], "answer_terms": ["primary", "replica"]},
+    {"id": "q05", "category": "factual", "query": "What does the CAP theorem say about network partitions?", "relevant": [["doc-distributed-systems", 2]], "answer_terms": ["consistency", "availability", "partition"]},
+    {"id": "q06", "category": "factual", "query": "What does a content delivery network cache?", "relevant": [["doc-cloud-infra", 2]], "answer_terms": ["static assets", "edge"]},
+    {"id": "q07", "category": "paraphrase", "query": "Which organelle generates most of the energy molecules a cell uses?", "relevant": [["doc-cell-biology", 2]], "answer_terms": ["mitochondri", "ATP"]},
+    {"id": "q08", "category": "paraphrase", "query": "Why do endurance runners hit the wall when their stored fuel runs out?", "relevant": [["doc-sports-nutrition", 2]], "answer_terms": ["glycogen", "fatigue"]},
+    {"id": "q09", "category": "paraphrase", "query": "How can a group of servers keep agreeing on the order of operations if one machine dies?", "relevant": [["doc-distributed-systems", 1]], "answer_terms": ["consensus", "leader", "majority"]},
+    {"id": "q10", "category": "paraphrase", "query": "Adding more machines automatically when traffic grows", "relevant": [["doc-cloud-infra", 1]], "answer_terms": ["autoscal", "instances"]},
+    {"id": "q11", "category": "paraphrase", "query": "Why can drinking too much plain water during a long race be dangerous?", "relevant": [["doc-sports-nutrition", 3]], "answer_terms": ["hyponatremia", "sodium"]},
+    {"id": "q12", "category": "paraphrase", "query": "How do water molecules move into or out of a cell?", "relevant": [["doc-cell-biology", 3]], "answer_terms": ["osmosis", "aquaporin"]},
+    {"id": "q13", "category": "paraphrase", "query": "Reading stale data right after writing it", "relevant": [["doc-cloud-infra", 3], ["doc-distributed-systems", 2]], "answer_terms": ["lag", "stale"]},
+    {"id": "q14", "category": "keyword", "query": "ATP synthase proton gradient", "relevant": [["doc-cell-biology", 2]], "answer_terms": ["ATP synthase", "proton"]},
+    {"id": "q15", "category": "keyword", "query": "Raft election term heartbeat", "relevant": [["doc-distributed-systems", 1]], "answer_terms": ["Raft", "heartbeat", "term"]},
+    {"id": "q16", "category": "keyword", "query": "TTL cache stampede", "relevant": [["doc-cloud-infra", 2]], "answer_terms": ["TTL", "stampede"]},
+    {"id": "q17", "category": "keyword", "query": "consistent hashing ring", "relevant": [["doc-distributed-systems", 3]], "answer_terms": ["consistent hashing", "ring"]},
+    {"id": "q18", "category": "keyword", "query": "sodium-potassium pump", "relevant": [["doc-cell-biology", 3]], "answer_terms": ["sodium-potassium pump"]},
+    {"id": "q19", "category": "keyword", "query": "leucine whey", "relevant": [["doc-sports-nutrition", 1]], "answer_terms": ["leucine", "whey"]},
+    {"id": "q20", "category": "cross_topic", "query": "How do muscles rebuild proteins after training?", "relevant": [["doc-sports-nutrition", 1], ["doc-cell-biology", 1]], "answer_terms": ["protein synthesis"]},
+    {"id": "q21", "category": "cross_topic", "query": "Where does the energy for muscle contraction come from?", "relevant": [["doc-sports-nutrition", 2], ["doc-cell-biology", 2]], "answer_terms": ["ATP", "glycogen"]},
+    {"id": "q22", "category": "cross_topic", "query": "Trade-off between serving stale cached data and freshness", "relevant": [["doc-cloud-infra", 2], ["doc-distributed-systems", 2]], "answer_terms": ["stale", "invalidat"]},
+    {"id": "q23", "category": "cross_topic", "query": "Removing failed servers from the pool with health checks", "relevant": [["doc-cloud-infra", 1], ["doc-distributed-systems", 3]], "answer_terms": ["health"]},
+    {"id": "q24", "category": "cross_topic", "query": "Replicating a log to followers and promoting a new leader on failure", "relevant": [["doc-distributed-systems", 1], ["doc-cloud-infra", 3]], "answer_terms": ["replicat", "leader"]}
+  ],
+  "cross_document": [
+    {"id": "x01", "source": ["doc-cell-biology", 1], "relevant": [["doc-sports-nutrition", 1]]},
+    {"id": "x02", "source": ["doc-cell-biology", 2], "relevant": [["doc-sports-nutrition", 2]]},
+    {"id": "x03", "source": ["doc-sports-nutrition", 3], "relevant": [["doc-cell-biology", 3]]},
+    {"id": "x04", "source": ["doc-cloud-infra", 3], "relevant": [["doc-distributed-systems", 1], ["doc-distributed-systems", 2]]},
+    {"id": "x05", "source": ["doc-cloud-infra", 2], "relevant": [["doc-distributed-systems", 2]]},
+    {"id": "x06", "source": ["doc-distributed-systems", 3], "relevant": [["doc-cloud-infra", 1]]}
+  ]
+}

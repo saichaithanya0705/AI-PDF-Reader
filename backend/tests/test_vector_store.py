@@ -1,4 +1,7 @@
+import importlib
 import json
+import sys
+import types
 from pathlib import Path
 
 from backend.app.vector_store import FAISSVectorStore
@@ -27,7 +30,7 @@ def test_remove_document_rebuilds_index_and_removed_document_is_not_searchable(t
 
     assert [result["document_id"] for result in results] == ["doc-b"]
     assert store.index.ntotal == 1
-    assert store.get_stats()["num_documents"] == 1
+    assert store.get_stats(user_id="tenant-1")["num_documents"] == 1
 
 
 def test_vector_store_metadata_json_does_not_load_legacy_pickle(tmp_path: Path):
@@ -127,3 +130,98 @@ def test_filtered_search_expands_candidates_until_matching_tenant_is_found(tmp_p
     results = store.search_similar([1.0, 0.0], top_k=1, user_id="target-user")
 
     assert [result.chunk_id for result in results] == ["target"]
+
+
+def test_global_vector_store_uses_shared_nvidia_embedding_profile(monkeypatch, tmp_path: Path):
+    from backend.app import vector_store
+
+    captured = {}
+
+    class CapturingStore:
+        def __init__(self, index_path, metadata_path, dimension):
+            captured.update(
+                index_path=index_path,
+                metadata_path=metadata_path,
+                dimension=dimension,
+            )
+
+    monkeypatch.setenv("NVIDIA_EMBEDDING_MODEL", "nvidia/test-embedding")
+    monkeypatch.setenv("NVIDIA_EMBEDDING_DIMENSION", "3")
+    monkeypatch.setenv("APP_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("PERSISTENCE_BACKEND", "sqlite")
+    monkeypatch.setattr(vector_store, "FAISSVectorStore", CapturingStore)
+    monkeypatch.setattr(vector_store, "_vector_store_instance", None)
+
+    vector_store.get_vector_store()
+
+    assert captured["dimension"] == 3
+    assert Path(captured["index_path"]) == tmp_path / "faiss_index-nvidia-test-embedding-3.bin"
+    assert Path(captured["metadata_path"]) == tmp_path / "metadata-nvidia-test-embedding-3.json"
+
+
+def test_global_vector_store_uses_supabase_adapter_for_supabase_persistence(monkeypatch):
+    from backend.app import persistence, vector_store
+
+    captured = {}
+
+    class CapturingSupabaseStore:
+        def __init__(self, database):
+            captured["database"] = database
+
+    fake_database = object()
+    fake_module = types.ModuleType("backend.app.supabase_vector_store")
+    fake_module.SupabaseVectorStore = CapturingSupabaseStore
+    monkeypatch.setenv("PERSISTENCE_BACKEND", "supabase")
+    monkeypatch.setattr(persistence, "db", fake_database)
+    monkeypatch.setitem(sys.modules, "backend.app.supabase_vector_store", fake_module)
+    monkeypatch.setattr(vector_store, "_vector_store_instance", None)
+
+    store = vector_store.get_vector_store()
+
+    assert isinstance(store, CapturingSupabaseStore)
+    assert captured["database"] is fake_database
+
+
+def test_supabase_vector_stats_require_and_forward_tenant_scope(monkeypatch):
+    database_module = types.ModuleType("backend.app.supabase_database")
+    database_module.SupabaseDatabase = object
+    monkeypatch.setitem(sys.modules, "backend.app.supabase_database", database_module)
+    monkeypatch.delitem(sys.modules, "backend.app.supabase_vector_store", raising=False)
+    supabase_vector_store = importlib.import_module("backend.app.supabase_vector_store")
+
+    class FakeDatabase:
+        def __init__(self):
+            self.requested_client_id = None
+
+        def _require_user_id(self, user_id):
+            assert user_id == "tenant-1"
+            return "validated-tenant-1"
+
+        def get_chunk_count(self, client_id=None):
+            self.requested_client_id = client_id
+            return 7
+
+    database = FakeDatabase()
+    store = supabase_vector_store.SupabaseVectorStore(database)
+
+    stats = store.get_stats(user_id="tenant-1")
+
+    assert stats["total_vectors"] == 7
+    assert database.requested_client_id == "validated-tenant-1"
+
+
+def test_app_data_dir_defaults_to_backend_data(monkeypatch):
+    from backend.app import storage_paths
+
+    monkeypatch.delenv("APP_DATA_DIR", raising=False)
+
+    assert storage_paths.get_data_dir() == Path(storage_paths.__file__).resolve().parents[1] / "data"
+
+
+def test_relative_app_data_dir_is_resolved_from_backend_directory(monkeypatch):
+    from backend.app import storage_paths
+
+    monkeypatch.setenv("APP_DATA_DIR", "runtime-data")
+    data_dir = storage_paths.get_data_dir()
+
+    assert data_dir == Path(storage_paths.__file__).resolve().parents[1] / "runtime-data"

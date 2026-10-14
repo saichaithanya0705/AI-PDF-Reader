@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { API_URL } from '../config';
 import {
   askGPT as askGPTApi,
@@ -64,9 +64,21 @@ export interface RelatedSection {
   file_path?: string;
 }
 
+// Must stay in sync with the insight types emitted by backend/app/enhanced_llm_service.py.
+const INSIGHT_TYPES = [
+  'key-insight',
+  'key-takeaway',
+  'did-you-know',
+  'counterpoint',
+  'connection',
+  'practical-tip',
+  'deep-dive',
+  'study-tip',
+] as const;
+
 export interface Insight {
   id: string;
-  type: 'key-insight' | 'did-you-know' | 'counterpoint' | 'connection';
+  type: typeof INSIGHT_TYPES[number];
   title: string;
   content: string;
   relevance: number;
@@ -95,6 +107,7 @@ interface PDFContextType {
   loadDocument: (documentId: string) => Promise<PDFDocument | null>;
   getRelatedSections: (documentId: string, currentPage: number) => Promise<RelatedSection[]>;
   getInsights: (documentId: string, currentPage: number) => Promise<Insight[]>;
+  clearRelatedContent: () => void;
   askGPT: (selectedText: string, context: string) => Promise<string>;
   updateDocuments: (newDocs: PDFDocument[]) => void;
   fetchAllDocuments: () => Promise<void>;
@@ -102,7 +115,7 @@ interface PDFContextType {
   deleteDocument: (documentId: string) => Promise<void>;
   deleteAllDocuments: (permanent?: boolean) => Promise<void>;
   renameDocument: (documentId: string, newName: string) => Promise<void>;
-  classifyUserIntent: (userInput: string) => Promise<unknown>;
+  classifyUserIntent: (userInput: string) => Promise<ReturnType<typeof classifyIntentLocally>>;
   getPersonaJobSuggestions: (userInput: string, topK?: number) => Promise<unknown>;
 }
 
@@ -358,15 +371,18 @@ const normalizeSections = (value: unknown, fallbackDocumentId: string): RelatedS
     : []
 );
 
+// Cross-document sections must name the PDF they came from. Falling back to the
+// open document would render a match that navigates back to the same file.
+const normalizeCrossDocumentSections = (value: unknown, currentDocumentId: string): RelatedSection[] => (
+  normalizeSections(value, '').filter((section) => (
+    section.documentId.length > 0 && section.documentId !== currentDocumentId
+  ))
+);
+
 const normalizeInsights = (value: unknown): Insight[] => {
   if (!Array.isArray(value)) return [];
 
-  const allowedTypes = new Set<Insight['type']>([
-    'key-insight',
-    'did-you-know',
-    'counterpoint',
-    'connection',
-  ]);
+  const allowedTypes = new Set<Insight['type']>(INSIGHT_TYPES);
 
   return value.filter(isRecord).map((record, index) => {
     const type = asString(record.type);
@@ -426,6 +442,10 @@ export const PDFProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [insights, setInsights] = useState<Insight[]>([]);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isLoadingDocuments, setIsLoadingDocuments] = useState(false);
+  // Page turns fire overlapping requests; only the latest one may update state,
+  // otherwise a slow response for page N overwrites the panel for page N+1.
+  const relatedRequestRef = useRef(0);
+  const insightsRequestRef = useRef(0);
 
   const persistDocuments = useCallback((nextDocuments: PDFDocument[]) => {
     setDocuments(nextDocuments);
@@ -572,18 +592,23 @@ export const PDFProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [mergeAndPersistDocuments]);
 
   const getRelatedSections = useCallback(async (documentId: string, currentPage: number): Promise<RelatedSection[]> => {
+    const requestId = ++relatedRequestRef.current;
     try {
-      const persona = localStorage.getItem('lastPersona') || 'Student';
-      const job = localStorage.getItem('lastJob') || 'Learning and Research';
+      // Only send persona/job the user actually chose; invented defaults pollute
+      // the retrieval query and trigger keyword re-ranking on every page.
+      const persona = localStorage.getItem('lastPersona') || undefined;
+      const job = localStorage.getItem('lastJob') || undefined;
       const data = await getRecommendationsApi(documentId, currentPage, persona, job, true);
+      if (requestId !== relatedRequestRef.current) return [];
       const response = isRecord(data) ? data : {};
       const sections = normalizeSections(response.recommendations, documentId);
-      const crossDocSections = normalizeSections(response.cross_document_sections, documentId);
+      const crossDocSections = normalizeCrossDocumentSections(response.cross_document_sections, documentId);
 
       setRelatedSections(sections);
       setCrossDocumentSections(crossDocSections);
       return sections;
     } catch (error) {
+      if (requestId !== relatedRequestRef.current) return [];
       console.error('Error fetching related sections:', error);
       setRelatedSections([]);
       setCrossDocumentSections([]);
@@ -591,19 +616,35 @@ export const PDFProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, []);
 
+  const clearRelatedContent = useCallback(() => {
+    relatedRequestRef.current += 1;
+    insightsRequestRef.current += 1;
+    setRelatedSections([]);
+    setCrossDocumentSections([]);
+    setInsights([]);
+  }, []);
+
   const getInsights = useCallback(async (documentId: string, currentPage: number): Promise<Insight[]> => {
     if (!isOnline) {
       return [];
     }
 
+    const requestId = ++insightsRequestRef.current;
     try {
-      const data = await getInsightsApi(documentId, currentPage);
+      const data = await getInsightsApi(
+        documentId,
+        currentPage,
+        localStorage.getItem('lastPersona') || undefined,
+        localStorage.getItem('lastJob') || undefined,
+      );
+      if (requestId !== insightsRequestRef.current) return [];
       const response = isRecord(data) ? data : {};
       const normalizedInsights = normalizeInsights(response.insights);
 
       setInsights(normalizedInsights);
       return normalizedInsights;
     } catch (error) {
+      if (requestId !== insightsRequestRef.current) return [];
       console.error('Error fetching insights:', error);
       setInsights([]);
       return [];
@@ -696,6 +737,7 @@ export const PDFProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     loadDocument,
     getRelatedSections,
     getInsights,
+    clearRelatedContent,
     askGPT,
     updateDocuments,
     fetchAllDocuments,
@@ -718,6 +760,7 @@ export const PDFProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     loadDocument,
     getRelatedSections,
     getInsights,
+    clearRelatedContent,
     askGPT,
     updateDocuments,
     fetchAllDocuments,

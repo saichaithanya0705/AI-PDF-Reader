@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usePDF } from '../context/usePDF';
 import { ExternalLink, FileText } from 'lucide-react';
@@ -8,8 +8,15 @@ interface RelatedDocumentsSidebarProps {
 }
 
 const RelatedDocumentsSidebar: React.FC<RelatedDocumentsSidebarProps> = ({ currentDocumentId }) => {
-  const { documents, crossDocumentSections } = usePDF();
+  const { documents, crossDocumentSections, fetchAllDocuments } = usePDF();
   const navigate = useNavigate();
+
+  // The reader can be opened directly (deep link / refresh) without visiting the
+  // library first, so load the full document list here rather than relying on
+  // whatever happens to be cached.
+  useEffect(() => {
+    fetchAllDocuments();
+  }, [fetchAllDocuments]);
 
   const handleNavigate = (docId: string, page: number = 1) => {
     navigate(`/reader/${docId}?page=${page}`);
@@ -62,6 +69,12 @@ const RelatedDocumentsSidebar: React.FC<RelatedDocumentsSidebarProps> = ({ curre
           })}
         </div>
 
+        {crossDocumentSections.length === 0 && documents.length > 1 && (
+          <p className="border-t border-slate-700 p-3 text-xs text-slate-500">
+            No closely related passages in your other PDFs for this page.
+          </p>
+        )}
+
         {crossDocumentSections.length > 0 && (
           <div className="border-t border-slate-700 p-3">
             <div className="mb-3">
@@ -87,8 +100,11 @@ const RelatedDocumentsSidebar: React.FC<RelatedDocumentsSidebarProps> = ({ curre
                       </span>
                       <span className="mt-1 inline-flex items-center gap-2 text-xs text-slate-400">
                         Page {section.page}
-                        <span className="rounded bg-indigo-400/10 px-1.5 py-0.5 text-indigo-200">
-                          {Math.round(section.relevance * 100)}% match
+                        <span
+                          className="rounded bg-indigo-400/10 px-1.5 py-0.5 tabular-nums text-indigo-200"
+                          title="Retrieval score (0.8 × semantic similarity + 0.2 × keyword match). Higher is more related; it is not a percentage."
+                        >
+                          score {section.relevance.toFixed(2)}
                         </span>
                       </span>
                     </span>

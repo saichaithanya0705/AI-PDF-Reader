@@ -24,8 +24,12 @@ python -m pip install --upgrade pip
 
 REM Install dependencies
 echo [*] Installing dependencies...
-call venv_new\Scripts\pip install fastapi uvicorn python-multipart requests sentence-transformers torch numpy faiss-cpu python-dotenv pypdf pymupdf PyPDF2 azure-cognitiveservices-speech openai google-generativeai google-cloud-aiplatform langchain-google-genai langchain langchain-community scikit-learn google-cloud-texttospeech pydub spacy supabase
-call venv_new\Scripts\python -m spacy download en_core_web_sm
+call venv_new\Scripts\python backend\scripts\check_hosted_embedding_policy.py
+if %errorlevel% neq 0 exit /b %errorlevel%
+call venv_new\Scripts\python -m pip install --requirement backend\requirements.txt
+if %errorlevel% neq 0 exit /b %errorlevel%
+call venv_new\Scripts\python -c "import spacy; spacy.load('en_core_web_sm')"
+if %errorlevel% neq 0 exit /b %errorlevel%
 
 echo.
 echo [OK] Environment setup complete!

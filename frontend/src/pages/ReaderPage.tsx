@@ -37,14 +37,16 @@ const ReaderPage: React.FC = () => {
     loadDocument,
     getRelatedSections,
     getInsights,
+    clearRelatedContent,
     insights,
     isOnline,
   } = usePDF();
 
-  // Initialize page from URL or default to 1
-  const pageParam = searchParams.get('page');
-  const initialPage = pageParam ? parseInt(pageParam, 10) : 1;
-  const [currentPage, setCurrentPage] = useState(initialPage);
+  // The URL is the single source of truth for the page, so links from the
+  // related-content sidebar (/reader/:id?page=N) land on the right page even
+  // though this component stays mounted across navigations.
+  const parsedPage = Number.parseInt(searchParams.get('page') ?? '', 10);
+  const currentPage = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
 
   const [showFloatingInsights, setShowFloatingInsights] = useState(false);
   const [showPodcast, setShowPodcast] = useState(false);
@@ -57,7 +59,16 @@ const ReaderPage: React.FC = () => {
   const [documentLoadError, setDocumentLoadError] = useState<string | null>(null);
   const isDockedChatViewport = useMediaQuery('(min-width: 1280px)');
   const readerRef = useRef<HTMLDivElement>(null);
+  const isActiveDocument = Boolean(pdfId && currentDocument?.id === pdfId);
 
+  // Drop the previous PDF's matches/insights as soon as the route changes.
+  useEffect(() => {
+    clearRelatedContent();
+    setShowInsightsNotification(false);
+  }, [pdfId, clearRelatedContent]);
+
+  // Resolve the document for the route. Data fetching lives in a separate
+  // effect so library refreshes don't re-trigger recommendation/LLM calls.
   useEffect(() => {
     if (!pdfId) {
       setIsDocumentLoading(false);
@@ -65,57 +76,45 @@ const ReaderPage: React.FC = () => {
       return;
     }
 
+    if (currentDocument?.id === pdfId) {
+      setIsDocumentLoading(false);
+      return;
+    }
+
     let cancelled = false;
+    setDocumentLoadError(null);
 
-    const resolveDocument = async () => {
-      setDocumentLoadError(null);
+    const cachedDocument = documents.find(d => d.id === pdfId);
+    if (cachedDocument) {
+      setCurrentDocument(cachedDocument);
+      setIsDocumentLoading(false);
+      return;
+    }
 
-      const doc = currentDocument?.id === pdfId
-        ? currentDocument
-        : documents.find(d => d.id === pdfId);
-
-      if (doc) {
-        setCurrentDocument(doc);
-        setIsDocumentLoading(false);
-        getRelatedSections(pdfId, currentPage);
-        if (isOnline) {
-          getInsights(pdfId, currentPage);
-        }
-        return;
-      }
-
-      setIsDocumentLoading(true);
-      const loadedDocument = await loadDocument(pdfId);
+    setIsDocumentLoading(true);
+    loadDocument(pdfId).then((loadedDocument) => {
       if (cancelled) return;
-
-      if (loadedDocument) {
-        setIsDocumentLoading(false);
-        getRelatedSections(pdfId, currentPage);
-        if (isOnline) {
-          getInsights(pdfId, currentPage);
-        }
-      } else {
-        setIsDocumentLoading(false);
+      setIsDocumentLoading(false);
+      if (!loadedDocument) {
         setDocumentLoadError('Document not found or you do not have access to it.');
       }
-    };
-
-    resolveDocument();
+    });
 
     return () => {
       cancelled = true;
     };
-  }, [
-    pdfId,
-    documents,
-    currentDocument,
-    currentPage,
-    isOnline,
-    setCurrentDocument,
-    loadDocument,
-    getRelatedSections,
-    getInsights,
-  ]);
+  }, [pdfId, documents, currentDocument?.id, setCurrentDocument, loadDocument]);
+
+  // Fetch side-panel content once per (document, page).
+  useEffect(() => {
+    if (!pdfId || !isActiveDocument) return;
+    getRelatedSections(pdfId, currentPage);
+  }, [pdfId, isActiveDocument, currentPage, getRelatedSections]);
+
+  useEffect(() => {
+    if (!pdfId || !isActiveDocument || !isOnline) return;
+    getInsights(pdfId, currentPage);
+  }, [pdfId, isActiveDocument, currentPage, isOnline, getInsights]);
 
   // Load saved persona and job only once on mount
   useEffect(() => {
@@ -136,9 +135,10 @@ const ReaderPage: React.FC = () => {
 
     if (podcast === 'true' && isOnline) {
       // Small delay to ensure document is loaded
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         setShowPodcast(true);
       }, 1000);
+      return () => clearTimeout(timer);
     }
   }, [searchParams, isOnline]);
 
@@ -150,27 +150,19 @@ const ReaderPage: React.FC = () => {
   }, [insights, showFloatingInsights]);
 
   const handlePageChange = (page: number) => {
-    setCurrentPage(page);
-
-    // Update URL without reloading
+    // Updating the URL drives currentPage and the fetch effects above.
     setSearchParams(prev => {
-      prev.set('page', page.toString());
-      return prev;
+      const next = new URLSearchParams(prev);
+      next.set('page', page.toString());
+      return next;
     }, { replace: true });
-
-    if (currentDocument) {
-      getRelatedSections(currentDocument.id, page);
-      if (isOnline) {
-        getInsights(currentDocument.id, page);
-      }
-    }
   };
 
-  if (isDocumentLoading || !currentDocument) {
+  if (isDocumentLoading || !currentDocument || !isActiveDocument) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-900">
         <div className="text-center p-8 bg-slate-800 rounded-lg border border-slate-700">
-          {isDocumentLoading ? (
+          {isDocumentLoading || !documentLoadError ? (
             <>
               <div className="animate-spin w-12 h-12 border-4 border-cyan-400 border-t-transparent rounded-full mx-auto mb-4"></div>
               <p className="text-white text-lg mb-2">Loading document...</p>
@@ -254,8 +246,9 @@ const ReaderPage: React.FC = () => {
 
         <div className="min-w-0 flex-1 p-4 overflow-hidden h-full">
           <SmartPDFViewer
+            key={currentDocument.id}
             document={currentDocument}
-            initialPage={initialPage}
+            initialPage={currentPage}
             onPageChange={handlePageChange}
             onTextSelection={(text, page) => {
               console.log(`📝 Text selected on page ${page}:`, text.substring(0, 100) + '...');
@@ -320,6 +313,7 @@ const ReaderPage: React.FC = () => {
       <FloatingInsightsPanel
         isVisible={showFloatingInsights}
         onClose={() => setShowFloatingInsights(false)}
+        currentPage={currentPage}
         position={{ x: 100, y: 100 }}
       />
 

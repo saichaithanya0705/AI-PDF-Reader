@@ -665,3 +665,11 @@ export async function healthCheck() {
 export async function getConfig() {
   return publicApiRequest('/config');
 }
+
+export async function getLatestEvalReport() {
+  return apiRequest<import('./evalTypes').EvalReport>('/api/evals/latest');
+}
+
+export async function getEvalHistory() {
+  return apiRequest<import('./evalTypes').EvalHistoryEntry[]>('/api/evals/history');
+}

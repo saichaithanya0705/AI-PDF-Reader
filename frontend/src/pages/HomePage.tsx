@@ -17,6 +17,7 @@ import {
   FolderPlus,
   Trash2,
   LogOut,
+  Gauge,
   UserCircle,
   Home,
 } from 'lucide-react';
@@ -34,6 +35,9 @@ type FileWithValidation = File & {
 };
 
 type StoredDocument = {
+  id?: string;
+  url?: string;
+  size?: number;
   uploadDate?: string | Date;
   lastOpened?: string | Date | null;
   lastUploaded?: string | Date | null;
@@ -646,14 +650,19 @@ const HomePage: React.FC = () => {
           try {
             const storedValue = JSON.parse(stored);
             const storedDocuments: StoredDocument[] = Array.isArray(storedValue) ? storedValue : [];
-            const parsedDocs = storedDocuments.map((d) => {
+            // Entries without an id/url cannot be opened or fetched; skip them.
+            const parsedDocs = storedDocuments
+              .filter((d): d is StoredDocument & { id: string; url: string } => (
+                typeof d?.id === 'string' && typeof d?.url === 'string'
+              ))
+              .map((d) => {
               // Safe date parsing
               let uploadDate: Date;
               let lastOpened: Date | null = null;
               let lastUploaded: Date | null = null;
 
               try {
-                uploadDate = new Date(d.uploadDate);
+                uploadDate = new Date(d.uploadDate ?? Date.now());
                 if (isNaN(uploadDate.getTime())) {
                   console.warn('Invalid upload date for document:', d.name, d.uploadDate);
                   uploadDate = new Date(); // Use current date as fallback
@@ -691,6 +700,8 @@ const HomePage: React.FC = () => {
 
               return {
                 ...d,
+                name: d.name || 'Untitled document',
+                size: typeof d.size === 'number' ? d.size : 0,
                 uploadDate,
                 lastOpened,
                 lastUploaded: lastUploaded || uploadDate // Fallback to upload date
@@ -904,6 +915,13 @@ const HomePage: React.FC = () => {
 
         {user && (
           <div className="flex flex-wrap items-center gap-3 text-sm text-slate-200">
+            <Link
+              to="/evals"
+              className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-transparent px-3 py-1.5 text-xs font-medium text-slate-200 transition hover:border-white/30 hover:text-white"
+            >
+              <Gauge className="h-4 w-4" />
+              RAG evals
+            </Link>
             <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1">
               <UserCircle className="h-4 w-4 text-cyan-300" />
               <span className="max-w-[12rem] truncate">{user.email}</span>

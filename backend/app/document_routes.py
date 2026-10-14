@@ -3,14 +3,15 @@
 from fastapi import APIRouter, HTTPException, Query, Path, Depends
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any, Literal
-from pathlib import Path as FilePath
 from datetime import datetime
 import json
 import shutil
 import logging
 
 from .auth_middleware import get_current_user, get_optional_user
-from .database import db, Document
+from .database import Document
+from .document_storage import get_document_storage
+from .persistence import db
 
 logger = logging.getLogger(__name__)
 
@@ -181,10 +182,8 @@ async def delete_document(
         # If permanent delete, also remove the file
         if permanent:
             try:
-                file_path = FilePath(document.file_path)
-                if file_path.exists():
-                    file_path.unlink()
-                    logger.info(f"🗑️ Deleted file: {file_path}")
+                get_document_storage().delete(document.file_path)
+                logger.info("Deleted persisted PDF object for document %s", document_id)
             except Exception as e:
                 logger.error(f"⚠️ Failed to delete file: {e}")
         

@@ -37,6 +37,12 @@ export const supabase = supabaseUrl && supabaseAnonKey
         async signOut() {
           throw new Error('Supabase client not configured');
         },
+        async resetPasswordForEmail() {
+          throw new Error('Supabase client not configured');
+        },
+        async updateUser() {
+          throw new Error('Supabase client not configured');
+        },
       },
       from() {
         throw new Error('Supabase client not configured');

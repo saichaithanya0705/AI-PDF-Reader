@@ -143,6 +143,7 @@ def test_deploy_paths_use_lockfile_and_backend_requirements():
 
 def test_obsolete_azure_workflow_is_manual_only_and_non_deploying():
     workflow = _read(".github/workflows/main_ai-pdf-reader.yml")
+    ci_workflow = _read(".github/workflows/deploy.yml")
 
     assert "workflow_dispatch:" in workflow
     assert "push:" not in workflow
@@ -151,7 +152,12 @@ def test_obsolete_azure_workflow_is_manual_only_and_non_deploying():
     assert "publish-profile" not in workflow
     assert "AZUREAPPSERVICE_PUBLISHPROFILE" not in workflow
     assert "Deployment disabled" in workflow
-    assert ".github/workflows/deploy.yml" in workflow
+    assert "docs/DEPLOY_RENDER_VERCEL.md" in workflow
+    assert "render.yaml" in workflow
+    assert "frontend/vercel.json" in workflow
+    assert "appleboy/ssh-action" not in ci_workflow
+    assert "Deploy to DigitalOcean" not in ci_workflow
+    assert "docker build --file backend/Dockerfile" in ci_workflow
 
 
 def test_backend_deploy_does_not_download_spacy_models_at_runtime():

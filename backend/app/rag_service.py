@@ -8,12 +8,19 @@ import math
 import re
 from typing import List, Dict, Any, Optional, Tuple
 
-from .database import db
+from .persistence import db
 from .embedding_service import get_embedding_service
 from .ingestion_service import get_ingestion_service
+from .reranker_service import RerankerServiceUnavailableError, get_reranker_service
 from .semantic_cache import SemanticCacheContext, get_semantic_search_cache
 from .vector_store import get_vector_store, SearchResult
-from sentence_transformers import CrossEncoder
+import os
+
+# Side-panel matches below this retrieval score are unrelated filler. Measured
+# with NVIDIA nemotron embeddings: correct cross-PDF matches scored >= 0.24 and
+# clearly unrelated ones 0.11-0.20; the floor sits at the midpoint. Re-check
+# with the evals (cross_doc_off_topic, cross_doc_hit@3) if the model changes.
+CROSS_DOCUMENT_MIN_SCORE = float(os.getenv("RECOMMENDATION_MIN_SCORE", "0.22"))
 
 
 def _optional_float(value: Any) -> Optional[float]:
@@ -98,13 +105,7 @@ class RAGService:
         self.ingestion_service = get_ingestion_service()
         self.semantic_cache = get_semantic_search_cache()
         
-        # Initialize Cross-Encoder for re-ranking
-        try:
-            self.cross_encoder = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
-            print("✅ Cross-Encoder initialized")
-        except Exception as e:
-            print(f"⚠️ Cross-Encoder initialization failed: {e}")
-            self.cross_encoder = None
+        self.reranker = get_reranker_service()
             
         print("✅ RAG Service initialized")
     
@@ -177,37 +178,22 @@ class RAGService:
 
     def rerank_results(self, query: str, results: List[SearchResult], top_k: int) -> List[SearchResult]:
         """
-        Re-rank search results using Cross-Encoder
+        Re-rank search results using NVIDIA's hosted reranking model.
         """
-        if not self.cross_encoder or not results:
+        if not results:
             return results[:top_k]
-            
-        print(f"🔄 Re-ranking {len(results)} results...")
         try:
-            # Prepare pairs for cross-encoder
-            pairs = [[query, result.chunk_text] for result in results]
-            
-            # Predict scores
-            scores = self.cross_encoder.predict(pairs)
-            
-            # Attach scores to results
-            for result, score in zip(results, scores):
+            scores = self.reranker.rerank(query, [result.chunk_text for result in results])
+            reranked_results = []
+            for score in scores:
+                result = results[score.index]
                 if getattr(result, "metadata", None) is None:
                     result.metadata = {}
                 result.metadata["vector_similarity"] = result.similarity_score
-                result.metadata["rerank_score"] = float(score)
-            
-            # Sort by new score (descending)
-            reranked_results = sorted(
-                results,
-                key=lambda x: (x.metadata or {}).get("rerank_score", float("-inf")),
-                reverse=True
-            )
-            
+                result.metadata["rerank_score"] = score.logit
+                reranked_results.append(result)
             return reranked_results[:top_k]
-            
-        except Exception as e:
-            print(f"⚠️ Re-ranking failed: {e}")
+        except RerankerServiceUnavailableError:
             return results[:top_k]
 
     def _candidate_count(self, top_k: int, use_advanced_rag: bool) -> int:
@@ -441,8 +427,10 @@ class RAGService:
         exclude_document_id: Optional[str],
         user_id: Optional[str],
     ) -> List[SearchResult]:
+        # Evals inject an isolated chunk store; production uses the app database.
+        chunk_db = getattr(self, "chunk_search_db", None) or db
         try:
-            rows = db.search_chunks_bm25(
+            rows = chunk_db.search_chunks_bm25(
                 query=query,
                 limit=fetch_k,
                 document_id=document_id,
@@ -603,7 +591,7 @@ class RAGService:
 
             # 2. Re-ranking (if enabled). retrieval_score remains the hybrid
             # vector/keyword/recency score; rerank_score is separate metadata.
-            if use_advanced_rag and self.cross_encoder and ranked_results:
+            if use_advanced_rag and ranked_results:
                 print("🚀 Using Advanced RAG: Re-ranking")
                 results = self.rerank_results(query, ranked_results, top_k)
             else:
@@ -822,10 +810,10 @@ FORMATTING:
                 'error': str(e)
             }
     
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self, user_id: Optional[str] = None) -> Dict[str, Any]:
         """Get RAG system statistics"""
-        vector_stats = self.vector_store.get_stats()
-        total_chunks = db.get_chunk_count()
+        vector_stats = self.vector_store.get_stats(user_id=user_id)
+        total_chunks = db.get_chunk_count(client_id=user_id)
         
         return {
             'vector_store': vector_stats,

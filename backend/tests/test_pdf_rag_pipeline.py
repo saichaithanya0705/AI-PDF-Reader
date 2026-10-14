@@ -12,7 +12,7 @@ from backend.app.utils import intelligent_pdf_brain, process_pdfs
 
 
 def test_backfill_requires_explicit_tenant_scope(monkeypatch):
-    monkeypatch.setenv("USE_SUPABASE", "false")
+    monkeypatch.setenv("PERSISTENCE_BACKEND", "sqlite")
     script = importlib.import_module("backend.process_documents_for_rag")
 
     with pytest.raises(ValueError, match="tenant scope"):
@@ -22,8 +22,16 @@ def test_backfill_requires_explicit_tenant_scope(monkeypatch):
         script._get_documents_for_scope(client_id="tenant-1", all_tenants=True)
 
 
+def test_supabase_backfill_rejects_unscoped_all_tenants(monkeypatch):
+    script = importlib.import_module("backend.process_documents_for_rag")
+    monkeypatch.setattr(script, "persistence_backend", lambda: "supabase")
+
+    with pytest.raises(ValueError, match="require --client-id"):
+        script._get_documents_for_scope(all_tenants=True)
+
+
 def test_backfill_uses_document_client_id_for_rag_user(monkeypatch, tmp_path):
-    monkeypatch.setenv("USE_SUPABASE", "false")
+    monkeypatch.setenv("PERSISTENCE_BACKEND", "sqlite")
     script = importlib.import_module("backend.process_documents_for_rag")
 
     pdf_path = tmp_path / "stored.pdf"
@@ -44,8 +52,9 @@ def test_backfill_uses_document_client_id_for_rag_user(monkeypatch, tmp_path):
             self.requested_client_id = client_id
             return [document]
 
-        def get_chunk_count(self, document_id):
+        def get_chunk_count(self, document_id, client_id=None):
             assert document_id == "doc-1"
+            assert client_id == "tenant-1"
             return 0
 
     class FakeRAG:
@@ -56,7 +65,8 @@ def test_backfill_uses_document_client_id_for_rag_user(monkeypatch, tmp_path):
             self.calls.append(kwargs)
             return {"success": True, "chunks_created": 1, "embeddings_generated": 1}
 
-        def get_stats(self):
+        def get_stats(self, user_id=None):
+            assert user_id == "tenant-1"
             return {
                 "vector_store": {"total_vectors": 1, "num_documents": 1},
                 "database": {"total_chunks": 1},
@@ -67,12 +77,74 @@ def test_backfill_uses_document_client_id_for_rag_user(monkeypatch, tmp_path):
     fake_rag = FakeRAG()
     monkeypatch.setattr(script, "db", fake_db)
     monkeypatch.setattr(script, "get_rag_service", lambda: fake_rag)
+    monkeypatch.setattr(
+        script,
+        "get_document_storage",
+        lambda: SimpleNamespace(ensure_local=lambda location: Path(location)),
+    )
 
     asyncio.run(script.process_all_documents(client_id="tenant-1"))
 
     assert fake_db.requested_client_id == "tenant-1"
     assert fake_rag.calls[0]["user_id"] == "tenant-1"
     assert fake_rag.calls[0]["user_id"] != document.user_id
+
+
+def test_backfill_materializes_supabase_pdf_through_document_storage(monkeypatch, tmp_path):
+    monkeypatch.setenv("PERSISTENCE_BACKEND", "sqlite")
+    script = importlib.import_module("backend.process_documents_for_rag")
+
+    local_pdf = tmp_path / "cached.pdf"
+    local_pdf.write_bytes(b"%PDF-1.4\n")
+    document = SimpleNamespace(
+        id="doc-remote",
+        original_name="Remote.pdf",
+        file_path="supabase://documents/tenant/doc-remote/remote.pdf",
+        client_id="tenant-1",
+    )
+
+    class FakeDB:
+        def get_all_documents(self, client_id=None):
+            assert client_id == "tenant-1"
+            return [document]
+
+        def get_chunk_count(self, document_id, client_id=None):
+            assert document_id == "doc-remote"
+            assert client_id == "tenant-1"
+            return 0
+
+    class FakeRAG:
+        def __init__(self):
+            self.calls = []
+
+        async def process_document(self, **kwargs):
+            self.calls.append(kwargs)
+            return {"success": True, "chunks_created": 1, "embeddings_generated": 1}
+
+        def get_stats(self, user_id=None):
+            assert user_id == "tenant-1"
+            return {
+                "vector_store": {"total_vectors": 1, "num_documents": 1},
+                "database": {"total_chunks": 1},
+                "embedding": {"model": "fake", "dimension": 3},
+            }
+
+    materialized = []
+    fake_rag = FakeRAG()
+    monkeypatch.setattr(script, "db", FakeDB())
+    monkeypatch.setattr(script, "get_rag_service", lambda: fake_rag)
+    monkeypatch.setattr(
+        script,
+        "get_document_storage",
+        lambda: SimpleNamespace(
+            ensure_local=lambda location: materialized.append(location) or local_pdf,
+        ),
+    )
+
+    asyncio.run(script.process_all_documents(client_id="tenant-1"))
+
+    assert materialized == [document.file_path]
+    assert fake_rag.calls[0]["pdf_path"] == str(local_pdf)
 
 
 def test_extract_sections_keeps_same_page_heading_content(monkeypatch):
@@ -169,7 +241,8 @@ def test_ingestion_failure_cleans_partial_chunks_and_vectors(monkeypatch, tmp_pa
             self.updates.append(kwargs)
             return True
 
-        def delete_chunks_by_document(self, document_id):
+        def delete_chunks_by_document(self, document_id, client_id=None):
+            assert client_id == "user-1"
             self.delete_calls.append(document_id)
             return 1
 

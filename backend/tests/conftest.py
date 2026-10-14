@@ -1,9 +1,18 @@
 import json
+import os
 import sys
 import types
 from pathlib import Path
 
+import dotenv
 import numpy as np
+
+# Tests must never see the developer's real .env: backend/app/main.py calls
+# load_dotenv(override=True) at import time, which would point the suite at the
+# live Supabase project and paid NVIDIA endpoints. Disable it before any app
+# module is imported and pin the local persistence backend.
+dotenv.load_dotenv = lambda *_args, **_kwargs: False
+os.environ["PERSISTENCE_BACKEND"] = "sqlite"
 
 
 class FakeFaissIndexHNSWFlat:
@@ -57,6 +66,16 @@ fake_faiss.read_index = fake_read_index
 sys.modules.setdefault("faiss", fake_faiss)
 
 
+try:
+    from supabase import Client as _SupabaseClient  # noqa: F401
+    from supabase import create_client as _create_supabase_client  # noqa: F401
+except ImportError:
+    supabase_module = sys.modules.get("supabase") or types.ModuleType("supabase")
+    supabase_module.Client = object
+    supabase_module.create_client = lambda *_args, **_kwargs: None
+    sys.modules["supabase"] = supabase_module
+
+
 azure_module = types.ModuleType("azure")
 cognitiveservices_module = types.ModuleType("azure.cognitiveservices")
 speech_module = types.ModuleType("azure.cognitiveservices.speech")
@@ -93,21 +112,6 @@ def fake_fitz_open(_path):
 
 fitz_module.open = fake_fitz_open
 sys.modules.setdefault("fitz", fitz_module)
-
-
-sentence_transformers_module = types.ModuleType("sentence_transformers")
-
-
-class FakeCrossEncoder:
-    def __init__(self, *_args, **_kwargs):
-        pass
-
-    def predict(self, pairs):
-        return [0.0 for _ in pairs]
-
-
-sentence_transformers_module.CrossEncoder = FakeCrossEncoder
-sys.modules.setdefault("sentence_transformers", sentence_transformers_module)
 
 
 jose_module = types.ModuleType("jose")

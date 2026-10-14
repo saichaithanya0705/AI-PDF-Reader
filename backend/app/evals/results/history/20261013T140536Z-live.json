@@ -1,0 +1,3662 @@
+{
+  "schema_version": 1,
+  "run_id": "20261013T140536Z",
+  "created_at": "2026-10-13T14:05:36.709191+00:00",
+  "mode": "live",
+  "git_commit": "b42584b",
+  "python": "3.11.9",
+  "dataset": {
+    "name": "pdf-reader-rag-golden-v1",
+    "description": "Hand-labelled corpus and queries for the PDF reader RAG pipeline. Two topic pairs (biology/nutrition, cloud/distributed systems) share concepts so cross-document recommendations have known correct answers. Relevance is labelled at (document, page) granularity, matching what the reader UI navigates to.",
+    "documents": [
+      {
+        "id": "doc-cell-biology",
+        "name": "Cell Biology Primer.pdf",
+        "pages": 3
+      },
+      {
+        "id": "doc-sports-nutrition",
+        "name": "Sports Nutrition Guide.pdf",
+        "pages": 3
+      },
+      {
+        "id": "doc-cloud-infra",
+        "name": "Cloud Infrastructure Handbook.pdf",
+        "pages": 3
+      },
+      {
+        "id": "doc-distributed-systems",
+        "name": "Distributed Systems Notes.pdf",
+        "pages": 3
+      }
+    ],
+    "queries": 24,
+    "cross_document_cases": 6,
+    "categories": [
+      "cross_topic",
+      "factual",
+      "keyword",
+      "paraphrase"
+    ]
+  },
+  "config": {
+    "top_k": 5,
+    "cross_document_top_k": 3,
+    "fusion_weights": {
+      "vector": 0.8,
+      "keyword": 0.2
+    },
+    "reranker_model": "nvidia/llama-nemotron-rerank-vl-1b-v2"
+  },
+  "ingest": {
+    "documents": 4,
+    "pages": 12,
+    "chunks": 12,
+    "avg_chunk_chars": 489.6,
+    "max_chunk_chars": 545,
+    "chunk_size": 1000,
+    "chunk_overlap": 200,
+    "embedding_model": "nvidia/nemotron-3-embed-1b",
+    "embedding_dimension": 2048,
+    "chunking_ms": 26.8,
+    "embedding_ms": 1375.9,
+    "embedding_ms_per_chunk": 114.7
+  },
+  "variants": {
+    "dense": {
+      "name": "dense",
+      "reranker_applied": false,
+      "summary": {
+        "hit@1": 0.9583,
+        "hit@3": 1.0,
+        "hit@5": 1.0,
+        "recall@5": 1.0,
+        "precision@3": 0.4167,
+        "mrr": 0.9792,
+        "ndcg@5": 0.9872,
+        "answer_term_recall": 1.0,
+        "queries": 24,
+        "latency_p50_ms": 312.7,
+        "latency_p95_ms": 345.8
+      },
+      "by_category": {
+        "cross_topic": {
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.6667,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "queries": 5,
+          "latency_p50_ms": 324.3,
+          "latency_p95_ms": 343.6
+        },
+        "factual": {
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "queries": 6,
+          "latency_p50_ms": 279.6,
+          "latency_p95_ms": 331.9
+        },
+        "keyword": {
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "queries": 6,
+          "latency_p50_ms": 306.6,
+          "latency_p95_ms": 325.3
+        },
+        "paraphrase": {
+          "hit@1": 0.8571,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.381,
+          "mrr": 0.9286,
+          "ndcg@5": 0.9562,
+          "answer_term_recall": 1.0,
+          "queries": 7,
+          "latency_p50_ms": 315.5,
+          "latency_p95_ms": 346.9
+        }
+      },
+      "queries": [
+        {
+          "id": "q01",
+          "category": "factual",
+          "query": "What does the ribosome do during translation?",
+          "relevant": [
+            [
+              "doc-cell-biology",
+              1
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-cell-biology",
+              1
+            ],
+            [
+              "doc-cell-biology",
+              2
+            ],
+            [
+              "doc-cell-biology",
+              3
+            ],
+            [
+              "doc-cloud-infra",
+              1
+            ],
+            [
+              "doc-cloud-infra",
+              3
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 333.3
+        },
+        {
+          "id": "q02",
+          "category": "factual",
+          "query": "How much protein per kilogram should athletes eat each day?",
+          "relevant": [
+            [
+              "doc-sports-nutrition",
+              1
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-sports-nutrition",
+              1
+            ],
+            [
+              "doc-sports-nutrition",
+              2
+            ],
+            [
+              "doc-sports-nutrition",
+              3
+            ],
+            [
+              "doc-cell-biology",
+              1
+            ],
+            [
+              "doc-cell-biology",
+              2
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 244.0
+        },
+        {
+          "id": "q03",
+          "category": "factual",
+          "query": "What is carbohydrate loading before a marathon?",
+          "relevant": [
+            [
+              "doc-sports-nutrition",
+              2
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-sports-nutrition",
+              2
+            ],
+            [
+              "doc-cloud-infra",
+              2
+            ],
+            [
+              "doc-sports-nutrition",
+              1
+            ],
+            [
+              "doc-sports-nutrition",
+              3
+            ],
+            [
+              "doc-distributed-systems",
+              3
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 327.9
+        },
+        {
+          "id": "q04",
+          "category": "factual",
+          "query": "How does leader-follower database replication work?",
+          "relevant": [
+            [
+              "doc-cloud-infra",
+              3
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-cloud-infra",
+              3
+            ],
+            [
+              "doc-distributed-systems",
+              1
+            ],
+            [
+              "doc-distributed-systems",
+              3
+            ],
+            [
+              "doc-cloud-infra",
+              1
+            ],
+            [
+              "doc-distributed-systems",
+              2
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 216.7
+        },
+        {
+          "id": "q05",
+          "category": "factual",
+          "query": "What does the CAP theorem say about network partitions?",
+          "relevant": [
+            [
+              "doc-distributed-systems",
+              2
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-distributed-systems",
+              2
+            ],
+            [
+              "doc-cloud-infra",
+              2
+            ],
+            [
+              "doc-distributed-systems",
+              3
+            ],
+            [
+              "doc-distributed-systems",
+              1
+            ],
+            [
+              "doc-cell-biology",
+              3
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 315.1
+        },
+        {
+          "id": "q06",
+          "category": "factual",
+          "query": "What does a content delivery network cache?",
+          "relevant": [
+            [
+              "doc-cloud-infra",
+              2
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-cloud-infra",
+              2
+            ],
+            [
+              "doc-distributed-systems",
+              2
+            ],
+            [
+              "doc-distributed-systems",
+              3
+            ],
+            [
+              "doc-distributed-systems",
+              1
+            ],
+            [
+              "doc-sports-nutrition",
+              2
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 188.9
+        },
+        {
+          "id": "q07",
+          "category": "paraphrase",
+          "query": "Which organelle generates most of the energy molecules a cell uses?",
+          "relevant": [
+            [
+              "doc-cell-biology",
+              2
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-cell-biology",
+              2
+            ],
+            [
+              "doc-cell-biology",
+              3
+            ],
+            [
+              "doc-cell-biology",
+              1
+            ],
+            [
+              "doc-sports-nutrition",
+              2
+            ],
+            [
+              "doc-sports-nutrition",
+              1
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 309.3
+        },
+        {
+          "id": "q08",
+          "category": "paraphrase",
+          "query": "Why do endurance runners hit the wall when their stored fuel runs out?",
+          "relevant": [
+            [
+              "doc-sports-nutrition",
+              2
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-sports-nutrition",
+              2
+            ],
+            [
+              "doc-sports-nutrition",
+              3
+            ],
+            [
+              "doc-cell-biology",
+              2
+            ],
+            [
+              "doc-distributed-systems",
+              3
+            ],
+            [
+              "doc-sports-nutrition",
+              1
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 191.4
+        },
+        {
+          "id": "q09",
+          "category": "paraphrase",
+          "query": "How can a group of servers keep agreeing on the order of operations if one machine dies?",
+          "relevant": [
+            [
+              "doc-distributed-systems",
+              1
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-distributed-systems",
+              1
+            ],
+            [
+              "doc-distributed-systems",
+              3
+            ],
+            [
+              "doc-distributed-systems",
+              2
+            ],
+            [
+              "doc-cloud-infra",
+              1
+            ],
+            [
+              "doc-cloud-infra",
+              3
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 308.0
+        },
+        {
+          "id": "q10",
+          "category": "paraphrase",
+          "query": "Adding more machines automatically when traffic grows",
+          "relevant": [
+            [
+              "doc-cloud-infra",
+              1
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-cloud-infra",
+              1
+            ],
+            [
+              "doc-distributed-systems",
+              3
+            ],
+            [
+              "doc-distributed-systems",
+              1
+            ],
+            [
+              "doc-cloud-infra",
+              2
+            ],
+            [
+              "doc-cloud-infra",
+              3
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 346.1
+        },
+        {
+          "id": "q11",
+          "category": "paraphrase",
+          "query": "Why can drinking too much plain water during a long race be dangerous?",
+          "relevant": [
+            [
+              "doc-sports-nutrition",
+              3
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-sports-nutrition",
+              3
+            ],
+            [
+              "doc-sports-nutrition",
+              2
+            ],
+            [
+              "doc-sports-nutrition",
+              1
+            ],
+            [
+              "doc-cell-biology",
+              3
+            ],
+            [
+              "doc-cloud-infra",
+              3
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 347.3
+        },
+        {
+          "id": "q12",
+          "category": "paraphrase",
+          "query": "How do water molecules move into or out of a cell?",
+          "relevant": [
+            [
+              "doc-cell-biology",
+              3
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-cell-biology",
+              3
+            ],
+            [
+              "doc-cell-biology",
+              2
+            ],
+            [
+              "doc-cell-biology",
+              1
+            ],
+            [
+              "doc-sports-nutrition",
+              3
+            ],
+            [
+              "doc-cloud-infra",
+              1
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 315.5
+        },
+        {
+          "id": "q13",
+          "category": "paraphrase",
+          "query": "Reading stale data right after writing it",
+          "relevant": [
+            [
+              "doc-cloud-infra",
+              3
+            ],
+            [
+              "doc-distributed-systems",
+              2
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-cloud-infra",
+              2
+            ],
+            [
+              "doc-distributed-systems",
+              2
+            ],
+            [
+              "doc-cloud-infra",
+              3
+            ],
+            [
+              "doc-distributed-systems",
+              1
+            ],
+            [
+              "doc-sports-nutrition",
+              3
+            ]
+          ],
+          "hit@1": 0.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.6666666666666666,
+          "mrr": 0.5,
+          "ndcg@5": 0.6934264036172708,
+          "answer_term_recall": 1.0,
+          "latency_ms": 334.0
+        },
+        {
+          "id": "q14",
+          "category": "keyword",
+          "query": "ATP synthase proton gradient",
+          "relevant": [
+            [
+              "doc-cell-biology",
+              2
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-cell-biology",
+              2
+            ],
+            [
+              "doc-cell-biology",
+              1
+            ],
+            [
+              "doc-sports-nutrition",
+              1
+            ],
+            [
+              "doc-cell-biology",
+              3
+            ],
+            [
+              "doc-cloud-infra",
+              3
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 305.7
+        },
+        {
+          "id": "q15",
+          "category": "keyword",
+          "query": "Raft election term heartbeat",
+          "relevant": [
+            [
+              "doc-distributed-systems",
+              1
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-distributed-systems",
+              1
+            ],
+            [
+              "doc-distributed-systems",
+              3
+            ],
+            [
+              "doc-cloud-infra",
+              3
+            ],
+            [
+              "doc-distributed-systems",
+              2
+            ],
+            [
+              "doc-cloud-infra",
+              1
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 204.6
+        },
+        {
+          "id": "q16",
+          "category": "keyword",
+          "query": "TTL cache stampede",
+          "relevant": [
+            [
+              "doc-cloud-infra",
+              2
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-cloud-infra",
+              2
+            ],
+            [
+              "doc-distributed-systems",
+              2
+            ],
+            [
+              "doc-distributed-systems",
+              3
+            ],
+            [
+              "doc-sports-nutrition",
+              2
+            ],
+            [
+              "doc-distributed-systems",
+              1
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 280.9
+        },
+        {
+          "id": "q17",
+          "category": "keyword",
+          "query": "consistent hashing ring",
+          "relevant": [
+            [
+              "doc-distributed-systems",
+              3
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-distributed-systems",
+              3
+            ],
+            [
+              "doc-distributed-systems",
+              2
+            ],
+            [
+              "doc-distributed-systems",
+              1
+            ],
+            [
+              "doc-cloud-infra",
+              2
+            ],
+            [
+              "doc-cloud-infra",
+              3
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 307.6
+        },
+        {
+          "id": "q18",
+          "category": "keyword",
+          "query": "sodium-potassium pump",
+          "relevant": [
+            [
+              "doc-cell-biology",
+              3
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-cell-biology",
+              3
+            ],
+            [
+              "doc-sports-nutrition",
+              3
+            ],
+            [
+              "doc-cell-biology",
+              2
+            ],
+            [
+              "doc-distributed-systems",
+              3
+            ],
+            [
+              "doc-sports-nutrition",
+              2
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 310.4
+        },
+        {
+          "id": "q19",
+          "category": "keyword",
+          "query": "leucine whey",
+          "relevant": [
+            [
+              "doc-sports-nutrition",
+              1
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-sports-nutrition",
+              1
+            ],
+            [
+              "doc-sports-nutrition",
+              3
+            ],
+            [
+              "doc-cloud-infra",
+              3
+            ],
+            [
+              "doc-distributed-systems",
+              3
+            ],
+            [
+              "doc-cell-biology",
+              1
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 330.3
+        },
+        {
+          "id": "q20",
+          "category": "cross_topic",
+          "query": "How do muscles rebuild proteins after training?",
+          "relevant": [
+            [
+              "doc-cell-biology",
+              1
+            ],
+            [
+              "doc-sports-nutrition",
+              1
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-sports-nutrition",
+              1
+            ],
+            [
+              "doc-cell-biology",
+              1
+            ],
+            [
+              "doc-sports-nutrition",
+              2
+            ],
+            [
+              "doc-cell-biology",
+              2
+            ],
+            [
+              "doc-cell-biology",
+              3
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.6666666666666666,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 343.9
+        },
+        {
+          "id": "q21",
+          "category": "cross_topic",
+          "query": "Where does the energy for muscle contraction come from?",
+          "relevant": [
+            [
+              "doc-cell-biology",
+              2
+            ],
+            [
+              "doc-sports-nutrition",
+              2
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-sports-nutrition",
+              2
+            ],
+            [
+              "doc-cell-biology",
+              2
+            ],
+            [
+              "doc-sports-nutrition",
+              1
+            ],
+            [
+              "doc-cell-biology",
+              3
+            ],
+            [
+              "doc-cell-biology",
+              1
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.6666666666666666,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 342.4
+        },
+        {
+          "id": "q22",
+          "category": "cross_topic",
+          "query": "Trade-off between serving stale cached data and freshness",
+          "relevant": [
+            [
+              "doc-cloud-infra",
+              2
+            ],
+            [
+              "doc-distributed-systems",
+              2
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-cloud-infra",
+              2
+            ],
+            [
+              "doc-distributed-systems",
+              2
+            ],
+            [
+              "doc-cloud-infra",
+              3
+            ],
+            [
+              "doc-distributed-systems",
+              3
+            ],
+            [
+              "doc-sports-nutrition",
+              2
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.6666666666666666,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 324.3
+        },
+        {
+          "id": "q23",
+          "category": "cross_topic",
+          "query": "Removing failed servers from the pool with health checks",
+          "relevant": [
+            [
+              "doc-cloud-infra",
+              1
+            ],
+            [
+              "doc-distributed-systems",
+              3
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-distributed-systems",
+              3
+            ],
+            [
+              "doc-cloud-infra",
+              1
+            ],
+            [
+              "doc-distributed-systems",
+              1
+            ],
+            [
+              "doc-cloud-infra",
+              3
+            ],
+            [
+              "doc-cloud-infra",
+              2
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.6666666666666666,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 318.7
+        },
+        {
+          "id": "q24",
+          "category": "cross_topic",
+          "query": "Replicating a log to followers and promoting a new leader on failure",
+          "relevant": [
+            [
+              "doc-cloud-infra",
+              3
+            ],
+            [
+              "doc-distributed-systems",
+              1
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-cloud-infra",
+              3
+            ],
+            [
+              "doc-distributed-systems",
+              1
+            ],
+            [
+              "doc-distributed-systems",
+              3
+            ],
+            [
+              "doc-distributed-systems",
+              2
+            ],
+            [
+              "doc-cloud-infra",
+              1
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.6666666666666666,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 182.9
+        }
+      ]
+    },
+    "hybrid": {
+      "name": "hybrid",
+      "reranker_applied": false,
+      "summary": {
+        "hit@1": 0.9167,
+        "hit@3": 1.0,
+        "hit@5": 1.0,
+        "recall@5": 1.0,
+        "precision@3": 0.4028,
+        "mrr": 0.9583,
+        "ndcg@5": 0.9667,
+        "answer_term_recall": 1.0,
+        "queries": 24,
+        "latency_p50_ms": 320.3,
+        "latency_p95_ms": 356.0
+      },
+      "by_category": {
+        "cross_topic": {
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.6,
+          "mrr": 1.0,
+          "ndcg@5": 0.9754,
+          "answer_term_recall": 1.0,
+          "queries": 5,
+          "latency_p50_ms": 320.9,
+          "latency_p95_ms": 325.1
+        },
+        "factual": {
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "queries": 6,
+          "latency_p50_ms": 326.3,
+          "latency_p95_ms": 352.5
+        },
+        "keyword": {
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "queries": 6,
+          "latency_p50_ms": 318.5,
+          "latency_p95_ms": 334.9
+        },
+        "paraphrase": {
+          "hit@1": 0.7143,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.381,
+          "mrr": 0.8571,
+          "ndcg@5": 0.9035,
+          "answer_term_recall": 1.0,
+          "queries": 7,
+          "latency_p50_ms": 315.2,
+          "latency_p95_ms": 352.4
+        }
+      },
+      "queries": [
+        {
+          "id": "q01",
+          "category": "factual",
+          "query": "What does the ribosome do during translation?",
+          "relevant": [
+            [
+              "doc-cell-biology",
+              1
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-cell-biology",
+              1
+            ],
+            [
+              "doc-cell-biology",
+              2
+            ],
+            [
+              "doc-cell-biology",
+              3
+            ],
+            [
+              "doc-cloud-infra",
+              3
+            ],
+            [
+              "doc-cloud-infra",
+              1
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 359.0
+        },
+        {
+          "id": "q02",
+          "category": "factual",
+          "query": "How much protein per kilogram should athletes eat each day?",
+          "relevant": [
+            [
+              "doc-sports-nutrition",
+              1
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-sports-nutrition",
+              1
+            ],
+            [
+              "doc-sports-nutrition",
+              2
+            ],
+            [
+              "doc-sports-nutrition",
+              3
+            ],
+            [
+              "doc-cell-biology",
+              1
+            ],
+            [
+              "doc-distributed-systems",
+              2
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 321.8
+        },
+        {
+          "id": "q03",
+          "category": "factual",
+          "query": "What is carbohydrate loading before a marathon?",
+          "relevant": [
+            [
+              "doc-sports-nutrition",
+              2
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-sports-nutrition",
+              2
+            ],
+            [
+              "doc-cloud-infra",
+              2
+            ],
+            [
+              "doc-sports-nutrition",
+              1
+            ],
+            [
+              "doc-sports-nutrition",
+              3
+            ],
+            [
+              "doc-distributed-systems",
+              3
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 330.8
+        },
+        {
+          "id": "q04",
+          "category": "factual",
+          "query": "How does leader-follower database replication work?",
+          "relevant": [
+            [
+              "doc-cloud-infra",
+              3
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-cloud-infra",
+              3
+            ],
+            [
+              "doc-distributed-systems",
+              1
+            ],
+            [
+              "doc-distributed-systems",
+              3
+            ],
+            [
+              "doc-distributed-systems",
+              2
+            ],
+            [
+              "doc-cloud-infra",
+              1
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 312.2
+        },
+        {
+          "id": "q05",
+          "category": "factual",
+          "query": "What does the CAP theorem say about network partitions?",
+          "relevant": [
+            [
+              "doc-distributed-systems",
+              2
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-distributed-systems",
+              2
+            ],
+            [
+              "doc-cloud-infra",
+              2
+            ],
+            [
+              "doc-distributed-systems",
+              3
+            ],
+            [
+              "doc-distributed-systems",
+              1
+            ],
+            [
+              "doc-cell-biology",
+              3
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 332.9
+        },
+        {
+          "id": "q06",
+          "category": "factual",
+          "query": "What does a content delivery network cache?",
+          "relevant": [
+            [
+              "doc-cloud-infra",
+              2
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-cloud-infra",
+              2
+            ],
+            [
+              "doc-distributed-systems",
+              2
+            ],
+            [
+              "doc-distributed-systems",
+              3
+            ],
+            [
+              "doc-distributed-systems",
+              1
+            ],
+            [
+              "doc-sports-nutrition",
+              2
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 198.3
+        },
+        {
+          "id": "q07",
+          "category": "paraphrase",
+          "query": "Which organelle generates most of the energy molecules a cell uses?",
+          "relevant": [
+            [
+              "doc-cell-biology",
+              2
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-cell-biology",
+              2
+            ],
+            [
+              "doc-cell-biology",
+              3
+            ],
+            [
+              "doc-cell-biology",
+              1
+            ],
+            [
+              "doc-sports-nutrition",
+              2
+            ],
+            [
+              "doc-sports-nutrition",
+              1
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 360.9
+        },
+        {
+          "id": "q08",
+          "category": "paraphrase",
+          "query": "Why do endurance runners hit the wall when their stored fuel runs out?",
+          "relevant": [
+            [
+              "doc-sports-nutrition",
+              2
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-sports-nutrition",
+              2
+            ],
+            [
+              "doc-sports-nutrition",
+              3
+            ],
+            [
+              "doc-cloud-infra",
+              1
+            ],
+            [
+              "doc-distributed-systems",
+              1
+            ],
+            [
+              "doc-cell-biology",
+              2
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 311.5
+        },
+        {
+          "id": "q09",
+          "category": "paraphrase",
+          "query": "How can a group of servers keep agreeing on the order of operations if one machine dies?",
+          "relevant": [
+            [
+              "doc-distributed-systems",
+              1
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-distributed-systems",
+              1
+            ],
+            [
+              "doc-distributed-systems",
+              3
+            ],
+            [
+              "doc-cloud-infra",
+              3
+            ],
+            [
+              "doc-sports-nutrition",
+              2
+            ],
+            [
+              "doc-distributed-systems",
+              2
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 327.7
+        },
+        {
+          "id": "q10",
+          "category": "paraphrase",
+          "query": "Adding more machines automatically when traffic grows",
+          "relevant": [
+            [
+              "doc-cloud-infra",
+              1
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-distributed-systems",
+              3
+            ],
+            [
+              "doc-cloud-infra",
+              1
+            ],
+            [
+              "doc-distributed-systems",
+              1
+            ],
+            [
+              "doc-cloud-infra",
+              2
+            ],
+            [
+              "doc-sports-nutrition",
+              3
+            ]
+          ],
+          "hit@1": 0.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 0.5,
+          "ndcg@5": 0.6309297535714575,
+          "answer_term_recall": 1.0,
+          "latency_ms": 315.2
+        },
+        {
+          "id": "q11",
+          "category": "paraphrase",
+          "query": "Why can drinking too much plain water during a long race be dangerous?",
+          "relevant": [
+            [
+              "doc-sports-nutrition",
+              3
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-sports-nutrition",
+              3
+            ],
+            [
+              "doc-sports-nutrition",
+              2
+            ],
+            [
+              "doc-sports-nutrition",
+              1
+            ],
+            [
+              "doc-cell-biology",
+              3
+            ],
+            [
+              "doc-distributed-systems",
+              2
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 332.5
+        },
+        {
+          "id": "q12",
+          "category": "paraphrase",
+          "query": "How do water molecules move into or out of a cell?",
+          "relevant": [
+            [
+              "doc-cell-biology",
+              3
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-cell-biology",
+              3
+            ],
+            [
+              "doc-cell-biology",
+              2
+            ],
+            [
+              "doc-sports-nutrition",
+              3
+            ],
+            [
+              "doc-cell-biology",
+              1
+            ],
+            [
+              "doc-cloud-infra",
+              1
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 312.6
+        },
+        {
+          "id": "q13",
+          "category": "paraphrase",
+          "query": "Reading stale data right after writing it",
+          "relevant": [
+            [
+              "doc-cloud-infra",
+              3
+            ],
+            [
+              "doc-distributed-systems",
+              2
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-cloud-infra",
+              2
+            ],
+            [
+              "doc-cloud-infra",
+              3
+            ],
+            [
+              "doc-distributed-systems",
+              2
+            ],
+            [
+              "doc-distributed-systems",
+              1
+            ],
+            [
+              "doc-sports-nutrition",
+              1
+            ]
+          ],
+          "hit@1": 0.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.6666666666666666,
+          "mrr": 0.5,
+          "ndcg@5": 0.6934264036172708,
+          "answer_term_recall": 1.0,
+          "latency_ms": 307.1
+        },
+        {
+          "id": "q14",
+          "category": "keyword",
+          "query": "ATP synthase proton gradient",
+          "relevant": [
+            [
+              "doc-cell-biology",
+              2
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-cell-biology",
+              2
+            ],
+            [
+              "doc-cell-biology",
+              3
+            ],
+            [
+              "doc-cell-biology",
+              1
+            ],
+            [
+              "doc-sports-nutrition",
+              1
+            ],
+            [
+              "doc-cloud-infra",
+              3
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 322.6
+        },
+        {
+          "id": "q15",
+          "category": "keyword",
+          "query": "Raft election term heartbeat",
+          "relevant": [
+            [
+              "doc-distributed-systems",
+              1
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-distributed-systems",
+              1
+            ],
+            [
+              "doc-distributed-systems",
+              3
+            ],
+            [
+              "doc-cloud-infra",
+              3
+            ],
+            [
+              "doc-distributed-systems",
+              2
+            ],
+            [
+              "doc-cloud-infra",
+              1
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 317.4
+        },
+        {
+          "id": "q16",
+          "category": "keyword",
+          "query": "TTL cache stampede",
+          "relevant": [
+            [
+              "doc-cloud-infra",
+              2
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-cloud-infra",
+              2
+            ],
+            [
+              "doc-distributed-systems",
+              2
+            ],
+            [
+              "doc-distributed-systems",
+              3
+            ],
+            [
+              "doc-sports-nutrition",
+              2
+            ],
+            [
+              "doc-distributed-systems",
+              1
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 339.0
+        },
+        {
+          "id": "q17",
+          "category": "keyword",
+          "query": "consistent hashing ring",
+          "relevant": [
+            [
+              "doc-distributed-systems",
+              3
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-distributed-systems",
+              3
+            ],
+            [
+              "doc-distributed-systems",
+              2
+            ],
+            [
+              "doc-distributed-systems",
+              1
+            ],
+            [
+              "doc-cloud-infra",
+              2
+            ],
+            [
+              "doc-cloud-infra",
+              3
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 317.4
+        },
+        {
+          "id": "q18",
+          "category": "keyword",
+          "query": "sodium-potassium pump",
+          "relevant": [
+            [
+              "doc-cell-biology",
+              3
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-cell-biology",
+              3
+            ],
+            [
+              "doc-sports-nutrition",
+              3
+            ],
+            [
+              "doc-cell-biology",
+              2
+            ],
+            [
+              "doc-distributed-systems",
+              3
+            ],
+            [
+              "doc-sports-nutrition",
+              2
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 309.4
+        },
+        {
+          "id": "q19",
+          "category": "keyword",
+          "query": "leucine whey",
+          "relevant": [
+            [
+              "doc-sports-nutrition",
+              1
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-sports-nutrition",
+              1
+            ],
+            [
+              "doc-sports-nutrition",
+              3
+            ],
+            [
+              "doc-cloud-infra",
+              3
+            ],
+            [
+              "doc-distributed-systems",
+              3
+            ],
+            [
+              "doc-cell-biology",
+              1
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 319.7
+        },
+        {
+          "id": "q20",
+          "category": "cross_topic",
+          "query": "How do muscles rebuild proteins after training?",
+          "relevant": [
+            [
+              "doc-cell-biology",
+              1
+            ],
+            [
+              "doc-sports-nutrition",
+              1
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-sports-nutrition",
+              1
+            ],
+            [
+              "doc-cell-biology",
+              1
+            ],
+            [
+              "doc-sports-nutrition",
+              2
+            ],
+            [
+              "doc-cell-biology",
+              3
+            ],
+            [
+              "doc-cloud-infra",
+              2
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.6666666666666666,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 320.9
+        },
+        {
+          "id": "q21",
+          "category": "cross_topic",
+          "query": "Where does the energy for muscle contraction come from?",
+          "relevant": [
+            [
+              "doc-cell-biology",
+              2
+            ],
+            [
+              "doc-sports-nutrition",
+              2
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-sports-nutrition",
+              2
+            ],
+            [
+              "doc-sports-nutrition",
+              1
+            ],
+            [
+              "doc-cell-biology",
+              3
+            ],
+            [
+              "doc-cell-biology",
+              2
+            ],
+            [
+              "doc-cloud-infra",
+              3
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 0.8772153153380493,
+          "answer_term_recall": 1.0,
+          "latency_ms": 325.7
+        },
+        {
+          "id": "q22",
+          "category": "cross_topic",
+          "query": "Trade-off between serving stale cached data and freshness",
+          "relevant": [
+            [
+              "doc-cloud-infra",
+              2
+            ],
+            [
+              "doc-distributed-systems",
+              2
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-distributed-systems",
+              2
+            ],
+            [
+              "doc-cloud-infra",
+              2
+            ],
+            [
+              "doc-cloud-infra",
+              3
+            ],
+            [
+              "doc-distributed-systems",
+              3
+            ],
+            [
+              "doc-sports-nutrition",
+              2
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.6666666666666666,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 322.7
+        },
+        {
+          "id": "q23",
+          "category": "cross_topic",
+          "query": "Removing failed servers from the pool with health checks",
+          "relevant": [
+            [
+              "doc-cloud-infra",
+              1
+            ],
+            [
+              "doc-distributed-systems",
+              3
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-distributed-systems",
+              3
+            ],
+            [
+              "doc-cloud-infra",
+              1
+            ],
+            [
+              "doc-distributed-systems",
+              1
+            ],
+            [
+              "doc-cloud-infra",
+              3
+            ],
+            [
+              "doc-cell-biology",
+              3
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.6666666666666666,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 205.6
+        },
+        {
+          "id": "q24",
+          "category": "cross_topic",
+          "query": "Replicating a log to followers and promoting a new leader on failure",
+          "relevant": [
+            [
+              "doc-cloud-infra",
+              3
+            ],
+            [
+              "doc-distributed-systems",
+              1
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-distributed-systems",
+              1
+            ],
+            [
+              "doc-cloud-infra",
+              3
+            ],
+            [
+              "doc-distributed-systems",
+              3
+            ],
+            [
+              "doc-distributed-systems",
+              2
+            ],
+            [
+              "doc-cloud-infra",
+              1
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.6666666666666666,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 183.5
+        }
+      ]
+    },
+    "hybrid_rerank": {
+      "name": "hybrid_rerank",
+      "reranker_applied": true,
+      "summary": {
+        "hit@1": 1.0,
+        "hit@3": 1.0,
+        "hit@5": 1.0,
+        "recall@5": 1.0,
+        "precision@3": 0.4167,
+        "mrr": 1.0,
+        "ndcg@5": 0.9933,
+        "answer_term_recall": 1.0,
+        "queries": 24,
+        "latency_p50_ms": 570.5,
+        "latency_p95_ms": 941.5
+      },
+      "by_category": {
+        "cross_topic": {
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.6667,
+          "mrr": 1.0,
+          "ndcg@5": 0.9839,
+          "answer_term_recall": 1.0,
+          "queries": 5,
+          "latency_p50_ms": 564.1,
+          "latency_p95_ms": 568.8
+        },
+        "factual": {
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "queries": 6,
+          "latency_p50_ms": 591.5,
+          "latency_p95_ms": 1206.2
+        },
+        "keyword": {
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "queries": 6,
+          "latency_p50_ms": 561.4,
+          "latency_p95_ms": 577.5
+        },
+        "paraphrase": {
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.381,
+          "mrr": 1.0,
+          "ndcg@5": 0.9885,
+          "answer_term_recall": 1.0,
+          "queries": 7,
+          "latency_p50_ms": 573.6,
+          "latency_p95_ms": 593.2
+        }
+      },
+      "queries": [
+        {
+          "id": "q01",
+          "category": "factual",
+          "query": "What does the ribosome do during translation?",
+          "relevant": [
+            [
+              "doc-cell-biology",
+              1
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-cell-biology",
+              1
+            ],
+            [
+              "doc-cell-biology",
+              2
+            ],
+            [
+              "doc-cell-biology",
+              3
+            ],
+            [
+              "doc-sports-nutrition",
+              2
+            ],
+            [
+              "doc-sports-nutrition",
+              1
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 1274.2
+        },
+        {
+          "id": "q02",
+          "category": "factual",
+          "query": "How much protein per kilogram should athletes eat each day?",
+          "relevant": [
+            [
+              "doc-sports-nutrition",
+              1
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-sports-nutrition",
+              1
+            ],
+            [
+              "doc-sports-nutrition",
+              2
+            ],
+            [
+              "doc-sports-nutrition",
+              3
+            ],
+            [
+              "doc-cell-biology",
+              1
+            ],
+            [
+              "doc-cell-biology",
+              2
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 1002.3
+        },
+        {
+          "id": "q03",
+          "category": "factual",
+          "query": "What is carbohydrate loading before a marathon?",
+          "relevant": [
+            [
+              "doc-sports-nutrition",
+              2
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-sports-nutrition",
+              2
+            ],
+            [
+              "doc-sports-nutrition",
+              3
+            ],
+            [
+              "doc-sports-nutrition",
+              1
+            ],
+            [
+              "doc-cell-biology",
+              2
+            ],
+            [
+              "doc-cell-biology",
+              3
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 570.2
+        },
+        {
+          "id": "q04",
+          "category": "factual",
+          "query": "How does leader-follower database replication work?",
+          "relevant": [
+            [
+              "doc-cloud-infra",
+              3
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-cloud-infra",
+              3
+            ],
+            [
+              "doc-distributed-systems",
+              1
+            ],
+            [
+              "doc-distributed-systems",
+              2
+            ],
+            [
+              "doc-distributed-systems",
+              3
+            ],
+            [
+              "doc-cloud-infra",
+              1
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 567.2
+        },
+        {
+          "id": "q05",
+          "category": "factual",
+          "query": "What does the CAP theorem say about network partitions?",
+          "relevant": [
+            [
+              "doc-distributed-systems",
+              2
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-distributed-systems",
+              2
+            ],
+            [
+              "doc-distributed-systems",
+              1
+            ],
+            [
+              "doc-cloud-infra",
+              3
+            ],
+            [
+              "doc-distributed-systems",
+              3
+            ],
+            [
+              "doc-cloud-infra",
+              2
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 597.1
+        },
+        {
+          "id": "q06",
+          "category": "factual",
+          "query": "What does a content delivery network cache?",
+          "relevant": [
+            [
+              "doc-cloud-infra",
+              2
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-cloud-infra",
+              2
+            ],
+            [
+              "doc-distributed-systems",
+              2
+            ],
+            [
+              "doc-distributed-systems",
+              3
+            ],
+            [
+              "doc-cloud-infra",
+              1
+            ],
+            [
+              "doc-cloud-infra",
+              3
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 586.0
+        },
+        {
+          "id": "q07",
+          "category": "paraphrase",
+          "query": "Which organelle generates most of the energy molecules a cell uses?",
+          "relevant": [
+            [
+              "doc-cell-biology",
+              2
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-cell-biology",
+              2
+            ],
+            [
+              "doc-sports-nutrition",
+              2
+            ],
+            [
+              "doc-cell-biology",
+              3
+            ],
+            [
+              "doc-cell-biology",
+              1
+            ],
+            [
+              "doc-sports-nutrition",
+              3
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 573.3
+        },
+        {
+          "id": "q08",
+          "category": "paraphrase",
+          "query": "Why do endurance runners hit the wall when their stored fuel runs out?",
+          "relevant": [
+            [
+              "doc-sports-nutrition",
+              2
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-sports-nutrition",
+              2
+            ],
+            [
+              "doc-sports-nutrition",
+              3
+            ],
+            [
+              "doc-cell-biology",
+              2
+            ],
+            [
+              "doc-sports-nutrition",
+              1
+            ],
+            [
+              "doc-cell-biology",
+              3
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 571.0
+        },
+        {
+          "id": "q09",
+          "category": "paraphrase",
+          "query": "How can a group of servers keep agreeing on the order of operations if one machine dies?",
+          "relevant": [
+            [
+              "doc-distributed-systems",
+              1
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-distributed-systems",
+              1
+            ],
+            [
+              "doc-distributed-systems",
+              3
+            ],
+            [
+              "doc-cloud-infra",
+              3
+            ],
+            [
+              "doc-distributed-systems",
+              2
+            ],
+            [
+              "doc-cloud-infra",
+              1
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 589.0
+        },
+        {
+          "id": "q10",
+          "category": "paraphrase",
+          "query": "Adding more machines automatically when traffic grows",
+          "relevant": [
+            [
+              "doc-cloud-infra",
+              1
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-cloud-infra",
+              1
+            ],
+            [
+              "doc-distributed-systems",
+              3
+            ],
+            [
+              "doc-cloud-infra",
+              3
+            ],
+            [
+              "doc-distributed-systems",
+              2
+            ],
+            [
+              "doc-distributed-systems",
+              1
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 573.6
+        },
+        {
+          "id": "q11",
+          "category": "paraphrase",
+          "query": "Why can drinking too much plain water during a long race be dangerous?",
+          "relevant": [
+            [
+              "doc-sports-nutrition",
+              3
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-sports-nutrition",
+              3
+            ],
+            [
+              "doc-sports-nutrition",
+              2
+            ],
+            [
+              "doc-sports-nutrition",
+              1
+            ],
+            [
+              "doc-cell-biology",
+              3
+            ],
+            [
+              "doc-cell-biology",
+              2
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 576.1
+        },
+        {
+          "id": "q12",
+          "category": "paraphrase",
+          "query": "How do water molecules move into or out of a cell?",
+          "relevant": [
+            [
+              "doc-cell-biology",
+              3
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-cell-biology",
+              3
+            ],
+            [
+              "doc-sports-nutrition",
+              3
+            ],
+            [
+              "doc-cell-biology",
+              1
+            ],
+            [
+              "doc-cell-biology",
+              2
+            ],
+            [
+              "doc-sports-nutrition",
+              2
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 570.9
+        },
+        {
+          "id": "q13",
+          "category": "paraphrase",
+          "query": "Reading stale data right after writing it",
+          "relevant": [
+            [
+              "doc-cloud-infra",
+              3
+            ],
+            [
+              "doc-distributed-systems",
+              2
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-cloud-infra",
+              3
+            ],
+            [
+              "doc-cloud-infra",
+              2
+            ],
+            [
+              "doc-distributed-systems",
+              2
+            ],
+            [
+              "doc-distributed-systems",
+              1
+            ],
+            [
+              "doc-distributed-systems",
+              3
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.6666666666666666,
+          "mrr": 1.0,
+          "ndcg@5": 0.9197207891481876,
+          "answer_term_recall": 1.0,
+          "latency_ms": 595.0
+        },
+        {
+          "id": "q14",
+          "category": "keyword",
+          "query": "ATP synthase proton gradient",
+          "relevant": [
+            [
+              "doc-cell-biology",
+              2
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-cell-biology",
+              2
+            ],
+            [
+              "doc-cell-biology",
+              3
+            ],
+            [
+              "doc-sports-nutrition",
+              3
+            ],
+            [
+              "doc-sports-nutrition",
+              2
+            ],
+            [
+              "doc-cell-biology",
+              1
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 561.7
+        },
+        {
+          "id": "q15",
+          "category": "keyword",
+          "query": "Raft election term heartbeat",
+          "relevant": [
+            [
+              "doc-distributed-systems",
+              1
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-distributed-systems",
+              1
+            ],
+            [
+              "doc-distributed-systems",
+              2
+            ],
+            [
+              "doc-distributed-systems",
+              3
+            ],
+            [
+              "doc-cloud-infra",
+              3
+            ],
+            [
+              "doc-cloud-infra",
+              2
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 561.0
+        },
+        {
+          "id": "q16",
+          "category": "keyword",
+          "query": "TTL cache stampede",
+          "relevant": [
+            [
+              "doc-cloud-infra",
+              2
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-cloud-infra",
+              2
+            ],
+            [
+              "doc-distributed-systems",
+              2
+            ],
+            [
+              "doc-distributed-systems",
+              3
+            ],
+            [
+              "doc-distributed-systems",
+              1
+            ],
+            [
+              "doc-cloud-infra",
+              1
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 581.3
+        },
+        {
+          "id": "q17",
+          "category": "keyword",
+          "query": "consistent hashing ring",
+          "relevant": [
+            [
+              "doc-distributed-systems",
+              3
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-distributed-systems",
+              3
+            ],
+            [
+              "doc-distributed-systems",
+              1
+            ],
+            [
+              "doc-cloud-infra",
+              3
+            ],
+            [
+              "doc-distributed-systems",
+              2
+            ],
+            [
+              "doc-cloud-infra",
+              1
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 566.1
+        },
+        {
+          "id": "q18",
+          "category": "keyword",
+          "query": "sodium-potassium pump",
+          "relevant": [
+            [
+              "doc-cell-biology",
+              3
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-cell-biology",
+              3
+            ],
+            [
+              "doc-sports-nutrition",
+              3
+            ],
+            [
+              "doc-cell-biology",
+              2
+            ],
+            [
+              "doc-cell-biology",
+              1
+            ],
+            [
+              "doc-sports-nutrition",
+              2
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 553.9
+        },
+        {
+          "id": "q19",
+          "category": "keyword",
+          "query": "leucine whey",
+          "relevant": [
+            [
+              "doc-sports-nutrition",
+              1
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-sports-nutrition",
+              1
+            ],
+            [
+              "doc-sports-nutrition",
+              2
+            ],
+            [
+              "doc-sports-nutrition",
+              3
+            ],
+            [
+              "doc-distributed-systems",
+              2
+            ],
+            [
+              "doc-cell-biology",
+              2
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 551.0
+        },
+        {
+          "id": "q20",
+          "category": "cross_topic",
+          "query": "How do muscles rebuild proteins after training?",
+          "relevant": [
+            [
+              "doc-cell-biology",
+              1
+            ],
+            [
+              "doc-sports-nutrition",
+              1
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-sports-nutrition",
+              1
+            ],
+            [
+              "doc-sports-nutrition",
+              2
+            ],
+            [
+              "doc-cell-biology",
+              1
+            ],
+            [
+              "doc-cell-biology",
+              2
+            ],
+            [
+              "doc-sports-nutrition",
+              3
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.6666666666666666,
+          "mrr": 1.0,
+          "ndcg@5": 0.9197207891481876,
+          "answer_term_recall": 1.0,
+          "latency_ms": 567.6
+        },
+        {
+          "id": "q21",
+          "category": "cross_topic",
+          "query": "Where does the energy for muscle contraction come from?",
+          "relevant": [
+            [
+              "doc-cell-biology",
+              2
+            ],
+            [
+              "doc-sports-nutrition",
+              2
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-sports-nutrition",
+              2
+            ],
+            [
+              "doc-cell-biology",
+              2
+            ],
+            [
+              "doc-sports-nutrition",
+              1
+            ],
+            [
+              "doc-cell-biology",
+              3
+            ],
+            [
+              "doc-sports-nutrition",
+              3
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.6666666666666666,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 554.6
+        },
+        {
+          "id": "q22",
+          "category": "cross_topic",
+          "query": "Trade-off between serving stale cached data and freshness",
+          "relevant": [
+            [
+              "doc-cloud-infra",
+              2
+            ],
+            [
+              "doc-distributed-systems",
+              2
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-cloud-infra",
+              2
+            ],
+            [
+              "doc-distributed-systems",
+              2
+            ],
+            [
+              "doc-cloud-infra",
+              3
+            ],
+            [
+              "doc-distributed-systems",
+              3
+            ],
+            [
+              "doc-cloud-infra",
+              1
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.6666666666666666,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 547.5
+        },
+        {
+          "id": "q23",
+          "category": "cross_topic",
+          "query": "Removing failed servers from the pool with health checks",
+          "relevant": [
+            [
+              "doc-cloud-infra",
+              1
+            ],
+            [
+              "doc-distributed-systems",
+              3
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-distributed-systems",
+              3
+            ],
+            [
+              "doc-cloud-infra",
+              1
+            ],
+            [
+              "doc-distributed-systems",
+              1
+            ],
+            [
+              "doc-distributed-systems",
+              2
+            ],
+            [
+              "doc-cloud-infra",
+              3
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.6666666666666666,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 564.1
+        },
+        {
+          "id": "q24",
+          "category": "cross_topic",
+          "query": "Replicating a log to followers and promoting a new leader on failure",
+          "relevant": [
+            [
+              "doc-cloud-infra",
+              3
+            ],
+            [
+              "doc-distributed-systems",
+              1
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-cloud-infra",
+              3
+            ],
+            [
+              "doc-distributed-systems",
+              1
+            ],
+            [
+              "doc-distributed-systems",
+              3
+            ],
+            [
+              "doc-distributed-systems",
+              2
+            ],
+            [
+              "doc-cloud-infra",
+              2
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "hit@5": 1.0,
+          "recall@5": 1.0,
+          "precision@3": 0.6666666666666666,
+          "mrr": 1.0,
+          "ndcg@5": 1.0,
+          "answer_term_recall": 1.0,
+          "latency_ms": 569.1
+        }
+      ]
+    },
+    "cross_document": {
+      "name": "cross_document",
+      "summary": {
+        "cases": 6,
+        "cross_doc_hit@1": 0.8333,
+        "cross_doc_hit@3": 0.8333,
+        "cross_doc_mrr": 0.8333,
+        "cross_doc_leakage": 0.0,
+        "cross_doc_empty_rate": 0.0,
+        "latency_p50_ms": 312.3,
+        "latency_p95_ms": 327.3
+      },
+      "cases": [
+        {
+          "id": "x01",
+          "source": [
+            "doc-cell-biology",
+            1
+          ],
+          "source_name": "Cell Biology Primer.pdf",
+          "relevant": [
+            [
+              "doc-sports-nutrition",
+              1
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-sports-nutrition",
+              1
+            ],
+            [
+              "doc-cloud-infra",
+              3
+            ],
+            [
+              "doc-cloud-infra",
+              1
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "mrr": 1.0,
+          "leakage": 0.0,
+          "empty": 0.0,
+          "latency_ms": 313.0
+        },
+        {
+          "id": "x02",
+          "source": [
+            "doc-cell-biology",
+            2
+          ],
+          "source_name": "Cell Biology Primer.pdf",
+          "relevant": [
+            [
+              "doc-sports-nutrition",
+              2
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-sports-nutrition",
+              1
+            ],
+            [
+              "doc-sports-nutrition",
+              3
+            ],
+            [
+              "doc-distributed-systems",
+              1
+            ]
+          ],
+          "hit@1": 0.0,
+          "hit@3": 0.0,
+          "mrr": 0.0,
+          "leakage": 0.0,
+          "empty": 0.0,
+          "latency_ms": 321.8
+        },
+        {
+          "id": "x03",
+          "source": [
+            "doc-sports-nutrition",
+            3
+          ],
+          "source_name": "Sports Nutrition Guide.pdf",
+          "relevant": [
+            [
+              "doc-cell-biology",
+              3
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-cell-biology",
+              3
+            ],
+            [
+              "doc-cell-biology",
+              2
+            ],
+            [
+              "doc-cloud-infra",
+              2
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "mrr": 1.0,
+          "leakage": 0.0,
+          "empty": 0.0,
+          "latency_ms": 200.3
+        },
+        {
+          "id": "x04",
+          "source": [
+            "doc-cloud-infra",
+            3
+          ],
+          "source_name": "Cloud Infrastructure Handbook.pdf",
+          "relevant": [
+            [
+              "doc-distributed-systems",
+              1
+            ],
+            [
+              "doc-distributed-systems",
+              2
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-distributed-systems",
+              2
+            ],
+            [
+              "doc-distributed-systems",
+              1
+            ],
+            [
+              "doc-distributed-systems",
+              3
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "mrr": 1.0,
+          "leakage": 0.0,
+          "empty": 0.0,
+          "latency_ms": 311.7
+        },
+        {
+          "id": "x05",
+          "source": [
+            "doc-cloud-infra",
+            2
+          ],
+          "source_name": "Cloud Infrastructure Handbook.pdf",
+          "relevant": [
+            [
+              "doc-distributed-systems",
+              2
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-distributed-systems",
+              2
+            ],
+            [
+              "doc-distributed-systems",
+              1
+            ],
+            [
+              "doc-distributed-systems",
+              3
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "mrr": 1.0,
+          "leakage": 0.0,
+          "empty": 0.0,
+          "latency_ms": 189.0
+        },
+        {
+          "id": "x06",
+          "source": [
+            "doc-distributed-systems",
+            3
+          ],
+          "source_name": "Distributed Systems Notes.pdf",
+          "relevant": [
+            [
+              "doc-cloud-infra",
+              1
+            ]
+          ],
+          "retrieved": [
+            [
+              "doc-cloud-infra",
+              1
+            ],
+            [
+              "doc-cloud-infra",
+              2
+            ],
+            [
+              "doc-cloud-infra",
+              3
+            ]
+          ],
+          "hit@1": 1.0,
+          "hit@3": 1.0,
+          "mrr": 1.0,
+          "leakage": 0.0,
+          "empty": 0.0,
+          "latency_ms": 329.1
+        }
+      ]
+    }
+  },
+  "gates": [
+    {
+      "metric": "hit@3",
+      "variant": "hybrid",
+      "op": ">=",
+      "threshold": 0.8,
+      "why": "Recommendations and chat use the hybrid path; the right page should be in the top 3.",
+      "value": 1.0,
+      "passed": true
+    },
+    {
+      "metric": "mrr",
+      "variant": "hybrid",
+      "op": ">=",
+      "threshold": 0.65,
+      "why": "The best page should usually be first or second.",
+      "value": 0.9583,
+      "passed": true
+    },
+    {
+      "metric": "answer_term_recall",
+      "variant": "hybrid",
+      "op": ">=",
+      "threshold": 0.75,
+      "why": "Retrieved context must contain the facts the answer needs.",
+      "value": 1.0,
+      "passed": true
+    },
+    {
+      "metric": "cross_doc_hit@3",
+      "variant": "cross_document",
+      "op": ">=",
+      "threshold": 0.8,
+      "why": "The side panel should surface the related page from another PDF.",
+      "value": 0.8333,
+      "passed": true
+    },
+    {
+      "metric": "cross_doc_leakage",
+      "variant": "cross_document",
+      "op": "<=",
+      "threshold": 0.0,
+      "why": "The side panel must never show the PDF that is already open.",
+      "value": 0.0,
+      "passed": true
+    },
+    {
+      "metric": "latency_p95_ms",
+      "variant": "hybrid",
+      "op": "<=",
+      "threshold": 2500,
+      "why": "Page turns refresh the panel; retrieval must stay interactive.",
+      "value": 356.0,
+      "passed": true
+    }
+  ],
+  "passed": true
+}

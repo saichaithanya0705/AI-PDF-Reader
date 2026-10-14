@@ -3,8 +3,7 @@
  * 
  * This automatically detects the correct URLs based on:
  * 1. Environment variables (VITE_API_URL, VITE_WS_URL)
- * 2. Current page location (auto-detect in production)
- * 3. Fallback to localhost for development
+ * 2. Localhost fallback for development only
  */
 
 const getApiUrl = (): string => {
@@ -13,16 +12,8 @@ const getApiUrl = (): string => {
     return import.meta.env.VITE_API_URL.replace(/\/$/, '');
   }
 
-  // In production (non-localhost), derive from current page URL
-  if (typeof window !== 'undefined' && !window.location.hostname.includes('localhost')) {
-    const protocol = window.location.protocol; // http: or https:
-    const hostname = window.location.hostname;
-    // Assume backend is on same domain, port 8000 or 8080
-    // You can customize this logic based on your deployment
-    return `${protocol}//${hostname}:8000`.replace(/\/$/, '');
-  }
-
-  // Development fallback
+  // Vercel and Render use different origins, so production must provide the
+  // Render service URL explicitly instead of guessing a port on this host.
   return 'http://localhost:8000';
 };
 

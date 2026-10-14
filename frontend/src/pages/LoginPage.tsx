@@ -1,8 +1,10 @@
 import { FormEvent, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, Loader2, Lock, Mail, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, Loader2, Mail, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
 import { toAuthErrorMessage } from '../lib/authErrors';
+import { FORGOT_PASSWORD_PATH } from '../lib/authRoutes';
+import PasswordInput from '../components/PasswordInput';
 
 type LoginLocationState = {
   from?: {
@@ -106,23 +108,22 @@ const LoginPage = () => {
                 <label className="text-sm font-medium text-white" htmlFor="password">
                   Password
                 </label>
-                <Link to="#" className="text-xs text-cyan-300 transition hover:text-cyan-200">
+                <Link
+                  to={FORGOT_PASSWORD_PATH}
+                  state={{ email }}
+                  className="text-xs text-cyan-300 transition hover:text-cyan-200"
+                >
                   Forgot password?
                 </Link>
               </div>
-              <div className="mt-2 flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-slate-200 focus-within:border-brand-400 focus-within:bg-slate-900">
-                <Lock className="h-4 w-4 text-slate-400" />
-                <input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  className="w-full bg-transparent text-sm text-white placeholder:text-slate-500 focus:outline-none"
-                  placeholder="••••••••"
-                  autoComplete="current-password"
-                  required
-                />
-              </div>
+              <PasswordInput
+                id="password"
+                value={password}
+                onValueChange={setPassword}
+                placeholder="••••••••"
+                autoComplete="current-password"
+                required
+              />
             </div>
 
             {successMessage && (

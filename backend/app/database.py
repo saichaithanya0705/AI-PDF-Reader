@@ -12,6 +12,8 @@ from typing import List, Optional, Dict, Any
 from dataclasses import dataclass, asdict
 import json
 
+from .storage_paths import DATA_DIR
+
 @dataclass
 class Document:
     """Document model representing a PDF file in the system"""
@@ -67,9 +69,7 @@ class DocumentDatabase:
     
     def __init__(self, db_path: str = None):
         if db_path is None:
-            # Use absolute path relative to the backend directory
-            backend_dir = Path(__file__).parent.parent  # Go up from app/ to backend/
-            db_path = backend_dir / "data" / "documents.db"
+            db_path = DATA_DIR / "documents.db"
 
         self.db_path = Path(db_path).resolve()  # Get absolute path
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -252,12 +252,13 @@ class DocumentDatabase:
                        job_role: Optional[str] = None,
                        validation_result: Optional[Dict[str, Any]] = None,
                        metadata: Optional[Dict[str, Any]] = None,
-                       file_hash: Optional[str] = None) -> Document:
+                       file_hash: Optional[str] = None,
+                       document_id: Optional[str] = None) -> Document:
         """Create a new document record"""
         
         now = datetime.now()
         document = Document(
-            id=str(uuid.uuid4()),
+            id=document_id or str(uuid.uuid4()),
             filename=filename,
             original_name=original_name,
             upload_date=now,
@@ -417,16 +418,23 @@ class DocumentDatabase:
             row = cursor.fetchone()
             return self._row_to_document(row) if row else None
 
-    def get_document_metadata(self, document_id: str) -> List[Dict[str, Any]]:
+    def get_document_metadata(
+        self, document_id: str, client_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
         """Get metadata/sections for a document"""
         cursor = self.conn.cursor()
-        cursor.execute("""
-            SELECT page, text, embedding_vector
-            FROM document_sections
-            WHERE document_id = ?
-            ORDER BY page, section_index
-            LIMIT 10
-        """, (document_id,))
+        query = """
+            SELECT sections.page, sections.text, sections.embedding_vector
+            FROM document_sections AS sections
+            JOIN documents ON documents.id = sections.document_id
+            WHERE sections.document_id = ?
+        """
+        params: List[Any] = [document_id]
+        if client_id:
+            query += " AND documents.client_id = ?"
+            params.append(client_id)
+        query += " ORDER BY sections.page, sections.section_index LIMIT 10"
+        cursor.execute(query, params)
 
         rows = cursor.fetchall()
         metadata = []
@@ -757,7 +765,10 @@ class DocumentDatabase:
         page_number: int,
         embedding: Optional[List[float]] = None,
         char_count: Optional[int] = None,
-        word_count: Optional[int] = None
+        word_count: Optional[int] = None,
+        client_id: Optional[str] = None,
+        chunk_id: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
         Store a document chunk in the database
@@ -765,7 +776,12 @@ class DocumentDatabase:
         Returns:
             chunk_id: ID of the stored chunk
         """
-        chunk_id = str(uuid.uuid4())
+        if client_id:
+            document = self.get_document_by_id(document_id, client_id=client_id)
+            if not document:
+                raise ValueError("Document does not belong to the requested tenant")
+
+        chunk_id = chunk_id or str(uuid.uuid4())
         
         # Convert embedding to binary if provided
         embedding_blob = None

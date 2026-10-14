@@ -11,20 +11,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from dotenv import load_dotenv
-import os
 
 load_dotenv()
 
-# Determine which database to use
-USE_SUPABASE = os.getenv("USE_SUPABASE", "false").lower() == "true"
-if USE_SUPABASE:
-    print("🚀 Using Supabase Database")
-    from app.supabase_database import get_supabase_db
-    db = get_supabase_db()
-else:
-    print("📂 Using Local SQLite Database")
-    from app.database import db
-
+from app.document_storage import get_document_storage
+from app.persistence import db, persistence_backend
 from app.rag_service import get_rag_service
 
 
@@ -35,6 +26,11 @@ def _get_documents_for_scope(client_id=None, all_tenants=False):
     if client_id:
         return db.get_all_documents(client_id=client_id)
 
+    if persistence_backend() == "supabase":
+        raise ValueError(
+            "Supabase backfills require --client-id; --all-tenants is disabled "
+            "to keep service-role reads tenant scoped"
+        )
     return db.get_all_documents()
 
 
@@ -47,9 +43,11 @@ async def process_all_documents(client_id=None, all_tenants=False, batch_size=32
     elif all_tenants:
         print("🌐 Tenant scope: all tenants")
     print("=" * 60)
+    print(f"🗄️ Persistence backend: {persistence_backend()}")
     
     # Get RAG service
     rag_service = get_rag_service()
+    document_storage = get_document_storage()
     
     # Get all documents
     documents = _get_documents_for_scope(client_id=client_id, all_tenants=all_tenants)
@@ -78,8 +76,19 @@ async def process_all_documents(client_id=None, all_tenants=False, batch_size=32
             })
             continue
         
-        # Check if file exists
-        file_path = Path(document.file_path)
+        # Resolve local files directly and materialize hosted objects through
+        # the canonical storage adapter before attempting the backfill.
+        try:
+            file_path = document_storage.ensure_local(document.file_path)
+        except Exception as exc:
+            print(f"  ❌ Could not materialize document: {exc}")
+            results.append({
+                'document_id': document.id,
+                'success': False,
+                'error': f'Document materialization failed: {exc}'
+            })
+            continue
+
         if not file_path.exists():
             print(f"  ❌ File not found: {file_path}")
             results.append({
@@ -90,7 +99,10 @@ async def process_all_documents(client_id=None, all_tenants=False, batch_size=32
             continue
         
         # Check if already processed
-        existing_chunks = db.get_chunk_count(document.id)
+        existing_chunks = db.get_chunk_count(
+            document.id,
+            client_id=document_client_id,
+        )
         if existing_chunks > 0:
             if force:
                 print(f"  ℹ️ Document already has {existing_chunks} chunks. Force re-processing...")
@@ -138,19 +150,23 @@ async def process_all_documents(client_id=None, all_tenants=False, batch_size=32
     print(f"  ❌ Failed: {failed}")
     print(f"\nTotal chunks created: {total_chunks}")
     
-    # Show RAG stats
-    print("\n" + "-" * 60)
-    print("RAG System Statistics")
-    print("-" * 60)
-    stats = rag_service.get_stats()
-    print(f"\nVector Store:")
-    print(f"  Total vectors: {stats['vector_store']['total_vectors']}")
-    print(f"  Documents: {stats['vector_store']['num_documents']}")
-    print(f"\nDatabase:")
-    print(f"  Total chunks: {stats['database']['total_chunks']}")
-    print(f"\nEmbedding Model:")
-    print(f"  Model: {stats['embedding']['model']}")
-    print(f"  Dimension: {stats['embedding']['dimension']}")
+    # Show only tenant-scoped RAG stats. A service-role global count would
+    # cross tenant boundaries during an all-tenant maintenance run.
+    if client_id:
+        print("\n" + "-" * 60)
+        print("RAG System Statistics")
+        print("-" * 60)
+        stats = rag_service.get_stats(user_id=client_id)
+        print(f"\nVector Store:")
+        print(f"  Total vectors: {stats['vector_store']['total_vectors']}")
+        print(f"  Documents: {stats['vector_store']['num_documents']}")
+        print(f"\nDatabase:")
+        print(f"  Total chunks: {stats['database']['total_chunks']}")
+        print(f"\nEmbedding Model:")
+        print(f"  Model: {stats['embedding']['model']}")
+        print(f"  Dimension: {stats['embedding']['dimension']}")
+    else:
+        print("\nRAG statistics omitted: all-tenant backfills have no single tenant scope.")
     
     print("\n✅ Processing complete!")
 

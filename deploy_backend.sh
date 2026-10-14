@@ -30,7 +30,8 @@ export TMPDIR=/var/www/pdfapp/tmp
 
 # Install backend dependencies
 echo "Installing Python dependencies from backend/requirements.txt..."
-python -m pip install --no-cache-dir --requirement backend/requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
+python backend/scripts/check_hosted_embedding_policy.py
+python -m pip install --no-cache-dir --requirement backend/requirements.txt
 
 # Verify NLP runtime assets are present from pinned dependencies.
 echo "Verifying packaged spaCy model..."

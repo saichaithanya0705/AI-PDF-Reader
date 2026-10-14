@@ -209,7 +209,7 @@ async def build_pdf_context(
         if current_page is not None:
             try:
                 # Get chunk/content for this page
-                page_content = await get_page_content(db, document_id, current_page)
+                page_content = await get_page_content(db, user_id, document_id, current_page)
             except Exception as e:
                 logger.warning(f"Could not retrieve page content: {e}")
         
@@ -337,7 +337,9 @@ async def search_library_documents(
         return []
 
 
-async def get_page_content(db, document_id: str, page_number: int) -> Optional[str]:
+async def get_page_content(
+    db, user_id: str, document_id: str, page_number: int
+) -> Optional[str]:
     """
     Retrieve text content for a specific page
     
@@ -350,7 +352,7 @@ async def get_page_content(db, document_id: str, page_number: int) -> Optional[s
         Page text content or None
     """
     try:
-        chunks = db.get_chunks_by_document(document_id)
+        chunks = db.get_chunks_by_document(document_id, client_id=user_id)
         page_chunks = [chunk for chunk in chunks if chunk.get('page_number') == page_number]
 
         if page_chunks:

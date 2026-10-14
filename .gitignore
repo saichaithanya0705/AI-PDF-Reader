@@ -35,3 +35,7 @@ deploy.tar.gz
 
 # Windows artifact
 nul
+
+# Local Python virtualenvs
+.venv/
+venv/

@@ -5,6 +5,9 @@ import os
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, field
 
+from .nvidia_retrieval_config import DEFAULT_EMBEDDING_DIMENSION, load_nvidia_embedding_config
+from .storage_paths import get_data_dir
+
 @dataclass
 class SearchResult:
     chunk_id: str
@@ -18,14 +21,14 @@ class SearchResult:
 
 
 class FAISSVectorStore:
-    def __init__(self, index_path="faiss_index.bin", metadata_path="metadata.pkl", dimension=384):
+    def __init__(self, index_path="faiss_index.bin", metadata_path="metadata.pkl", dimension=DEFAULT_EMBEDDING_DIMENSION):
         """
         Initialize FAISS vector store with HNSW index for efficient search.
         
         Args:
             index_path: Path to save/load the FAISS index
             metadata_path: Path to save/load metadata
-            dimension: Dimension of embeddings (default 384 for all-MiniLM-L6-v2)
+            dimension: Dimension of the configured NVIDIA embedding model.
         """
         self.index_path = index_path
         self.metadata_path = metadata_path
@@ -319,8 +322,9 @@ class FAISSVectorStore:
         elif os.path.exists(self.metadata_path) and self.metadata_path.endswith(".pkl"):
             print("[WARNING] Ignoring legacy pickle metadata; rebuild the vector store from source chunks.")
     
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self, user_id: Optional[str] = None) -> Dict[str, Any]:
         """Get vector store statistics"""
+        del user_id  # Local FAISS statistics are not partitioned by tenant.
         return {
             'total_vectors': self.index.ntotal,
             'num_documents': len(set((m.get('document_id') or m.get('doc_id')) for m in self.metadata)) if self.metadata else 0,
@@ -330,12 +334,26 @@ class FAISSVectorStore:
 # Global instance
 _vector_store_instance = None
 
+
 def get_vector_store():
     global _vector_store_instance
     if _vector_store_instance is None:
-        # Store index in the backend directory
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        index_path = os.path.join(base_dir, "faiss_index.bin")
-        metadata_path = os.path.join(base_dir, "metadata.json")
-        _vector_store_instance = FAISSVectorStore(index_path, metadata_path)
+        from .persistence import db, persistence_backend
+
+        if persistence_backend() == "supabase":
+            from .supabase_vector_store import SupabaseVectorStore
+
+            _vector_store_instance = SupabaseVectorStore(db)
+            return _vector_store_instance
+
+        config = load_nvidia_embedding_config()
+        data_dir = get_data_dir()
+        data_dir.mkdir(parents=True, exist_ok=True)
+        index_path = data_dir / f"faiss_index-{config.index_namespace}.bin"
+        metadata_path = data_dir / f"metadata-{config.index_namespace}.json"
+        _vector_store_instance = FAISSVectorStore(
+            str(index_path),
+            str(metadata_path),
+            dimension=config.dimension,
+        )
     return _vector_store_instance

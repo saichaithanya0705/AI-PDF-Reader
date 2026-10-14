@@ -1,0 +1,70 @@
+# yaml-language-server: $schema=https://render.com/schema/render.yaml.json
+services:
+  - type: web
+    name: ai-pdf-reader-api
+    runtime: docker
+    plan: 0.5c-512mb
+    region: singapore
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    healthCheckPath: /healthz
+    autoDeployTrigger: checksPass
+    numInstances: 1
+    buildFilter:
+      paths:
+        - backend/**
+        - .dockerignore
+        - render.yaml
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: APP_DATA_DIR
+        value: /tmp/ai-pdf-reader
+      - key: PERSISTENCE_BACKEND
+        value: supabase
+      - key: AUTH_BYPASS_ENABLED
+        value: "false"
+      - key: ALLOW_CLIENT_ID_FALLBACK
+        value: "false"
+      - key: CORS_ORIGINS
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: SUPABASE_STORAGE_BUCKET
+        value: documents
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: LLM_PROVIDER
+        value: gemini
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
+      - key: NVIDIA_API_KEY
+        sync: false
+      - key: NVIDIA_EMBEDDING_MODEL
+        value: nvidia/nemotron-3-embed-1b
+      - key: NVIDIA_EMBEDDING_DIMENSION
+        value: "2048"
+      - key: NVIDIA_EMBEDDING_BASE_URL
+        value: https://integrate.api.nvidia.com/v1
+      - key: NVIDIA_EMBEDDING_TIMEOUT_SECONDS
+        value: "30"
+      - key: NVIDIA_RERANK_MODEL
+        value: nvidia/llama-nemotron-rerank-vl-1b-v2
+      - key: NVIDIA_RERANK_ENDPOINT
+        value: https://ai.api.nvidia.com/v1/retrieval/nvidia/llama-nemotron-rerank-vl-1b-v2/reranking
+      - key: NVIDIA_RERANK_TIMEOUT_SECONDS
+        value: "30"
+      - key: TTS_PROVIDER
+        value: azure
+      - key: AZURE_TTS_KEY
+        sync: false
+      - key: AZURE_TTS_REGION
+        value: eastasia
+      - key: ADOBE_CLIENT_ID
+        sync: false

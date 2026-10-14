@@ -68,19 +68,22 @@ print("📦 Loading websocket and models...")
 sys.stdout.flush()
 from .websocket_manager import manager
 from .models import WebSocketMessage, SectionHighlight, RelevantSection
+from .document_storage import get_document_storage
+from .storage_paths import BACKEND_DIR, DATA_DIR, DOCS_DIR
 print("✅ Websocket and models loaded")
 sys.stdout.flush()
 
-# Storage split: Supabase authenticates users, SQLite stores records, FAISS stores vectors.
-print("🗄️ Database mode: SQLite records + FAISS vectors; Supabase auth")
+# The persistence module selects local SQLite/FAISS or Supabase Postgres/Storage.
+print(f"🗄️ Database mode: {os.getenv('PERSISTENCE_BACKEND', 'sqlite')}")
 sys.stdout.flush()
 
 try:
-    from .database import db
+    from .persistence import db
     from .document_routes import router as api_router
+    from .eval_routes import router as eval_router
     from .auth_middleware import get_current_user, get_optional_user
     from .user_resolver import resolve_user_id
-    print("✅ Using SQLite document records with Supabase authentication")
+    print("✅ Document persistence initialized")
 except Exception as e:
     print(f"❌ FATAL: Failed to initialize storage/auth dependencies: {e}")
     sys.stdout.flush()
@@ -93,23 +96,19 @@ from .llm_providers import get_llm_provider
 from .enhanced_llm_service import EnhancedLLMService
 from .tts_service import TTSService
 from .section_highlighter import SectionHighlighter
-from .duplicate_cleaner import run_duplicate_cleanup
 print("✅ Services loaded")
 sys.stdout.flush()
 
 print("📦 Loading RAG Service...")
 sys.stdout.flush()
-from .rag_service import format_retrieval_result, get_rag_service
+from .rag_service import CROSS_DOCUMENT_MIN_SCORE, format_retrieval_result, get_rag_service
 from .ingestion_service import get_ingestion_service
 print("✅ RAG Service loaded")
 sys.stdout.flush()
 
-# Create necessary directories - use consistent paths
+# Create necessary directories under the canonical application data root.
 print("📁 Setting up directories...")
 sys.stdout.flush()
-BACKEND_DIR = Path(__file__).parent.parent  # Go up from app/ to backend/
-DATA_DIR = BACKEND_DIR / "data"
-DOCS_DIR = DATA_DIR / "docs"
 DOCS_DIR.mkdir(parents=True, exist_ok=True)
 MAX_PDF_UPLOAD_BYTES = int(os.getenv("MAX_PDF_UPLOAD_BYTES", str(100 * 1024 * 1024)))
 MAX_PDF_TRANSFORM_BYTES = int(os.getenv("MAX_PDF_TRANSFORM_BYTES", str(150 * 1024 * 1024)))
@@ -162,10 +161,19 @@ def _safe_docs_path(filename: str) -> Path:
 
 
 def _document_pdf_path(document) -> Path:
-    file_path = Path(document.file_path).resolve()
+    file_path = get_document_storage().ensure_local(document.file_path)
     if not _path_is_within(file_path, DOCS_DIR):
         raise HTTPException(status_code=404, detail="Document file not found")
     return file_path
+
+
+def _delete_document_location_quietly(location: Optional[str]) -> None:
+    if not location:
+        return
+    try:
+        get_document_storage().delete(location)
+    except Exception as exc:
+        logger.warning("Failed to clean persisted document object %s: %s", location, exc)
 
 
 def _validate_pdf_bytes(content: bytes, filename: str) -> int:
@@ -286,6 +294,7 @@ else:
 
 # Include API routes AFTER static files
 app.include_router(api_router)
+app.include_router(eval_router)
 # Initialize services
 llm_provider = None
 try:
@@ -437,12 +446,12 @@ async def upload_context_files(
     sys.stdout.flush()
 
     for file in files:
-        current_file_path: Optional[Path] = None
+        current_location: Optional[str] = None
         try:
             content = await file.read()
             original_name = _canonical_pdf_filename(file.filename)
             _validate_pdf_bytes(content, original_name)
-            file_hash = hashlib.md5(content).hexdigest()
+            file_hash = hashlib.sha256(content).hexdigest()
 
             existing = db.find_duplicate_by_hash(file_hash, client_id=user_id)
             if existing:
@@ -459,16 +468,19 @@ async def upload_context_files(
 
             file_id = str(uuid.uuid4())
             filename_with_id = f"{file_id}_{original_name}"
-            current_file_path = _safe_docs_path(filename_with_id)
-
-            with open(current_file_path, "wb") as f:
-                f.write(content)
+            current_location = get_document_storage().store_pdf(
+                user_id=user_id,
+                document_id=file_id,
+                filename=filename_with_id,
+                content=content,
+            )
 
             doc = db.create_document(
+                document_id=file_id,
                 filename=filename_with_id,
                 original_name=original_name,
                 file_size=len(content),
-                file_path=str(current_file_path),
+                file_path=current_location,
                 client_id=user_id,
                 persona=persona,
                 job_role=job,
@@ -495,8 +507,7 @@ async def upload_context_files(
             })
             # Cleanup
             try:
-                if current_file_path is not None and current_file_path.exists():
-                    current_file_path.unlink()
+                _delete_document_location_quietly(current_location)
             except Exception:
                 pass
 
@@ -537,7 +548,7 @@ async def upload_active_file(
     file_content = await file.read()
     original_name = _canonical_pdf_filename(file.filename)
     _validate_pdf_bytes(file_content, original_name)
-    file_hash = hashlib.md5(file_content).hexdigest()
+    file_hash = hashlib.sha256(file_content).hexdigest()
 
     existing = db.find_duplicate_by_hash(file_hash, client_id=user_id)
     if existing:
@@ -556,17 +567,20 @@ async def upload_active_file(
 
     file_id = str(uuid.uuid4())
     filename_with_id = f"{file_id}_{original_name}"
-    file_path = _safe_docs_path(filename_with_id)
-
-    with open(file_path, "wb") as buffer:
-        buffer.write(file_content)
+    file_location = get_document_storage().store_pdf(
+        user_id=user_id,
+        document_id=file_id,
+        filename=filename_with_id,
+        content=file_content,
+    )
 
     try:
         doc = db.create_document(
+            document_id=file_id,
             filename=filename_with_id,
             original_name=original_name,
             file_size=len(file_content),
-            file_path=str(file_path),
+            file_path=file_location,
             client_id=user_id,
             persona=persona,
             job_role=job,
@@ -574,11 +588,10 @@ async def upload_active_file(
         )
     except Exception as e:
         print(f"❌ Failed to create document record: {e}")
-        if file_path.exists():
-            file_path.unlink()
+        _delete_document_location_quietly(file_location)
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
-    background_tasks.add_task(process_pdf, doc.id, user_id, str(file_path), "current", persona, job)
+    background_tasks.add_task(process_pdf, doc.id, user_id, file_location, "current", persona, job)
 
     return JSONResponse(
         status_code=202,
@@ -619,6 +632,12 @@ async def get_frontend():
             return HTMLResponse(content=html_file.read_text(), media_type="text/html")
     
     return HTMLResponse(content=f"<h1>Frontend not found. Tried: {[str(p.absolute()) for p in possible_paths]}. Please build the React app first.</h1>", media_type="text/html")
+
+
+@app.get("/healthz", include_in_schema=False)
+async def healthcheck():
+    """Lightweight liveness check used by Render and container runtimes."""
+    return {"status": "ok"}
 
 
 @app.get("/config")
@@ -695,7 +714,7 @@ async def get_recommendations(
 
         from .context_builder import get_page_content
 
-        page_content = await get_page_content(db, document_id, page)
+        page_content = await get_page_content(db, user_id, document_id, page)
         if page_content:
             current_content = page_content[:2000]
         else:
@@ -750,19 +769,19 @@ async def get_recommendations(
             enhanced_cross_document = []
             try:
                 # Initialize the intelligent PDF brain
-                from app.utils.intelligent_pdf_brain import IntelligentPDFBrain
+                from .utils.intelligent_pdf_brain import DocumentSection, IntelligentPDFBrain
                 brain = IntelligentPDFBrain()
-                
+
                 # Score cross-document sections using intelligent analysis
                 for rec in cross_document_recommendations[:5]:  # Limit to top 5 for processing
-                    # Create a simple section-like object for scoring
-                    class SimpleSection:
-                        def __init__(self, content):
-                            self.content = content
-                            self.section_title = rec['title']
-                            self.page_number = rec['page']
-                    
-                    section = SimpleSection(rec['snippet'])
+                    # The scorer reads key_entities/key_concepts, so use the real
+                    # dataclass rather than an ad-hoc object missing those fields.
+                    section = DocumentSection(
+                        document=rec['documentName'],
+                        section_title=rec['title'],
+                        content=rec['snippet'],
+                        page_number=rec['page'],
+                    )
                     
                     # Calculate enhanced relevance using the brain's intelligence
                     try:
@@ -788,6 +807,12 @@ async def get_recommendations(
                 print(f"Error in intelligent cross-document analysis: {e}")
                 enhanced_cross_document = cross_document_recommendations[:3]
         
+        # Drop weak filler so the side panel only shows genuinely related pages.
+        enhanced_cross_document = [
+            rec for rec in enhanced_cross_document
+            if (rec.get("relevance") or 0.0) >= CROSS_DOCUMENT_MIN_SCORE
+        ]
+
         # Return top 3 same-document and top 3 cross-document recommendations
         result = {
             "recommendations": same_document_recommendations[:3],
@@ -896,7 +921,7 @@ COMPLETE DOCUMENT CONTENT:
             all_documents = db.get_all_documents(client_id=user_id)
             for doc in all_documents[:3]:
                 if doc.id != document_id and hasattr(db, "get_document_metadata"):
-                    doc_metadata = db.get_document_metadata(doc.id)
+                    doc_metadata = db.get_document_metadata(doc.id, client_id=user_id)
                     if doc_metadata:
                         for meta in doc_metadata[:2]:
                             related_sections.append({
@@ -1434,24 +1459,31 @@ async def split_document(request: Request, current_user: dict = Depends(get_curr
             split_doc.insert_pdf(source_doc, from_page=start_page, to_page=end_page)
 
             # Save split document
-            output_filename = f"{uuid.uuid4()}_{output_display_name}"
+            output_document_id = str(uuid.uuid4())
+            output_filename = f"{output_document_id}_{output_display_name}"
             output_path = _safe_docs_path(output_filename)
             split_doc.save(str(output_path))
             split_doc.close()
             _validate_pdf_file(output_path)
 
             # Calculate file hash and size
-            file_size = output_path.stat().st_size
-            with open(output_path, 'rb') as f:
-                file_hash = hashlib.md5(f.read()).hexdigest()
-
-            # Create new document record in database
+            output_location = None
             try:
+                file_size = output_path.stat().st_size
+                output_content = output_path.read_bytes()
+                file_hash = hashlib.sha256(output_content).hexdigest()
+                output_location = get_document_storage().store_pdf(
+                    user_id=user_id,
+                    document_id=output_document_id,
+                    filename=output_filename,
+                    content=output_content,
+                )
                 new_document = db.create_document(
+                    document_id=output_document_id,
                     filename=output_filename,
                     original_name=output_display_name,
                     file_size=file_size,
-                    file_path=str(output_path),
+                    file_path=output_location,
                     client_id=user_id,
                     persona=document.persona or "System",
                     job_role=document.job_role or "PDF Split",
@@ -1467,10 +1499,14 @@ async def split_document(request: Request, current_user: dict = Depends(get_curr
                     "page_range": f"{start_page+1}-{end_page+1}"
                 })
 
-            except Exception as db_error:
-                # Clean up file if database insert failed
+            except Exception as persistence_error:
+                _delete_document_location_quietly(output_location)
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to persist split document: {str(persistence_error)}",
+                )
+            finally:
                 output_path.unlink(missing_ok=True)
-                raise HTTPException(status_code=500, detail=f"Failed to save split document to database: {str(db_error)}")
 
         source_doc.close()
 
@@ -1553,34 +1589,44 @@ async def merge_documents(request: Request, current_user: dict = Depends(get_cur
             print(f"    Added {page_count} pages (total: {total_pages})")
 
         # Save merged PDF
-        output_filename = f"{uuid.uuid4()}_{output_display_name}"
+        output_document_id = str(uuid.uuid4())
+        output_filename = f"{output_document_id}_{output_display_name}"
         output_path = _safe_docs_path(output_filename)
         merged_doc.save(str(output_path))
         merged_doc.close()
         _validate_pdf_file(output_path)
 
-        # Calculate file hash and size
-        file_size = output_path.stat().st_size
-        with open(output_path, 'rb') as f:
-            file_hash = hashlib.md5(f.read()).hexdigest()
-
-        # Create new document record in database
+        output_location = None
         try:
+            file_size = output_path.stat().st_size
+            output_content = output_path.read_bytes()
+            file_hash = hashlib.sha256(output_content).hexdigest()
+            output_location = get_document_storage().store_pdf(
+                user_id=user_id,
+                document_id=output_document_id,
+                filename=output_filename,
+                content=output_content,
+            )
             new_document = db.create_document(
+                document_id=output_document_id,
                 filename=output_filename,
                 original_name=output_display_name,
                 file_size=file_size,
-                file_path=str(output_path),
+                file_path=output_location,
                 client_id=user_id,
                 persona="System",
                 job_role="PDF Merge",
                 file_hash=file_hash
             )
             new_doc_id = new_document.id
-        except Exception as db_error:
-            # Clean up file if database insert failed
+        except Exception as persistence_error:
+            _delete_document_location_quietly(output_location)
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to persist merged document: {str(persistence_error)}",
+            )
+        finally:
             output_path.unlink(missing_ok=True)
-            raise HTTPException(status_code=500, detail=f"Failed to save merged document to database: {str(db_error)}")
 
         print(f"✅ Successfully merged {len(documents)} documents into: {output_name}.pdf")
         print(f"📊 Total pages: {total_pages}, File size: {file_size} bytes")
@@ -1920,25 +1966,29 @@ async def delete_document_from_rag(document_id: str, current_user: dict = Depend
 
 
 # Catch-all route for SPA routing (MUST be last)
+# Absolute, so it does not depend on the process working directory.
+FRONTEND_DIST_DIR = BACKEND_DIR.parent / "frontend" / "dist"
+_STATIC_MEDIA_TYPES = {
+    ".js": "application/javascript",
+    ".css": "text/css",
+    ".html": "text/html",
+    ".json": "application/json",
+    ".svg": "image/svg+xml",
+}
+
+
 @app.get("/{path:path}")
 async def serve_frontend(path: str):
     """Serve React app for all routes (SPA routing)"""
-    # Serve static files with proper MIME types
-    static_file = Path("../frontend/dist") / path
-    if static_file.exists() and static_file.is_file():
-        # Determine MIME type based on file extension
-        if path.endswith('.js'):
-            media_type = "application/javascript"
-        elif path.endswith('.css'):
-            media_type = "text/css"
-        elif path.endswith('.html'):
-            media_type = "text/html"
-        elif path.endswith('.json'):
-            media_type = "application/json"
-        else:
-            media_type = None
+    # Unknown API paths must 404, not return the SPA shell with a 200.
+    if path == "api" or path.startswith("api/"):
+        raise HTTPException(status_code=404, detail="Not Found")
 
-        return FileResponse(static_file, media_type=media_type)
+    dist_root = FRONTEND_DIST_DIR.resolve()
+    static_file = (dist_root / path).resolve()
+    # Only serve files that stay inside the build folder (blocks ../ traversal).
+    if static_file.is_relative_to(dist_root) and static_file.is_file():
+        return FileResponse(static_file, media_type=_STATIC_MEDIA_TYPES.get(static_file.suffix.lower()))
 
     # For all other routes, serve the React app (SPA routing)
     return await get_frontend()

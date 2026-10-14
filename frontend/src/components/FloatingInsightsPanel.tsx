@@ -6,12 +6,14 @@ interface FloatingInsightsPanelProps {
   isVisible: boolean;
   onClose: () => void;
   position?: { x: number; y: number };
+  currentPage?: number;
 }
 
 const FloatingInsightsPanel: React.FC<FloatingInsightsPanelProps> = ({ 
   isVisible, 
   onClose, 
-  position = { x: 100, y: 100 } 
+  position = { x: 100, y: 100 },
+  currentPage = 1,
 }) => {
   const { insights, isOnline, currentDocument, getInsights } = usePDF();
   const [isMinimized, setIsMinimized] = useState(false);
@@ -23,9 +25,9 @@ const FloatingInsightsPanel: React.FC<FloatingInsightsPanelProps> = ({
   useEffect(() => {
     if (isVisible && currentDocument && insights.length === 0) {
       // Auto-load insights when panel opens
-      getInsights(currentDocument.id, 1, 'Student', 'Research');
+      getInsights(currentDocument.id, currentPage);
     }
-  }, [currentDocument, getInsights, insights.length, isVisible]);
+  }, [currentDocument, currentPage, getInsights, insights.length, isVisible]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (e.target === e.currentTarget || (e.target as HTMLElement).classList.contains('drag-handle')) {

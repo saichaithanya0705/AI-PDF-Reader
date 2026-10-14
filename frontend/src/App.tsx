@@ -4,6 +4,9 @@ import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
 import ReaderPage from './pages/ReaderPage';
 import SignupPage from './pages/SignupPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
+import EvalsPage from './pages/EvalsPage';
 import { AuthProvider } from './context/AuthContext';
 import { PDFProvider } from './context/PDFContext';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -21,6 +24,8 @@ function App() {
                 <Route path="/" element={<LandingPage />} />
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/signup" element={<SignupPage />} />
+                <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+                <Route path="/reset-password" element={<ResetPasswordPage />} />
                 
                 {/* Protected routes - require authentication */}
                 <Route 
@@ -30,6 +35,14 @@ function App() {
                       <HomePage />
                     </ProtectedRoute>
                   } 
+                />
+                <Route
+                  path="/evals"
+                  element={
+                    <ProtectedRoute>
+                      <EvalsPage />
+                    </ProtectedRoute>
+                  }
                 />
                 <Route 
                   path="/reader/:pdfId" 
