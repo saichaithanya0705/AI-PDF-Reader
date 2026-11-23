@@ -11,9 +11,6 @@ const RelatedDocumentsSidebar: React.FC<RelatedDocumentsSidebarProps> = ({ curre
   const { documents, crossDocumentSections, fetchAllDocuments } = usePDF();
   const navigate = useNavigate();
 
-  // The reader can be opened directly (deep link / refresh) without visiting the
-  // library first, so load the full document list here rather than relying on
-  // whatever happens to be cached.
   useEffect(() => {
     fetchAllDocuments();
   }, [fetchAllDocuments]);
@@ -27,39 +24,42 @@ const RelatedDocumentsSidebar: React.FC<RelatedDocumentsSidebarProps> = ({ curre
   }
 
   return (
-    <aside className="hidden h-full w-72 shrink-0 flex-col overflow-hidden border-r border-slate-700 bg-slate-900/95 lg:flex">
-      <div className="border-b border-slate-700 p-4">
-        <h3 className="flex items-center gap-2 text-sm font-semibold text-white">
-          <FileText className="h-4 w-4 text-cyan-300" />
-          Uploaded PDFs
-        </h3>
-        <p className="mt-1 text-xs text-slate-400">
-          {documents.length} file{documents.length === 1 ? '' : 's'} available in this workspace
-        </p>
+    <aside className="hidden h-full w-phi-sidebar shrink-0 flex-col overflow-hidden border-r border-[rgba(25,24,22,0.09)] bg-paper-50 lg:flex">
+      <div className="border-b border-[rgba(25,24,22,0.08)] px-phi-4 py-phi-3">
+        <div className="flex items-center justify-between gap-phi-2">
+          <h3 className="text-phi-xs font-medium text-ink-primary">Workspace PDFs</h3>
+          <span className="font-mono text-phi-2xs tabular-nums text-ink-muted">
+            {documents.length}
+          </span>
+        </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="space-y-2 p-3">
+      <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
+        <div className="space-y-phi-1 p-phi-3">
           {documents.map((document) => {
             const isActive = document.id === currentDocumentId;
             return (
               <button
                 key={document.id}
+                type="button"
                 onClick={() => handleNavigate(document.id)}
-                className={`w-full rounded-lg border p-3 text-left transition-colors ${
+                className={`w-full rounded-phi-md px-phi-3 py-phi-2 text-left transition-colors duration-phi-fast ${
                   isActive
-                    ? 'border-cyan-400/50 bg-cyan-400/10 text-white'
-                    : 'border-slate-700 bg-slate-800/70 text-slate-200 hover:border-slate-500 hover:bg-slate-800'
+                    ? 'folio-mark bg-app-surface text-ink-primary shadow-subtle ring-1 ring-[rgba(25,24,22,0.09)]'
+                    : 'text-ink-secondary hover:bg-paper-200/70 hover:text-ink-primary'
                 }`}
                 title={document.name}
               >
-                <div className="flex items-start gap-3">
-                  <span className={`mt-0.5 rounded-md p-1.5 ${isActive ? 'bg-cyan-400/20 text-cyan-200' : 'bg-slate-700 text-slate-300'}`}>
-                    <FileText className="h-4 w-4" />
-                  </span>
+                <div className="flex items-start gap-phi-3">
+                  <FileText
+                    className={`mt-phi-1 h-4 w-4 shrink-0 ${
+                      isActive ? 'text-accent' : 'text-ink-muted'
+                    }`}
+                    strokeWidth={1.5}
+                  />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium">{document.name}</span>
-                    <span className="mt-1 block text-xs text-slate-400">
+                    <span className="block truncate text-phi-xs font-medium">{document.name}</span>
+                    <span className="mt-phi-1 block font-mono text-phi-2xs tabular-nums text-ink-muted">
                       {Math.max(1, Math.round((document.size || 0) / 1024))} KB
                     </span>
                   </span>
@@ -70,47 +70,50 @@ const RelatedDocumentsSidebar: React.FC<RelatedDocumentsSidebarProps> = ({ curre
         </div>
 
         {crossDocumentSections.length === 0 && documents.length > 1 && (
-          <p className="border-t border-slate-700 p-3 text-xs text-slate-500">
+          <p className="border-t border-[rgba(25,24,22,0.08)] p-phi-4 text-phi-xs leading-phi text-ink-muted">
             No closely related passages in your other PDFs for this page.
           </p>
         )}
 
         {crossDocumentSections.length > 0 && (
-          <div className="border-t border-slate-700 p-3">
-            <div className="mb-3">
-              <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-300">
-                Relevant Lines
-              </h4>
-              <p className="mt-1 text-xs text-slate-500">
-                Matches from other PDFs for the current page
+          <div className="border-t border-[rgba(25,24,22,0.08)] p-phi-3">
+            <div className="mb-phi-3 px-phi-1">
+              <h4 className="text-phi-xs font-medium text-ink-primary">Related passages</h4>
+              <p className="mt-phi-1 text-phi-2xs text-ink-muted">
+                Matches from other PDFs for this page
               </p>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-phi-2">
               {crossDocumentSections.map((section) => (
                 <button
                   key={`${section.documentId}-${section.page}-${section.id}`}
-                  className="group w-full rounded-lg border border-slate-700 bg-slate-800/60 p-3 text-left transition-colors hover:border-indigo-400/50 hover:bg-slate-800"
+                  type="button"
+                  className="group w-full rounded-phi-md border border-[rgba(25,24,22,0.09)] bg-app-surface p-phi-3 text-left transition-colors duration-phi-fast hover:border-[rgba(25,24,22,0.22)]"
                   onClick={() => handleNavigate(section.documentId, section.page)}
                 >
-                  <div className="mb-2 flex items-start gap-2">
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium text-cyan-200" title={section.documentName}>
-                        {section.documentName}
-                      </span>
-                      <span className="mt-1 inline-flex items-center gap-2 text-xs text-slate-400">
-                        Page {section.page}
-                        <span
-                          className="rounded bg-indigo-400/10 px-1.5 py-0.5 tabular-nums text-indigo-200"
-                          title="Retrieval score (0.8 × semantic similarity + 0.2 × keyword match). Higher is more related; it is not a percentage."
-                        >
-                          score {section.relevance.toFixed(2)}
-                        </span>
-                      </span>
+                  <div className="flex items-start justify-between gap-phi-2">
+                    <span
+                      className="min-w-0 flex-1 truncate text-phi-xs font-medium text-ink-primary group-hover:text-accent-ink"
+                      title={section.documentName}
+                    >
+                      {section.documentName}
                     </span>
-                    <ExternalLink className="h-3.5 w-3.5 shrink-0 text-slate-500 opacity-0 transition-opacity group-hover:opacity-100" />
+                    <ExternalLink
+                      className="mt-phi-1 h-3.5 w-3.5 shrink-0 text-ink-faint opacity-0 transition-opacity duration-phi-fast group-hover:opacity-100"
+                      strokeWidth={1.5}
+                    />
                   </div>
-                  <p className="line-clamp-3 border-l-2 border-slate-700 pl-2 text-xs leading-relaxed text-slate-300 group-hover:border-indigo-400/50">
+
+                  <div className="mt-phi-1 flex items-center gap-phi-2 font-mono text-phi-2xs tabular-nums text-ink-muted">
+                    <span className="text-accent-ink">p. {section.page}</span>
+                    <span>·</span>
+                    <span title="Retrieval score (0.8 × semantic similarity + 0.2 × keyword match). Higher is more related.">
+                      score {section.relevance.toFixed(2)}
+                    </span>
+                  </div>
+
+                  <p className="mt-phi-2 line-clamp-3 border-l-2 border-[rgba(25,24,22,0.12)] pl-phi-3 text-phi-xs leading-phi text-ink-secondary transition-colors duration-phi-fast group-hover:border-accent">
                     {section.snippet}
                   </p>
                 </button>

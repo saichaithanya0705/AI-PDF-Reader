@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, MessageSquare, Wifi, WifiOff } from 'lucide-react';
+import { ArrowLeft, Headphones, Lightbulb, Loader2, MessageSquare, Wifi, WifiOff } from 'lucide-react';
 import { usePDF } from '../context/usePDF';
 import SmartPDFViewer from '../components/SmartPDFViewer';
 import FloatingInsightsPanel from '../components/FloatingInsightsPanel';
@@ -10,9 +10,9 @@ import SimpleChatbot from '../components/SimpleChatbot';
 import RelatedDocumentsSidebar from '../components/RelatedDocumentsSidebar';
 
 const useMediaQuery = (query: string) => {
-  const [matches, setMatches] = useState(() => (
+  const [matches, setMatches] = useState(() =>
     typeof window !== 'undefined' ? window.matchMedia(query).matches : false
-  ));
+  );
 
   useEffect(() => {
     const mediaQuery = window.matchMedia(query);
@@ -42,9 +42,6 @@ const ReaderPage: React.FC = () => {
     isOnline,
   } = usePDF();
 
-  // The URL is the single source of truth for the page, so links from the
-  // related-content sidebar (/reader/:id?page=N) land on the right page even
-  // though this component stays mounted across navigations.
   const parsedPage = Number.parseInt(searchParams.get('page') ?? '', 10);
   const currentPage = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
 
@@ -61,14 +58,11 @@ const ReaderPage: React.FC = () => {
   const readerRef = useRef<HTMLDivElement>(null);
   const isActiveDocument = Boolean(pdfId && currentDocument?.id === pdfId);
 
-  // Drop the previous PDF's matches/insights as soon as the route changes.
   useEffect(() => {
     clearRelatedContent();
     setShowInsightsNotification(false);
   }, [pdfId, clearRelatedContent]);
 
-  // Resolve the document for the route. Data fetching lives in a separate
-  // effect so library refreshes don't re-trigger recommendation/LLM calls.
   useEffect(() => {
     if (!pdfId) {
       setIsDocumentLoading(false);
@@ -84,7 +78,7 @@ const ReaderPage: React.FC = () => {
     let cancelled = false;
     setDocumentLoadError(null);
 
-    const cachedDocument = documents.find(d => d.id === pdfId);
+    const cachedDocument = documents.find((d) => d.id === pdfId);
     if (cachedDocument) {
       setCurrentDocument(cachedDocument);
       setIsDocumentLoading(false);
@@ -105,7 +99,6 @@ const ReaderPage: React.FC = () => {
     };
   }, [pdfId, documents, currentDocument?.id, setCurrentDocument, loadDocument]);
 
-  // Fetch side-panel content once per (document, page).
   useEffect(() => {
     if (!pdfId || !isActiveDocument) return;
     getRelatedSections(pdfId, currentPage);
@@ -116,25 +109,22 @@ const ReaderPage: React.FC = () => {
     getInsights(pdfId, currentPage);
   }, [pdfId, isActiveDocument, currentPage, isOnline, getInsights]);
 
-  // Load saved persona and job only once on mount
   useEffect(() => {
     const savedPersona = localStorage.getItem('lastPersona');
     const savedJob = localStorage.getItem('lastJob');
     if (savedPersona) setCurrentPersona(savedPersona);
     if (savedJob) setCurrentJob(savedJob);
-  }, []); // Only run once on mount
+  }, []);
 
-  // Handle URL parameters for auto-opening features
   useEffect(() => {
-    const insights = searchParams.get('insights');
-    const podcast = searchParams.get('podcast');
+    const insightsParam = searchParams.get('insights');
+    const podcastParam = searchParams.get('podcast');
 
-    if (insights === 'true' && isOnline) {
+    if (insightsParam === 'true' && isOnline) {
       setShowFloatingInsights(true);
     }
 
-    if (podcast === 'true' && isOnline) {
-      // Small delay to ensure document is loaded
+    if (podcastParam === 'true' && isOnline) {
       const timer = setTimeout(() => {
         setShowPodcast(true);
       }, 1000);
@@ -142,7 +132,6 @@ const ReaderPage: React.FC = () => {
     }
   }, [searchParams, isOnline]);
 
-  // Show notification when insights are available
   useEffect(() => {
     if (insights && insights.length > 0 && !showFloatingInsights) {
       setShowInsightsNotification(true);
@@ -150,33 +139,41 @@ const ReaderPage: React.FC = () => {
   }, [insights, showFloatingInsights]);
 
   const handlePageChange = (page: number) => {
-    // Updating the URL drives currentPage and the fetch effects above.
-    setSearchParams(prev => {
-      const next = new URLSearchParams(prev);
-      next.set('page', page.toString());
-      return next;
-    }, { replace: true });
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set('page', page.toString());
+        return next;
+      },
+      { replace: true }
+    );
   };
 
   if (isDocumentLoading || !currentDocument || !isActiveDocument) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-900">
-        <div className="text-center p-8 bg-slate-800 rounded-lg border border-slate-700">
+      <div className="flex min-h-screen items-center justify-center bg-app-bg p-phi-5">
+        <div className="w-full max-w-phi-modal-sm rounded-phi-lg border border-[rgba(25,24,22,0.1)] bg-app-surface p-phi-6 text-center shadow-card">
           {isDocumentLoading || !documentLoadError ? (
             <>
-              <div className="animate-spin w-12 h-12 border-4 border-cyan-400 border-t-transparent rounded-full mx-auto mb-4"></div>
-              <p className="text-white text-lg mb-2">Loading document...</p>
-              <p className="text-slate-400 text-sm">Fetching the protected document from your library.</p>
+              <Loader2
+                className="mx-auto mb-phi-3 h-5 w-5 animate-spin text-ink-muted"
+                strokeWidth={1.5}
+              />
+              <p className="text-phi-sm font-medium text-ink-primary">Opening document</p>
+              <p className="mt-phi-1 text-phi-xs text-ink-muted">
+                Fetching the protected PDF from your library
+              </p>
             </>
           ) : (
             <>
-              <p className="text-white text-lg mb-2">Unable to open document</p>
-              <p className="text-slate-400 text-sm">{documentLoadError}</p>
+              <p className="text-phi-sm font-medium text-ink-primary">Unable to open document</p>
+              <p className="mt-phi-2 text-phi-xs text-ink-secondary">{documentLoadError}</p>
             </>
           )}
           <button
+            type="button"
             onClick={() => navigate('/library')}
-            className="mt-4 px-4 py-2 bg-cyan-600 text-white rounded hover:bg-cyan-700 transition-colors"
+            className="btn-secondary mt-phi-5 h-phi-ctrl-sm text-phi-xs"
           >
             Back to library
           </button>
@@ -185,77 +182,114 @@ const ReaderPage: React.FC = () => {
     );
   }
 
-  // Debug: Log when reader renders (removed to prevent re-render loops)
-  // console.log('🎯 Reader rendering with document:', currentDocument?.name, 'ID:', currentDocument?.id);
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950 to-slate-950" ref={readerRef}>
-      {/* Header */}
-      <header className="bg-slate-900/90 backdrop-blur border-b border-slate-700 sticky top-0 z-40">
-        <div className="px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
+    <div className="flex h-screen flex-col overflow-hidden bg-app-bg text-ink-primary" ref={readerRef}>
+      {/* Reader Header */}
+      <header className="z-30 shrink-0 border-b border-[rgba(25,24,22,0.09)] bg-app-surface">
+        <div className="flex h-phi-bar items-center justify-between gap-phi-4 px-phi-4">
+          <div className="flex min-w-0 items-center gap-phi-3">
             <button
+              type="button"
               onClick={() => navigate('/library')}
-              className="p-2 hover:bg-slate-800 rounded-lg transition-colors"
+              className="inline-flex h-phi-ctrl-sm w-phi-ctrl-sm shrink-0 items-center justify-center rounded-phi-md text-ink-secondary transition-colors duration-phi-fast hover:bg-app-raised hover:text-ink-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              aria-label="Back to library"
+              title="Back to library"
             >
-              <ArrowLeft className="w-5 h-5 text-slate-400" />
+              <ArrowLeft className="h-4 w-4" strokeWidth={1.5} />
             </button>
-            <div>
-              <h1 className="text-xl font-semibold text-white truncate max-w-md">
+            <div className="min-w-0">
+              <h1 className="truncate text-phi-sm font-medium text-ink-primary" title={currentDocument.name}>
                 {currentDocument.name}
               </h1>
-              <p className="text-sm text-slate-400">Page {currentPage}</p>
+              <p className="font-mono text-phi-2xs tabular-nums text-ink-muted">
+                Page {currentPage}
+              </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex shrink-0 items-center gap-phi-2">
+            {isOnline && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowFloatingInsights((prev) => !prev);
+                    setShowInsightsNotification(false);
+                  }}
+                  className={`inline-flex h-phi-ctrl-sm items-center gap-phi-2 rounded-phi-md border px-phi-3 text-phi-xs font-medium transition-colors duration-phi-fast ${
+                    showFloatingInsights
+                      ? 'border-accent/40 bg-accent-soft text-accent-ink'
+                      : 'border-[rgba(25,24,22,0.1)] bg-app-surface text-ink-secondary hover:bg-app-raised hover:text-ink-primary'
+                  }`}
+                >
+                  <Lightbulb className="h-3.5 w-3.5" strokeWidth={1.5} />
+                  <span className="hidden sm:inline">Insights</span>
+                  {insights && insights.length > 0 && (
+                    <span className="font-mono text-phi-2xs tabular-nums text-ink-muted">
+                      {insights.length}
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowPodcast(true)}
+                  className="inline-flex h-phi-ctrl-sm items-center gap-phi-2 rounded-phi-md border border-[rgba(25,24,22,0.1)] bg-app-surface px-phi-3 text-phi-xs font-medium text-ink-secondary transition-colors duration-phi-fast hover:bg-app-raised hover:text-ink-primary"
+                >
+                  <Headphones className="h-3.5 w-3.5" strokeWidth={1.5} />
+                  <span className="hidden sm:inline">Audio overview</span>
+                </button>
+              </>
+            )}
+
             <button
+              type="button"
               onClick={() => {
-                setShowChatbot(prev => !prev);
+                setShowChatbot((prev) => !prev);
                 if (showChatbot) {
                   setInitialChatMessage('');
                 }
               }}
-              className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+              className={`inline-flex h-phi-ctrl-sm items-center gap-phi-2 rounded-phi-md border px-phi-3 text-phi-xs font-medium transition-colors duration-phi-fast ${
                 showChatbot
-                  ? 'bg-blue-500/20 text-blue-100 hover:bg-blue-500/30'
-                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
+                  ? 'border-ink-primary bg-ink-primary text-paper-50'
+                  : 'border-[rgba(25,24,22,0.1)] bg-app-surface text-ink-secondary hover:bg-app-raised hover:text-ink-primary'
               }`}
             >
-              <MessageSquare className="h-4 w-4" />
-              {showChatbot ? 'Hide chat' : 'Chat'}
+              <MessageSquare className="h-3.5 w-3.5" strokeWidth={1.5} />
+              <span>{showChatbot ? 'Hide chat' : 'Chat'}</span>
             </button>
 
-            {/* Online/Offline Indicator */}
-            <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium ${isOnline
-              ? 'bg-green-400/10 text-green-400 border border-green-400/20'
-              : 'bg-orange-400/10 text-orange-400 border border-orange-400/20'
-              }`}>
-              {isOnline ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-              {isOnline ? 'Online' : 'Offline'}
+            <span className="hidden h-phi-4 w-px bg-[rgba(25,24,22,0.1)] sm:inline-block" />
+
+            <div
+              className={`hidden items-center gap-phi-2 font-mono text-phi-2xs sm:flex ${
+                isOnline ? 'text-semantic-positive' : 'text-semantic-warning'
+              }`}
+            >
+              {isOnline ? (
+                <Wifi className="h-3.5 w-3.5" strokeWidth={1.5} />
+              ) : (
+                <WifiOff className="h-3.5 w-3.5" strokeWidth={1.5} />
+              )}
+              <span>{isOnline ? 'Online' : 'Offline'}</span>
             </div>
-
-
           </div>
         </div>
       </header>
 
-      {/* Main Content - Integrated PDF Viewer with Built-in Recommendations */}
-      <div className="flex flex-1 h-[calc(100vh-80px)] overflow-hidden">
+      {/* Main Three-Pane Workspace */}
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         <RelatedDocumentsSidebar currentDocumentId={currentDocument.id} />
 
-        <div className="min-w-0 flex-1 p-4 overflow-hidden h-full">
+        <div className="min-w-0 flex-1 overflow-hidden">
           <SmartPDFViewer
             key={currentDocument.id}
             document={currentDocument}
             initialPage={currentPage}
             onPageChange={handlePageChange}
-            onTextSelection={(text, page) => {
-              console.log(`📝 Text selected on page ${page}:`, text.substring(0, 100) + '...');
-            }}
+            onTextSelection={() => {}}
             onAskLLM={(text, page) => {
-              console.log(`🤖 Ask LLM clicked on page ${page} with text:`, text.substring(0, 100) + '...');
-              // Open chatbot and pre-fill with selected text
               setInitialChatMessage(`Regarding the text on page ${page}: "${text}"\n\nQuestion: `);
               setShowChatbot(true);
             }}
@@ -263,7 +297,7 @@ const ReaderPage: React.FC = () => {
         </div>
 
         {showChatbot && isDockedChatViewport && (
-          <aside className="h-full w-[400px] min-w-[360px] max-w-[420px] shrink-0 overflow-hidden border-l border-slate-700 bg-slate-900">
+          <aside className="h-full w-phi-chat shrink-0 overflow-hidden border-l border-[rgba(25,24,22,0.09)] bg-app-surface">
             <SimpleChatbot
               documentId={currentDocument?.id}
               documentContext={`Reading: ${currentDocument?.name} (Page ${currentPage})`}
@@ -296,9 +330,6 @@ const ReaderPage: React.FC = () => {
         />
       )}
 
-
-
-      {/* Insights Notification */}
       <InsightsNotification
         isVisible={showInsightsNotification}
         onOpenInsights={() => {
@@ -309,15 +340,13 @@ const ReaderPage: React.FC = () => {
         insightCount={insights?.length || 0}
       />
 
-      {/* Floating Insights Panel */}
       <FloatingInsightsPanel
         isVisible={showFloatingInsights}
         onClose={() => setShowFloatingInsights(false)}
         currentPage={currentPage}
-        position={{ x: 100, y: 100 }}
+        position={{ x: 110, y: 78 }}
       />
 
-      {/* Podcast Modal */}
       <PodcastModal
         isVisible={showPodcast}
         onClose={() => setShowPodcast(false)}
@@ -338,7 +367,7 @@ const ReaderPage: React.FC = () => {
           currentPage={currentPage}
         />
       )}
-    </div >
+    </div>
   );
 };
 

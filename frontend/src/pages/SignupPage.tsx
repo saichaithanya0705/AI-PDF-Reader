@@ -1,8 +1,9 @@
 import { FormEvent, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, BadgeCheck, Loader2, Mail, Shield, UserCog } from 'lucide-react';
+import { ArrowLeft, Loader2, Mail, Shield, UserCog } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
 import PasswordInput from '../components/PasswordInput';
+import BrandMark from '../components/BrandMark';
 import { toAuthErrorMessage } from '../lib/authErrors';
 
 const SignupPage = () => {
@@ -22,7 +23,7 @@ const SignupPage = () => {
     resetError();
 
     if (!email || !password || !confirmPassword) {
-      setFormError('Please complete all required fields.');
+      setFormError('Complete all required fields.');
       return;
     }
 
@@ -32,18 +33,17 @@ const SignupPage = () => {
     }
 
     if (password.length < 6) {
-      setFormError('Password must be at least 6 characters long.');
+      setFormError('Password must be at least 6 characters.');
       return;
     }
 
     try {
       setIsSubmitting(true);
       await signUp({ email, password, metadata: { persona, role } });
-      // Redirect to login with success state
-      navigate('/login', { 
-        state: { 
-          message: 'Account created successfully! Please sign in to continue.' 
-        } 
+      navigate('/login', {
+        state: {
+          message: 'Account created. Sign in to open your library.',
+        },
       });
     } catch (err) {
       setFormError(toAuthErrorMessage(err));
@@ -53,117 +53,133 @@ const SignupPage = () => {
   };
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center px-6 py-16">
-      <div className="absolute inset-0 -z-10 opacity-60">
-        <div className="mx-auto h-full w-full max-w-4xl rounded-full bg-gradient-to-r from-cyan-500/20 via-brand-500/20 to-fuchsia-500/20 blur-3xl" />
-      </div>
+    <div className="flex min-h-screen flex-col bg-paper-100">
+      <header className="mx-auto flex h-phi-header w-full max-w-phi-container items-center justify-between px-phi-5 lg:px-phi-6">
+        <Link
+          to="/"
+          className="rounded-phi-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        >
+          <BrandMark />
+        </Link>
+        <Link
+          to="/"
+          className="inline-flex items-center gap-phi-2 text-phi-sm text-ink-secondary transition-colors duration-phi-fast hover:text-ink-primary"
+        >
+          <ArrowLeft className="h-4 w-4" strokeWidth={1.5} />
+          Overview
+        </Link>
+      </header>
 
-      <div className="w-full max-w-5xl rounded-3xl border border-white/10 bg-slate-950/80 p-8 shadow-glow backdrop-blur">
-        <div className="flex flex-col gap-6 md:flex-row md:items-stretch md:gap-12">
-          <div className="flex flex-1 flex-col justify-between gap-6 rounded-2xl border border-white/5 bg-white/5 p-6">
-            <button
-              type="button"
-              onClick={() => navigate('/')}
-              className="flex items-center gap-2 text-sm text-slate-300 transition hover:text-white"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Back
-            </button>
-            <div className="flex flex-col gap-4">
-              <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs uppercase tracking-[0.3em] text-slate-300">
-                <BadgeCheck className="h-3.5 w-3.5" />
-                Create your workspace
-              </span>
-              <h1 className="text-3xl sm:text-4xl">Launch a secure AI workspace for your documents.</h1>
-              <p className="text-sm leading-relaxed text-slate-300">
-                Personalise your experience with custom personas and jobs to keep recommendations relevant across your team.
+      <main className="mx-auto flex w-full max-w-phi-container flex-1 items-center justify-center px-phi-5 py-phi-6 lg:px-phi-6">
+        <div className="grid w-full max-w-[56.86rem] overflow-hidden rounded-phi-lg border border-[rgba(25,24,22,0.1)] bg-paper-50 shadow-card md:grid-cols-phi-rev">
+          <aside className="flex flex-col justify-between border-b border-[rgba(25,24,22,0.08)] bg-paper-200/55 p-phi-5 sm:p-phi-6 md:border-b-0 md:border-r">
+            <div className="space-y-phi-4">
+              <p className="font-mono text-phi-2xs text-ink-muted">New workspace</p>
+              <h1 className="font-serif text-phi-xl font-normal leading-phi-tight tracking-[-0.02em] text-ink-primary">
+                Create a document workspace
+              </h1>
+              <p className="text-phi-sm leading-phi text-ink-secondary">
+                Upload PDFs, link passages across your collection, and tailor recommendations to your role.
               </p>
             </div>
-            <div className="space-y-3 text-xs text-slate-400">
-              <p>• Unlimited PDF uploads with smart deduplication</p>
-              <p>• Persona-aware insights synced to the Reader</p>
-              <p>• Invite teammates and manage roles in-app</p>
-            </div>
-          </div>
 
-          <form className="flex flex-1 flex-col gap-6" onSubmit={handleSubmit}>
+            <div className="mt-phi-6 space-y-phi-3 border-t border-[rgba(25,24,22,0.08)] pt-phi-5 text-phi-sm text-ink-secondary">
+              <div className="folio-mark pl-phi-4">
+                <p className="font-medium text-ink-primary">Single and bulk ingestion</p>
+                <p className="mt-phi-1 text-phi-xs text-ink-muted">
+                  Validate PDFs on upload and avoid duplicate copies
+                </p>
+              </div>
+              <div className="pl-phi-4">
+                <p className="font-medium text-ink-primary">Private by default</p>
+                <p className="mt-phi-1 text-phi-xs text-ink-muted">
+                  Documents and chat sessions stay scoped to your account
+                </p>
+              </div>
+            </div>
+          </aside>
+
+          <form className="flex flex-col gap-phi-4 p-phi-5 sm:p-phi-6" onSubmit={handleSubmit}>
             <div>
-              <label className="text-sm font-medium text-white" htmlFor="signup-email">
+              <label className="text-phi-sm font-medium text-ink-primary" htmlFor="signup-email">
                 Work email
               </label>
-              <div className="mt-2 flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-slate-200 focus-within:border-brand-400 focus-within:bg-slate-900">
-                <Mail className="h-4 w-4 text-slate-400" />
+              <div className="mt-phi-2 flex h-phi-ctrl items-center gap-phi-3 rounded-phi-md border border-[rgba(25,24,22,0.14)] bg-app-surface px-phi-3 text-ink-primary transition-colors duration-phi-fast focus-within:border-ink-primary focus-within:ring-2 focus-within:ring-accent/15">
+                <Mail className="h-4 w-4 shrink-0 text-ink-muted" strokeWidth={1.5} />
                 <input
                   id="signup-email"
                   type="email"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
-                  className="w-full bg-transparent text-sm text-white placeholder:text-slate-500 focus:outline-none"
-                  placeholder="you@company.com"
+                  className="w-full bg-transparent text-phi-sm text-ink-primary placeholder:text-ink-faint focus:outline-none"
+                  placeholder="name@company.com"
                   autoComplete="email"
                   required
                 />
               </div>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-phi-4 sm:grid-cols-2">
               <div>
-                <label className="text-sm font-medium text-white" htmlFor="persona">
-                  Primary persona (optional)
+                <label className="text-phi-sm font-medium text-ink-primary" htmlFor="persona">
+                  Primary persona <span className="font-normal text-ink-muted">(optional)</span>
                 </label>
-                <div className="mt-2 flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-slate-200 focus-within:border-brand-400 focus-within:bg-slate-900">
-                  <UserCog className="h-4 w-4 text-slate-400" />
+                <div className="mt-phi-2 flex h-phi-ctrl items-center gap-phi-3 rounded-phi-md border border-[rgba(25,24,22,0.14)] bg-app-surface px-phi-3 text-ink-primary transition-colors duration-phi-fast focus-within:border-ink-primary focus-within:ring-2 focus-within:ring-accent/15">
+                  <UserCog className="h-4 w-4 shrink-0 text-ink-muted" strokeWidth={1.5} />
                   <input
                     id="persona"
                     type="text"
                     value={persona}
                     onChange={(event) => setPersona(event.target.value)}
-                    className="w-full bg-transparent text-sm text-white placeholder:text-slate-500 focus:outline-none"
-                    placeholder="Product Designer"
+                    className="w-full bg-transparent text-phi-sm text-ink-primary placeholder:text-ink-faint focus:outline-none"
+                    placeholder="Research Analyst"
                   />
                 </div>
               </div>
               <div>
-                <label className="text-sm font-medium text-white" htmlFor="role">
-                  Team role (optional)
+                <label className="text-phi-sm font-medium text-ink-primary" htmlFor="role">
+                  Team role <span className="font-normal text-ink-muted">(optional)</span>
                 </label>
-                <div className="mt-2 flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-slate-200 focus-within:border-brand-400 focus-within:bg-slate-900">
-                  <Shield className="h-4 w-4 text-slate-400" />
+                <div className="mt-phi-2 flex h-phi-ctrl items-center gap-phi-3 rounded-phi-md border border-[rgba(25,24,22,0.14)] bg-app-surface px-phi-3 text-ink-primary transition-colors duration-phi-fast focus-within:border-ink-primary focus-within:ring-2 focus-within:ring-accent/15">
+                  <Shield className="h-4 w-4 shrink-0 text-ink-muted" strokeWidth={1.5} />
                   <input
                     id="role"
                     type="text"
                     value={role}
                     onChange={(event) => setRole(event.target.value)}
-                    className="w-full bg-transparent text-sm text-white placeholder:text-slate-500 focus:outline-none"
-                    placeholder="Head of Compliance"
+                    className="w-full bg-transparent text-phi-sm text-ink-primary placeholder:text-ink-faint focus:outline-none"
+                    placeholder="Policy Review"
                   />
                 </div>
               </div>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-phi-4 sm:grid-cols-2">
               <div>
-                <label className="text-sm font-medium text-white" htmlFor="signup-password">
+                <label className="text-phi-sm font-medium text-ink-primary" htmlFor="signup-password">
                   Password
                 </label>
                 <PasswordInput
                   id="signup-password"
                   value={password}
                   onValueChange={setPassword}
-                  placeholder="Create a strong password"
+                  placeholder="Min 6 characters"
                   autoComplete="new-password"
                   required
                 />
               </div>
               <div>
-                <label className="text-sm font-medium text-white" htmlFor="signup-password-confirm">
+                <label
+                  className="text-phi-sm font-medium text-ink-primary"
+                  htmlFor="signup-password-confirm"
+                >
                   Confirm password
                 </label>
                 <PasswordInput
                   id="signup-password-confirm"
                   value={confirmPassword}
                   onValueChange={setConfirmPassword}
-                  placeholder="Re-enter your password"
+                  placeholder="Repeat password"
                   autoComplete="new-password"
                   required
                 />
@@ -171,19 +187,18 @@ const SignupPage = () => {
             </div>
 
             {(formError || error) && (
-              <div className="rounded-2xl border border-aurora/40 bg-aurora/10 px-4 py-3 text-sm text-aurora">
+              <div
+                role="alert"
+                className="rounded-phi-md border border-semantic-negative/25 bg-semantic-negativeBg px-phi-4 py-phi-3 text-phi-sm text-semantic-negative"
+              >
                 {formError || error?.message}
               </div>
             )}
 
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="flex items-center justify-center gap-2 rounded-full bg-brand-500 px-6 py-3 text-sm font-semibold text-white shadow-glow transition hover:bg-brand-400 disabled:cursor-not-allowed disabled:opacity-60"
-            >
+            <button type="submit" disabled={isSubmitting} className="btn-primary h-phi-ctrl w-full">
               {isSubmitting ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.5} />
                   Creating account
                 </>
               ) : (
@@ -191,15 +206,18 @@ const SignupPage = () => {
               )}
             </button>
 
-            <p className="text-sm text-slate-300">
+            <p className="text-phi-sm text-ink-secondary">
               Already have an account?{' '}
-              <Link to="/login" className="font-medium text-cyan-300 transition hover:text-cyan-200">
+              <Link
+                to="/login"
+                className="font-medium text-accent-ink transition-colors duration-phi-fast hover:underline"
+              >
                 Sign in
               </Link>
             </p>
           </form>
         </div>
-      </div>
+      </main>
     </div>
   );
 };

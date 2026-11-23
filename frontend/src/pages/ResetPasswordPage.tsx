@@ -1,15 +1,12 @@
 import { FormEvent, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { KeyRound, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
 import PasswordInput from '../components/PasswordInput';
+import BrandMark from '../components/BrandMark';
 import { toAuthErrorMessage } from '../lib/authErrors';
 import { FORGOT_PASSWORD_PATH, MIN_PASSWORD_LENGTH } from '../lib/authRoutes';
 
-/**
- * Landing page for the emailed reset link. Supabase exchanges the link's token
- * for a short-lived session (detectSessionInUrl), which authorises updateUser.
- */
 const ResetPasswordPage = () => {
   const navigate = useNavigate();
   const { session, loading, isPasswordRecovery, updatePassword, signOut } = useAuth();
@@ -34,7 +31,6 @@ const ResetPasswordPage = () => {
     try {
       setIsSubmitting(true);
       await updatePassword(password);
-      // Sign out of the recovery session so the new password is proven on next sign-in.
       await signOut().catch(() => undefined);
       navigate('/login', {
         replace: true,
@@ -50,90 +46,102 @@ const ResetPasswordPage = () => {
   const hasRecoverySession = Boolean(session) || isPasswordRecovery;
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center px-6 py-16">
-      <div className="w-full max-w-md rounded-3xl border border-white/10 bg-slate-950/80 p-8 shadow-glow backdrop-blur">
-        <div className="flex items-center gap-3">
-          <span className="rounded-xl bg-cyan-400/10 p-2 text-cyan-300">
-            <KeyRound className="h-5 w-5" />
-          </span>
-          <h1 className="text-2xl text-white">Choose a new password</h1>
-        </div>
+    <div className="flex min-h-screen flex-col bg-paper-100">
+      <header className="mx-auto flex h-phi-header w-full max-w-phi-container items-center justify-between px-phi-5 lg:px-phi-6">
+        <Link
+          to="/"
+          className="rounded-phi-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        >
+          <BrandMark />
+        </Link>
+      </header>
 
-        {loading ? (
-          <div className="mt-8 flex items-center gap-2 text-sm text-slate-300">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Verifying your reset link...
-          </div>
-        ) : !hasRecoverySession ? (
-          <div className="mt-6 space-y-4">
-            <div role="alert" className="rounded-2xl border border-aurora/40 bg-aurora/10 px-4 py-3 text-sm text-aurora">
-              This reset link is invalid or has expired. Links work once and only on the device that opens them.
-            </div>
-            <Link
-              to={FORGOT_PASSWORD_PATH}
-              className="inline-flex rounded-full bg-brand-500 px-6 py-3 text-sm font-semibold text-white shadow-glow transition hover:bg-brand-400"
-            >
-              Request a new link
-            </Link>
-          </div>
-        ) : (
-          <form className="mt-6 flex flex-col gap-5" onSubmit={handleSubmit} noValidate>
-            {session?.user?.email && (
-              <p className="text-sm text-slate-300">
-                Resetting the password for <span className="font-medium text-white">{session.user.email}</span>.
-              </p>
-            )}
-            <div>
-              <label className="text-sm font-medium text-white" htmlFor="new-password">
-                New password
-              </label>
-              <PasswordInput
-                id="new-password"
-                value={password}
-                onValueChange={setPassword}
-                placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
-                autoComplete="new-password"
-                autoFocus
-                required
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium text-white" htmlFor="confirm-new-password">
-                Confirm new password
-              </label>
-              <PasswordInput
-                id="confirm-new-password"
-                value={confirmPassword}
-                onValueChange={setConfirmPassword}
-                placeholder="Repeat the new password"
-                autoComplete="new-password"
-                required
-              />
-            </div>
+      <main className="mx-auto flex w-full max-w-phi-modal-sm flex-1 items-center justify-center px-phi-5 py-phi-6">
+        <div className="w-full rounded-phi-lg border border-[rgba(25,24,22,0.1)] bg-paper-50 p-phi-5 shadow-card sm:p-phi-6">
+          <p className="font-mono text-phi-2xs text-ink-muted">Account recovery</p>
+          <h1 className="mt-phi-2 font-serif text-phi-xl font-normal leading-phi-tight tracking-[-0.02em] text-ink-primary">
+            Choose a new password
+          </h1>
 
-            {formError && (
-              <div role="alert" className="rounded-2xl border border-aurora/40 bg-aurora/10 px-4 py-3 text-sm text-aurora">
-                {formError}
+          {loading ? (
+            <div className="mt-phi-5 flex items-center gap-phi-2 text-phi-sm text-ink-secondary">
+              <Loader2 className="h-4 w-4 animate-spin text-ink-muted" strokeWidth={1.5} />
+              Verifying your reset link
+            </div>
+          ) : !hasRecoverySession ? (
+            <div className="mt-phi-5 space-y-phi-4">
+              <div
+                role="alert"
+                className="rounded-phi-md border border-semantic-negative/25 bg-semantic-negativeBg px-phi-4 py-phi-3 text-phi-sm text-semantic-negative"
+              >
+                This reset link is invalid or has expired. Links work once and only on the device that opens them.
               </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="flex items-center justify-center gap-2 rounded-full bg-brand-500 px-6 py-3 text-sm font-semibold text-white shadow-glow transition hover:bg-brand-400 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Updating password
-                </>
-              ) : (
-                'Update password'
+              <Link to={FORGOT_PASSWORD_PATH} className="btn-primary h-phi-ctrl">
+                Request a new link
+              </Link>
+            </div>
+          ) : (
+            <form className="mt-phi-5 flex flex-col gap-phi-5" onSubmit={handleSubmit} noValidate>
+              {session?.user?.email && (
+                <p className="text-phi-sm text-ink-secondary">
+                  Resetting the password for{' '}
+                  <span className="font-medium text-ink-primary">{session.user.email}</span>.
+                </p>
               )}
-            </button>
-          </form>
-        )}
-      </div>
+              <div>
+                <label className="text-phi-sm font-medium text-ink-primary" htmlFor="new-password">
+                  New password
+                </label>
+                <PasswordInput
+                  id="new-password"
+                  value={password}
+                  onValueChange={setPassword}
+                  placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
+                  autoComplete="new-password"
+                  autoFocus
+                  required
+                />
+              </div>
+              <div>
+                <label
+                  className="text-phi-sm font-medium text-ink-primary"
+                  htmlFor="confirm-new-password"
+                >
+                  Confirm new password
+                </label>
+                <PasswordInput
+                  id="confirm-new-password"
+                  value={confirmPassword}
+                  onValueChange={setConfirmPassword}
+                  placeholder="Repeat the new password"
+                  autoComplete="new-password"
+                  required
+                />
+              </div>
+
+              {formError && (
+                <div
+                  role="alert"
+                  className="rounded-phi-md border border-semantic-negative/25 bg-semantic-negativeBg px-phi-4 py-phi-3 text-phi-sm text-semantic-negative"
+                >
+                  {formError}
+                </div>
+              )}
+
+              <button type="submit" disabled={isSubmitting} className="btn-primary h-phi-ctrl w-full">
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.5} />
+                    Updating password
+                  </>
+                ) : (
+                  'Update password'
+                )}
+              </button>
+            </form>
+          )}
+        </div>
+      </main>
     </div>
   );
 };

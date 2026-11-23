@@ -1,57 +1,172 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    color-scheme: dark;
+    color-scheme: light;
+    --ease-editorial: cubic-bezier(0.22, 1, 0.36, 1);
+    --phi: 1.618034;
+    --phi-1: 0.236rem;
+    --phi-2: 0.382rem;
+    --phi-3: 0.618rem;
+    --phi-4: 1rem;
+    --phi-5: 1.618rem;
+    --phi-6: 2.618rem;
+    --phi-7: 4.236rem;
+    --phi-8: 6.854rem;
+  }
+
+  html {
+    scroll-behavior: smooth;
   }
 
   body {
-    @apply bg-slate-950 text-slate-100 font-sans antialiased;
-    background-image: radial-gradient(circle at 20% 20%, rgba(124, 58, 237, 0.25), transparent 55%),
-      radial-gradient(circle at 80% 0%, rgba(14, 165, 233, 0.2), transparent 45%),
-      radial-gradient(circle at 0% 80%, rgba(236, 72, 153, 0.18), transparent 50%);
-    background-attachment: fixed;
+    @apply bg-paper-100 text-ink-primary font-sans text-phi-base antialiased selection:bg-accent-soft selection:text-accent-ink;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
 
-  h1,
-  h2,
-  h3,
-  h4,
-  h5,
-  h6 {
-    @apply font-display text-white tracking-tight;
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    transition-timing-function: var(--ease-editorial);
   }
 }
 
-/* Custom scrollbar styles for insights panel */
+@layer utilities {
+  .hairline {
+    border-color: rgba(25, 24, 22, 0.09);
+  }
+
+  .hairline-strong {
+    border-color: rgba(25, 24, 22, 0.16);
+  }
+
+  .folio-mark {
+    position: relative;
+  }
+
+  .folio-mark::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0.236rem;
+    bottom: 0.236rem;
+    width: 2px;
+    border-radius: 1px;
+    background-color: #c23b22;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-phi-2 rounded-phi-md bg-ink-primary px-phi-4 py-phi-2 text-phi-sm font-medium text-paper-50 transition-colors duration-phi-fast hover:bg-[#2c2a26] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-paper-100 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-accent {
+    @apply inline-flex items-center justify-center gap-phi-2 rounded-phi-md bg-accent px-phi-4 py-phi-2 text-phi-sm font-medium text-white transition-colors duration-phi-fast hover:bg-accent-hover active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-paper-100 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-phi-2 rounded-phi-md border border-[rgba(25,24,22,0.12)] bg-app-surface px-phi-4 py-phi-2 text-phi-sm font-medium text-ink-primary shadow-subtle transition-colors duration-phi-fast hover:border-[rgba(25,24,22,0.22)] hover:bg-paper-200/60 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-paper-100 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-phi-2 rounded-phi-md px-phi-3 py-phi-2 text-phi-sm font-medium text-ink-secondary transition-colors duration-phi-fast hover:bg-paper-200/80 hover:text-ink-primary active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .keycap {
+    @apply inline-flex items-center justify-center rounded-phi-xs border border-[rgba(25,24,22,0.14)] bg-paper-50 px-phi-2 py-phi-1 font-mono text-phi-2xs leading-none text-ink-secondary shadow-[0_1px_0_rgba(25,24,22,0.08)];
+  }
+}
+
+/* Editorial entrance animation (golden durations & stagger) */
+@keyframes editorial-rise {
+  from {
+    opacity: 0;
+    transform: translateY(0.618rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-rise {
+  animation: editorial-rise 424ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-rise-delay-1 {
+  animation: editorial-rise 424ms cubic-bezier(0.22, 1, 0.36, 1) 62ms both;
+}
+
+.animate-rise-delay-2 {
+  animation: editorial-rise 424ms cubic-bezier(0.22, 1, 0.36, 1) 124ms both;
+}
+
+.animate-rise-delay-3 {
+  animation: editorial-rise 424ms cubic-bezier(0.22, 1, 0.36, 1) 186ms both;
+}
+
+/* Custom scrollbar for reading panels */
 .scrollbar-thin {
   scrollbar-width: thin;
-  scrollbar-color: #475569 #1e293b;
+  scrollbar-color: rgba(25, 24, 22, 0.18) transparent;
 }
 
 .scrollbar-thin::-webkit-scrollbar {
   width: 6px;
+  height: 6px;
 }
 
 .scrollbar-thin::-webkit-scrollbar-track {
-  background: #1e293b;
-  border-radius: 3px;
+  background: transparent;
 }
 
 .scrollbar-thin::-webkit-scrollbar-thumb {
-  background: #475569;
+  background: rgba(25, 24, 22, 0.18);
   border-radius: 3px;
 }
 
 .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-  background: #64748b;
+  background: rgba(25, 24, 22, 0.32);
 }
 
-/* Smooth scrolling for insights */
+/* Clean audio range slider */
+.editorial-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  background: rgba(25, 24, 22, 0.12);
+  border-radius: 4px;
+  height: 4px;
+  cursor: pointer;
+}
+
+.editorial-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 14px;
+  width: 14px;
+  border-radius: 9999px;
+  background: #c23b22;
+  border: 2px solid #ffffff;
+  box-shadow: 0 1px 3px rgba(25, 24, 22, 0.25);
+  transition: transform 162ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.editorial-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+}
+
+.editorial-slider::-moz-range-thumb {
+  height: 14px;
+  width: 14px;
+  border-radius: 9999px;
+  background: #c23b22;
+  border: 2px solid #ffffff;
+  box-shadow: 0 1px 3px rgba(25, 24, 22, 0.25);
+}
+
 .insights-scroll {
   scroll-behavior: smooth;
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { Lightbulb, X } from 'lucide-react';
 
 interface InsightsNotificationProps {
@@ -12,14 +12,10 @@ const InsightsNotification: React.FC<InsightsNotificationProps> = ({
   isVisible,
   onOpenInsights,
   onDismiss,
-  insightCount = 0
+  insightCount = 0,
 }) => {
-  const [isAnimating, setIsAnimating] = useState(false);
-
   useEffect(() => {
     if (isVisible) {
-      setIsAnimating(true);
-      // Auto-dismiss after 8 seconds
       const timer = setTimeout(() => {
         onDismiss();
       }, 8000);
@@ -30,46 +26,37 @@ const InsightsNotification: React.FC<InsightsNotificationProps> = ({
   if (!isVisible) return null;
 
   return (
-    <div className="fixed top-20 right-6 z-40 animate-in slide-in-from-right duration-300">
-      <div className="bg-gradient-to-r from-yellow-400/90 to-orange-500/90 backdrop-blur-lg text-white rounded-xl shadow-2xl border border-yellow-400/30 p-4 max-w-sm">
-        <div className="flex items-start gap-3">
-          <div className="p-2 bg-white/20 rounded-lg">
-            <Lightbulb className="w-5 h-5 animate-pulse" />
-          </div>
-          <div className="flex-1">
-            <h4 className="font-semibold text-sm mb-1">
-              AI Insights Ready! 🧠
-            </h4>
-            <p className="text-xs text-white/90 mb-3">
-              {insightCount > 0 
-                ? `${insightCount} insights generated for this page. Click to explore!`
-                : 'AI has analyzed this page and found interesting insights.'
-              }
-            </p>
-            <div className="flex items-center gap-2">
+    <div className="fixed right-phi-5 top-phi-7 z-40 w-phi-sidebar max-w-[calc(100vw-2rem)]">
+      <div className="folio-mark rounded-phi-md border border-[rgba(25,24,22,0.12)] bg-app-surface py-phi-3 pl-phi-4 pr-phi-3 shadow-float">
+        <div className="flex items-start gap-phi-3">
+          <Lightbulb className="mt-phi-1 h-4 w-4 shrink-0 text-accent" strokeWidth={1.5} />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-phi-2">
+              <h4 className="text-phi-sm font-medium text-ink-primary">Page insights ready</h4>
               <button
-                onClick={onOpenInsights}
-                className="bg-white/20 hover:bg-white/30 text-white text-xs px-3 py-1.5 rounded-lg transition-colors font-medium"
-              >
-                View Insights (+5 pts)
-              </button>
-              <button
+                type="button"
                 onClick={onDismiss}
-                className="text-white/70 hover:text-white transition-colors"
-                title="Dismiss"
+                className="rounded-phi-xs p-phi-1 text-ink-muted transition-colors duration-phi-fast hover:bg-paper-200 hover:text-ink-primary"
+                aria-label="Dismiss notification"
               >
-                <X className="w-4 h-4" />
+                <X className="h-3.5 w-3.5" strokeWidth={1.5} />
+              </button>
+            </div>
+            <p className="mt-phi-1 text-phi-xs leading-phi text-ink-secondary">
+              {insightCount > 0
+                ? `${insightCount} note${insightCount === 1 ? '' : 's'} extracted for the open page.`
+                : 'Notes have been extracted for the open page.'}
+            </p>
+            <div className="mt-phi-3">
+              <button
+                type="button"
+                onClick={onOpenInsights}
+                className="btn-secondary h-phi-ctrl-sm px-phi-3 text-phi-xs"
+              >
+                View insights
               </button>
             </div>
           </div>
-        </div>
-        
-        {/* Progress bar for auto-dismiss */}
-        <div className="mt-3 h-1 bg-white/20 rounded-full overflow-hidden">
-          <div 
-            className="h-full bg-white/40 rounded-full transition-all duration-[8000ms] ease-linear"
-            style={{ width: isAnimating ? '0%' : '100%' }}
-          />
         </div>
       </div>
     </div>

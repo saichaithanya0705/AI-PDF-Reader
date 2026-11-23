@@ -4,7 +4,17 @@ import type { PDFPageProxy } from 'pdfjs-dist/types/src/display/api';
 import { PDFDocument } from '../context/PDFContext';
 import { API_URL } from '../config';
 import { fetchAuthenticatedBlobUrl, fetchAuthenticatedBytes, generateAudio } from '../lib/api';
-import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Loader2, MessageSquare, Copy, Volume2, Check } from 'lucide-react';
+import {
+  ChevronLeft,
+  ChevronRight,
+  ZoomIn,
+  ZoomOut,
+  Loader2,
+  MessageSquare,
+  Copy,
+  Volume2,
+  Check,
+} from 'lucide-react';
 import 'react-pdf/dist/Page/TextLayer.css';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 
@@ -33,7 +43,7 @@ const SimplePDFViewer: React.FC<SimplePDFViewerProps> = ({
   onPageChange,
   onTextSelection,
   onAskLLM,
-  initialPage = 1
+  initialPage = 1,
 }) => {
   const [numPages, setNumPages] = useState<number>(0);
   const [pageNumber, setPageNumber] = useState<number>(initialPage);
@@ -50,9 +60,10 @@ const SimplePDFViewer: React.FC<SimplePDFViewerProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const audioObjectUrlRef = useRef<string | null>(null);
   const pdfUrl = pdfDocument.url?.startsWith('http') ? pdfDocument.url : `${API_URL}${pdfDocument.url}`;
-  const pdfFile = useMemo(() => (
-    authenticatedPdfData ? { data: authenticatedPdfData } : null
-  ), [authenticatedPdfData]);
+  const pdfFile = useMemo(
+    () => (authenticatedPdfData ? { data: authenticatedPdfData } : null),
+    [authenticatedPdfData]
+  );
 
   useEffect(() => {
     return () => {
@@ -105,9 +116,11 @@ const SimplePDFViewer: React.FC<SimplePDFViewerProps> = ({
   const requestVoiceover = useCallback(
     async (text: string) => {
       const data = await generateAudio(text, pdfDocument.id, pageNumber);
-      const audioPath = data && typeof data === 'object'
-        ? (data as { audioUrl?: unknown; audio_url?: unknown }).audioUrl ?? (data as { audio_url?: unknown }).audio_url
-        : undefined;
+      const audioPath =
+        data && typeof data === 'object'
+          ? (data as { audioUrl?: unknown; audio_url?: unknown }).audioUrl ??
+            (data as { audio_url?: unknown }).audio_url
+          : undefined;
 
       if (typeof audioPath === 'string' && audioPath.trim()) {
         currentAudio?.pause();
@@ -126,7 +139,6 @@ const SimplePDFViewer: React.FC<SimplePDFViewerProps> = ({
     [currentAudio, pageNumber, pdfDocument.id]
   );
 
-  // Follow external page requests (e.g. a related-section link to ?page=N).
   useEffect(() => {
     setPageNumber(initialPage);
   }, [initialPage]);
@@ -134,7 +146,6 @@ const SimplePDFViewer: React.FC<SimplePDFViewerProps> = ({
   const onDocumentLoadSuccess = useCallback(({ numPages }: { numPages: number }) => {
     setPdfLoadError(null);
     setNumPages(numPages);
-    // A deep link may point past the end of a shorter PDF.
     setPageNumber((page) => Math.min(Math.max(page, 1), numPages));
   }, []);
 
@@ -143,7 +154,6 @@ const SimplePDFViewer: React.FC<SimplePDFViewerProps> = ({
     setPdfLoadError(error.message || 'Unable to render the protected PDF file.');
   }, []);
 
-  // Handle text selection
   useEffect(() => {
     const handleSelection = () => {
       const selection = window.getSelection();
@@ -169,14 +179,11 @@ const SimplePDFViewer: React.FC<SimplePDFViewerProps> = ({
 
       if (isPdfTextSelection) {
         setSelectedText(text);
-
-        // Get selection position for floating menu
         const rect = range?.getBoundingClientRect();
-
         if (rect) {
           setMenuPosition({
             x: rect.left + rect.width / 2,
-            y: rect.top - 10
+            y: rect.top - 10,
           });
         }
       } else {
@@ -208,15 +215,12 @@ const SimplePDFViewer: React.FC<SimplePDFViewerProps> = ({
   const handleAskLLM = () => {
     if (!selectedText.trim()) return;
 
-    // Call the new onAskLLM callback if provided
     if (onAskLLM) {
       onAskLLM(selectedText, pageNumber);
     }
-    // Also call the legacy callback for backwards compatibility
     if (onTextSelection) {
       onTextSelection(selectedText, pageNumber);
     }
-    // Clear selection after asking
     window.getSelection()?.removeAllRanges();
     setSelectedText('');
     setMenuPosition(null);
@@ -263,66 +267,101 @@ const SimplePDFViewer: React.FC<SimplePDFViewerProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full bg-slate-900 text-white" ref={containerRef}>
-      {/* Top Navigation Bar */}
-      <div className="flex items-center justify-between px-4 py-3 bg-slate-800 border-b border-slate-700">
-        <div className="flex items-center gap-3">
-          <button onClick={goToPrevPage} disabled={pageNumber <= 1} className="p-2 rounded-lg bg-slate-700 hover:bg-slate-600 disabled:opacity-50 transition-colors">
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <span className="text-sm font-medium">{pageNumber} / {numPages}</span>
-          <button onClick={goToNextPage} disabled={pageNumber >= numPages} className="p-2 rounded-lg bg-slate-700 hover:bg-slate-600 disabled:opacity-50 transition-colors">
-            <ChevronRight className="w-4 h-4" />
-          </button>
-        </div>
-        <div className="flex items-center gap-3">
-          <button onClick={() => setScale(s => Math.max(0.5, s - 0.2))} className="p-2 rounded-lg bg-slate-700 hover:bg-slate-600 transition-colors">
-            <ZoomOut className="w-4 h-4" />
-          </button>
-          <span className="text-sm font-medium min-w-[3rem] text-center">{Math.round(scale * 100)}%</span>
-          <button onClick={() => setScale(s => Math.min(3, s + 0.2))} className="p-2 rounded-lg bg-slate-700 hover:bg-slate-600 transition-colors">
-            <ZoomIn className="w-4 h-4" />
-          </button>
-        </div>
-        <div className="flex items-center gap-3">
+    <div className="flex h-full flex-col bg-app-canvas text-ink-primary" ref={containerRef}>
+      {/* Viewer Controls Toolbar */}
+      <div className="flex h-phi-ctrl shrink-0 items-center justify-between border-b border-[rgba(25,24,22,0.08)] bg-paper-50 px-phi-4">
+        <div className="flex items-center gap-phi-2">
           <button
-            onClick={handlePageVoiceover}
-            disabled={pageVoiceGenerating || !currentPageText}
-            className="flex items-center gap-2 rounded-full bg-purple-600 px-2.5 py-2 text-xs font-medium text-white transition hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-60 sm:px-3 sm:text-sm"
-            title={currentPageText ? 'Generate voiceover for this page' : 'Page text is loading'}
+            type="button"
+            onClick={goToPrevPage}
+            disabled={pageNumber <= 1}
+            className="inline-flex h-phi-ctrl-sm w-phi-ctrl-sm items-center justify-center rounded-phi-sm border border-[rgba(25,24,22,0.1)] bg-app-surface text-ink-secondary transition-colors duration-phi-fast hover:bg-paper-200 hover:text-ink-primary disabled:opacity-40"
+            aria-label="Previous page"
           >
-            {pageVoiceGenerating ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Building voiceover
-              </>
-            ) : (
-              <>
-                <Volume2 className="h-4 w-4" />
-                Voiceover
-              </>
-            )}
+            <ChevronLeft className="h-4 w-4" strokeWidth={1.5} />
+          </button>
+          <span className="min-w-[4.5rem] text-center font-mono text-phi-xs tabular-nums text-ink-secondary">
+            {pageNumber} / {numPages || '—'}
+          </span>
+          <button
+            type="button"
+            onClick={goToNextPage}
+            disabled={pageNumber >= numPages}
+            className="inline-flex h-phi-ctrl-sm w-phi-ctrl-sm items-center justify-center rounded-phi-sm border border-[rgba(25,24,22,0.1)] bg-app-surface text-ink-secondary transition-colors duration-phi-fast hover:bg-paper-200 hover:text-ink-primary disabled:opacity-40"
+            aria-label="Next page"
+          >
+            <ChevronRight className="h-4 w-4" strokeWidth={1.5} />
           </button>
         </div>
+
+        <div className="flex items-center gap-phi-2">
+          <button
+            type="button"
+            onClick={() => setScale((s) => Math.max(0.5, s - 0.2))}
+            className="inline-flex h-phi-ctrl-sm w-phi-ctrl-sm items-center justify-center rounded-phi-sm border border-[rgba(25,24,22,0.1)] bg-app-surface text-ink-secondary transition-colors duration-phi-fast hover:bg-paper-200 hover:text-ink-primary"
+            aria-label="Zoom out"
+          >
+            <ZoomOut className="h-3.5 w-3.5" strokeWidth={1.5} />
+          </button>
+          <span className="min-w-[3.25rem] text-center font-mono text-phi-xs tabular-nums text-ink-secondary">
+            {Math.round(scale * 100)}%
+          </span>
+          <button
+            type="button"
+            onClick={() => setScale((s) => Math.min(3, s + 0.2))}
+            className="inline-flex h-phi-ctrl-sm w-phi-ctrl-sm items-center justify-center rounded-phi-sm border border-[rgba(25,24,22,0.1)] bg-app-surface text-ink-secondary transition-colors duration-phi-fast hover:bg-paper-200 hover:text-ink-primary"
+            aria-label="Zoom in"
+          >
+            <ZoomIn className="h-3.5 w-3.5" strokeWidth={1.5} />
+          </button>
+        </div>
+
+        <button
+          type="button"
+          onClick={handlePageVoiceover}
+          disabled={pageVoiceGenerating || !currentPageText}
+          className="inline-flex h-phi-ctrl-sm items-center gap-phi-2 rounded-phi-sm border border-[rgba(25,24,22,0.12)] bg-app-surface px-phi-3 text-phi-xs font-medium text-ink-primary transition-colors duration-phi-fast hover:bg-paper-200 disabled:cursor-not-allowed disabled:opacity-50"
+          title={currentPageText ? 'Read this page aloud' : 'Waiting for page text'}
+        >
+          {pageVoiceGenerating ? (
+            <>
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-accent" strokeWidth={1.5} />
+              <span>Building audio</span>
+            </>
+          ) : (
+            <>
+              <Volume2 className="h-3.5 w-3.5 text-ink-muted" strokeWidth={1.5} />
+              <span>Voiceover</span>
+            </>
+          )}
+        </button>
       </div>
 
-      {/* PDF Content Area */}
-      <div className="flex-1 overflow-auto bg-slate-950 flex justify-center p-4 relative">
+      {/* PDF Reading Desk */}
+      <div className="relative flex flex-1 justify-center overflow-auto p-phi-5 scrollbar-thin">
         {pdfLoadError ? (
-          <div className="flex max-w-md flex-col items-center justify-center gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-6 text-center text-red-100">
-            <p className="font-medium">Could not load this PDF</p>
-            <p className="text-sm text-red-200/80">{pdfLoadError}</p>
+          <div className="my-auto flex max-w-phi-modal-sm flex-col items-center justify-center gap-phi-2 rounded-phi-lg border border-semantic-negative/25 bg-semantic-negativeBg p-phi-5 text-center">
+            <p className="text-phi-sm font-medium text-semantic-negative">Could not load this PDF</p>
+            <p className="text-phi-xs text-ink-secondary">{pdfLoadError}</p>
           </div>
         ) : !pdfFile ? (
-          <Loader2 className="w-8 h-8 animate-spin text-cyan-400" />
+          <div className="my-auto flex items-center gap-phi-2 text-phi-sm text-ink-secondary">
+            <Loader2 className="h-4 w-4 animate-spin text-ink-muted" strokeWidth={1.5} />
+            <span>Loading sheet</span>
+          </div>
         ) : (
           <Document
             file={pdfFile}
             onLoadSuccess={onDocumentLoadSuccess}
             onLoadError={onDocumentLoadError}
-            loading={<Loader2 className="w-8 h-8 animate-spin text-cyan-400" />}
+            loading={
+              <div className="flex items-center gap-phi-2 py-phi-6 text-phi-sm text-ink-secondary">
+                <Loader2 className="h-4 w-4 animate-spin text-ink-muted" strokeWidth={1.5} />
+                <span>Rendering page</span>
+              </div>
+            }
             error={
-              <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-100">
+              <div className="rounded-phi-md border border-semantic-negative/25 bg-semantic-negativeBg p-phi-4 text-phi-sm text-semantic-negative">
                 Unable to load the protected PDF file.
               </div>
             }
@@ -333,15 +372,15 @@ const SimplePDFViewer: React.FC<SimplePDFViewerProps> = ({
               renderTextLayer={true}
               renderAnnotationLayer={true}
               onLoadSuccess={handlePageLoadSuccess}
-              className="shadow-2xl"
+              className="rounded-phi-xs bg-white shadow-sheet ring-1 ring-[rgba(25,24,22,0.08)]"
             />
           </Document>
         )}
 
-        {/* Floating Selection Menu */}
+        {/* Floating Selection Action Bar */}
         {selectedText && menuPosition && (
           <div
-            className="fixed z-50 bg-slate-800 rounded-lg shadow-2xl border border-slate-700 p-2 flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-200"
+            className="fixed z-50 flex items-center gap-phi-1 rounded-phi-md border border-[rgba(25,24,22,0.16)] bg-ink-primary p-phi-1 text-paper-50 shadow-float"
             onMouseDown={(event) => event.preventDefault()}
             style={{
               left: `${menuPosition.x}px`,
@@ -349,50 +388,50 @@ const SimplePDFViewer: React.FC<SimplePDFViewerProps> = ({
               transform: 'translate(-50%, -100%)',
             }}
           >
-            {/* Ask LLM Button */}
             <button
+              type="button"
               onClick={handleAskLLM}
-              className="flex items-center gap-2 px-3 py-2 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors"
-              title="Ask AI about this text"
+              className="flex items-center gap-phi-2 rounded-phi-sm bg-accent px-phi-3 py-phi-1 text-phi-xs font-medium text-white transition-colors duration-phi-fast hover:bg-accent-hover"
+              title="Ask about this excerpt"
             >
-              <MessageSquare className="w-4 h-4" />
-              Ask AI
+              <MessageSquare className="h-3.5 w-3.5" strokeWidth={1.5} />
+              Ask
             </button>
 
-            {/* Copy Button */}
             <button
+              type="button"
               onClick={handleCopy}
-              className="flex items-center gap-2 px-3 py-2 rounded-md bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium transition-colors"
+              className="flex items-center gap-phi-2 rounded-phi-sm px-phi-3 py-phi-1 text-phi-xs font-medium text-paper-100 transition-colors duration-phi-fast hover:bg-white/10"
               title="Copy to clipboard"
             >
               {copied ? (
                 <>
-                  <Check className="w-4 h-4 text-green-400" />
-                  Copied!
+                  <Check className="h-3.5 w-3.5 text-[#4cc38a]" strokeWidth={1.5} />
+                  Copied
                 </>
               ) : (
                 <>
-                  <Copy className="w-4 h-4" />
+                  <Copy className="h-3.5 w-3.5" strokeWidth={1.5} />
                   Copy
                 </>
               )}
             </button>
 
-            {/* Generate Voice Button */}
             <button
+              type="button"
               onClick={handleGenerateVoice}
               disabled={generating}
-              className="flex items-center gap-2 px-3 py-2 rounded-md bg-purple-600 hover:bg-purple-700 disabled:bg-purple-800 disabled:opacity-50 text-white text-sm font-medium transition-colors"
-              title="Generate audio for this text"
+              className="flex items-center gap-phi-2 rounded-phi-sm px-phi-3 py-phi-1 text-phi-xs font-medium text-paper-100 transition-colors duration-phi-fast hover:bg-white/10 disabled:opacity-50"
+              title="Read excerpt aloud"
             >
               {generating ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Generating...
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.5} />
+                  Generating
                 </>
               ) : (
                 <>
-                  <Volume2 className="w-4 h-4" />
+                  <Volume2 className="h-3.5 w-3.5" strokeWidth={1.5} />
                   Voice
                 </>
               )}

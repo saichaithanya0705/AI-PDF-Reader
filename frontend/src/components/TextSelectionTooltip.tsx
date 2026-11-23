@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Copy, MessageCircle, X, Check, Brain, ExternalLink, Lightbulb, Loader2, Sparkles } from 'lucide-react';
+import { Copy, MessageCircle, X, Check, ExternalLink, Lightbulb, Loader2, Search } from 'lucide-react';
 import { usePDF } from '../context/usePDF';
 import { analyzeTextSelection, askGeminiSelection } from '../lib/api';
 
@@ -40,7 +40,7 @@ const TextSelectionTooltip: React.FC<TextSelectionTooltipProps> = ({
   isOnline,
   documentId,
   currentPage = 1,
-  onClose
+  onClose,
 }) => {
   const { askGPT } = usePDF();
   const [showGPTResponse, setShowGPTResponse] = useState(false);
@@ -64,14 +64,13 @@ const TextSelectionTooltip: React.FC<TextSelectionTooltipProps> = ({
 
   const handleAskGPT = async () => {
     if (!isOnline) return;
-
     setIsLoading(true);
     try {
       const response = await askGPT(text, 'Current document context');
       setGPTResponse(response);
       setShowGPTResponse(true);
     } catch (error) {
-      console.error('Failed to get GPT response:', error);
+      console.error('Failed to get explanation:', error);
     } finally {
       setIsLoading(false);
     }
@@ -79,12 +78,10 @@ const TextSelectionTooltip: React.FC<TextSelectionTooltipProps> = ({
 
   const handleAnalyzeSelection = async () => {
     if (!isOnline || !documentId) return;
-
     setIsLoading(true);
     try {
       const persona = localStorage.getItem('lastPersona') || 'Student';
       const job = localStorage.getItem('lastJob') || 'Learning and Research';
-
       const data = await analyzeTextSelection(text, documentId, currentPage, persona, job, true);
       setAnalysisData(data as SelectionAnalysis);
       setShowAnalysis(true);
@@ -97,19 +94,15 @@ const TextSelectionTooltip: React.FC<TextSelectionTooltipProps> = ({
 
   const handleAskGemini = async () => {
     if (!documentId) return;
-
     setIsGeminiLoading(true);
     setShowGeminiResponse(true);
-
     try {
       const data = await askGeminiSelection(documentId, text, currentPage, 500);
-      const explanation = data && typeof data === 'object'
-        ? (data as { explanation?: unknown }).explanation
-        : undefined;
-      setGeminiResponse(typeof explanation === 'string' ? explanation : 'No explanation available');
-    } catch (error) {
-      console.error('Failed to ask Gemini:', error);
-      setGeminiResponse('Sorry, I could not analyze this text at the moment. Please try again.');
+      const explanation =
+        data && typeof data === 'object' ? (data as { explanation?: unknown }).explanation : undefined;
+      setGeminiResponse(typeof explanation === 'string' ? explanation : 'No explanation available.');
+    } catch {
+      setGeminiResponse('Could not analyze this excerpt right now. Try again.');
     } finally {
       setIsGeminiLoading(false);
     }
@@ -117,237 +110,184 @@ const TextSelectionTooltip: React.FC<TextSelectionTooltipProps> = ({
 
   return (
     <div
-      className="fixed z-50 pointer-events-auto"
+      className="pointer-events-auto fixed z-50"
       style={{
-        left: Math.max(10, Math.min(position.x - 120, window.innerWidth - 250)),
-        top: Math.max(10, position.y - 10),
+        left: Math.max(12, Math.min(position.x - 120, window.innerWidth - 260)),
+        top: Math.max(12, position.y - 10),
       }}
     >
-      <div className="relative">
-        {!showGPTResponse && !showAnalysis && !showGeminiResponse ? (
-          // Selection Actions
-          <div className="bg-slate-900/95 backdrop-blur border border-slate-600 rounded-lg shadow-xl overflow-hidden">
-            <div className="flex items-center">
-              <button
-                onClick={handleCopy}
-                className="flex items-center gap-2 px-4 py-3 hover:bg-slate-800 transition-colors text-white"
-                disabled={copied}
-              >
-                {copied ? (
-                  <>
-                    <Check className="w-4 h-4 text-green-400" />
-                    <span className="text-sm text-green-400">Copied!</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-4 h-4 text-slate-400" />
-                    <span className="text-sm">Copy Text</span>
-                  </>
-                )}
-              </button>
-              
-              {isOnline && (
-                <button
-                  onClick={handleAskGPT}
-                  disabled={isLoading}
-                  className="flex items-center gap-2 px-4 py-3 hover:bg-slate-800 transition-colors text-white border-l border-slate-600"
-                >
-                  {isLoading ? (
-                    <div className="animate-spin w-4 h-4 border-2 border-cyan-400 border-t-transparent rounded-full" />
-                  ) : (
-                    <MessageCircle className="w-4 h-4 text-cyan-400" />
-                  )}
-                  <span className="text-sm">Ask GPT</span>
-                </button>
+      {!showGPTResponse && !showAnalysis && !showGeminiResponse ? (
+        <div className="flex items-center gap-phi-1 overflow-hidden rounded-phi-md border border-[rgba(25,24,22,0.14)] bg-ink-primary p-phi-1 text-paper-50 shadow-float">
+          <button
+            type="button"
+            onClick={handleCopy}
+            disabled={copied}
+            className="flex items-center gap-phi-2 rounded-phi-sm px-phi-3 py-phi-1 text-phi-xs font-medium transition-colors duration-phi-fast hover:bg-white/10"
+          >
+            {copied ? (
+              <>
+                <Check className="h-3.5 w-3.5 text-[#4cc38a]" strokeWidth={1.5} />
+                Copied
+              </>
+            ) : (
+              <>
+                <Copy className="h-3.5 w-3.5" strokeWidth={1.5} />
+                Copy
+              </>
+            )}
+          </button>
+
+          {isOnline && (
+            <button
+              type="button"
+              onClick={handleAskGPT}
+              disabled={isLoading}
+              className="flex items-center gap-phi-2 rounded-phi-sm px-phi-3 py-phi-1 text-phi-xs font-medium transition-colors duration-phi-fast hover:bg-white/10"
+            >
+              {isLoading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.5} />
+              ) : (
+                <MessageCircle className="h-3.5 w-3.5" strokeWidth={1.5} />
               )}
+              Explain
+            </button>
+          )}
 
-              {isOnline && documentId && (
-                <button
-                  onClick={handleAskGemini}
-                  disabled={isGeminiLoading}
-                  className="flex items-center gap-2 px-4 py-3 hover:bg-slate-800 transition-colors text-white border-l border-slate-600"
-                >
-                  {isGeminiLoading ? (
-                    <Loader2 className="w-4 h-4 text-purple-400 animate-spin" />
-                  ) : (
-                    <Sparkles className="w-4 h-4 text-purple-400" />
-                  )}
-                  <span className="text-sm">Ask Gemini</span>
-                </button>
-              )}
-
-              {isOnline && documentId && (
-                <button
-                  onClick={handleAnalyzeSelection}
-                  disabled={isLoading}
-                  className="flex items-center gap-2 px-4 py-3 hover:bg-slate-800 transition-colors text-white border-l border-slate-600"
-                >
-                  {isLoading ? (
-                    <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
-                  ) : (
-                    <Brain className="w-4 h-4 text-purple-400" />
-                  )}
-                  <span className="text-sm">Find Related</span>
-                </button>
-              )}
-              
-              <button
-                onClick={onClose}
-                className="p-3 hover:bg-slate-800 transition-colors text-slate-400 hover:text-white border-l border-slate-600"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        ) : showGPTResponse ? (
-          // GPT Response
-          <div className="bg-slate-900/95 backdrop-blur border border-slate-600 rounded-lg shadow-xl p-4 max-w-sm">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <MessageCircle className="w-4 h-4 text-cyan-400" />
-                <span className="text-sm font-medium text-white">GPT Explanation</span>
-              </div>
-              <button
-                onClick={onClose}
-                className="text-slate-400 hover:text-white transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="text-sm text-slate-300 leading-relaxed mb-3">
-              {gptResponse}
-            </div>
-
-            <div className="flex justify-between items-center pt-3 border-t border-slate-700">
-              <span className="text-xs text-slate-400">Powered by AI</span>
-              <button
-                onClick={() => setShowGPTResponse(false)}
-                className="text-xs text-cyan-400 hover:text-cyan-300 transition-colors"
-              >
-                Back
-              </button>
-            </div>
-          </div>
-        ) : showGeminiResponse ? (
-          // Gemini Response
-          <div className="bg-slate-900/95 backdrop-blur border border-slate-600 rounded-lg shadow-xl p-4 max-w-sm">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-purple-400" />
-                <span className="text-sm font-medium text-white">Gemini Explanation</span>
-              </div>
-              <button
-                onClick={onClose}
-                className="text-slate-400 hover:text-white transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="text-sm text-slate-300 leading-relaxed mb-3">
+          {isOnline && documentId && (
+            <button
+              type="button"
+              onClick={handleAskGemini}
+              disabled={isGeminiLoading}
+              className="flex items-center gap-phi-2 rounded-phi-sm px-phi-3 py-phi-1 text-phi-xs font-medium transition-colors duration-phi-fast hover:bg-white/10"
+            >
               {isGeminiLoading ? (
-                <div className="flex items-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
-                  <span>Gemini is analyzing...</span>
+                <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.5} />
+              ) : (
+                <Lightbulb className="h-3.5 w-3.5" strokeWidth={1.5} />
+              )}
+              Summarize
+            </button>
+          )}
+
+          {isOnline && documentId && (
+            <button
+              type="button"
+              onClick={handleAnalyzeSelection}
+              disabled={isLoading}
+              className="flex items-center gap-phi-2 rounded-phi-sm px-phi-3 py-phi-1 text-phi-xs font-medium transition-colors duration-phi-fast hover:bg-white/10"
+            >
+              {isLoading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.5} />
+              ) : (
+                <Search className="h-3.5 w-3.5" strokeWidth={1.5} />
+              )}
+              Find related
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-phi-sm p-phi-1 text-paper-300 transition-colors duration-phi-fast hover:bg-white/10 hover:text-white"
+            aria-label="Close selection toolbar"
+          >
+            <X className="h-3.5 w-3.5" strokeWidth={1.5} />
+          </button>
+        </div>
+      ) : (
+        <div className="w-phi-chat max-w-phi-modal-sm rounded-phi-md border border-[rgba(25,24,22,0.14)] bg-app-surface p-phi-4 text-ink-primary shadow-float">
+          <div className="flex items-center justify-between border-b border-[rgba(25,24,22,0.08)] pb-phi-2">
+            <span className="text-phi-xs font-medium text-ink-primary">
+              {showGPTResponse
+                ? 'Passage explanation'
+                : showGeminiResponse
+                  ? 'Contextual summary'
+                  : 'Cross-document matches'}
+            </span>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-phi-xs p-phi-1 text-ink-muted hover:bg-paper-200 hover:text-ink-primary"
+              aria-label="Close"
+            >
+              <X className="h-3.5 w-3.5" strokeWidth={1.5} />
+            </button>
+          </div>
+
+          <div className="mt-phi-3 max-h-64 space-y-phi-3 overflow-y-auto text-phi-xs leading-phi text-ink-secondary scrollbar-thin">
+            {showGPTResponse && <p>{gptResponse}</p>}
+
+            {showGeminiResponse &&
+              (isGeminiLoading ? (
+                <div className="flex items-center gap-phi-2 text-ink-muted">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.5} />
+                  Analyzing excerpt
                 </div>
               ) : (
-                geminiResponse
-              )}
-            </div>
+                <p>{geminiResponse}</p>
+              ))}
 
-            <div className="flex justify-between items-center pt-3 border-t border-slate-700">
-              <span className="text-xs text-slate-400">Powered by Gemini AI</span>
-              <button
-                onClick={() => setShowGeminiResponse(false)}
-                className="text-xs text-purple-400 hover:text-purple-300 transition-colors"
-              >
-                Back
-              </button>
-            </div>
-          </div>
-        ) : showAnalysis && analysisData ? (
-          // Analysis Results
-          <div className="bg-slate-900/95 backdrop-blur border border-slate-600 rounded-lg shadow-xl p-4 max-w-md">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <Brain className="w-4 h-4 text-purple-400" />
-                <span className="text-sm font-medium text-white">Cross-Document Analysis</span>
-              </div>
-              <button
-                onClick={onClose}
-                className="text-slate-400 hover:text-white transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+            {showAnalysis && analysisData && (
+              <>
+                {analysisData.text_insights?.explanation && (
+                  <p className="text-ink-primary">{analysisData.text_insights.explanation}</p>
+                )}
 
-            <div className="space-y-3 max-h-64 overflow-y-auto">
-              {/* Text Insights */}
-              {analysisData.text_insights && (
-                <div className="bg-slate-800/50 rounded-lg p-3">
-                  <h4 className="text-xs font-medium text-purple-400 mb-2">Analysis</h4>
-                  <p className="text-xs text-slate-300">{analysisData.text_insights.explanation}</p>
-                </div>
-              )}
+                {analysisData.cross_document_sections &&
+                  analysisData.cross_document_sections.length > 0 && (
+                    <div className="space-y-phi-2 border-t border-[rgba(25,24,22,0.08)] pt-phi-2">
+                      <p className="flex items-center gap-phi-2 font-medium text-ink-primary">
+                        <ExternalLink className="h-3.5 w-3.5 text-ink-muted" strokeWidth={1.5} />
+                        Related files ({analysisData.cross_document_sections.length})
+                      </p>
+                      {analysisData.cross_document_sections.slice(0, 3).map((section, index) => (
+                        <div key={index} className="folio-mark pl-phi-3">
+                          <div className="flex items-center justify-between gap-phi-2">
+                            <span className="truncate font-medium text-ink-primary">
+                              {section.document_name}
+                            </span>
+                            <span className="font-mono text-phi-2xs tabular-nums text-accent-ink">
+                              {((section.relevance_score ?? 0) * 100).toFixed(0)}%
+                            </span>
+                          </div>
+                          <p className="mt-phi-1 line-clamp-2 text-ink-secondary">{section.snippet}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
-              {/* Cross-Document Sections */}
-              {analysisData.cross_document_sections && analysisData.cross_document_sections.length > 0 && (
-                <div className="bg-slate-800/50 rounded-lg p-3">
-                  <h4 className="text-xs font-medium text-green-400 mb-2 flex items-center gap-1">
-                    <ExternalLink className="w-3 h-3" />
-                    Related Documents ({analysisData.cross_document_sections.length})
-                  </h4>
-                  <div className="space-y-2">
-                    {analysisData.cross_document_sections.slice(0, 3).map((section, index) => (
-                      <div key={index} className="text-xs">
-                        <div className="text-slate-400 font-medium">{section.document_name}</div>
-                        <div className="text-slate-300">{section.snippet}</div>
-                        <div className="text-green-400 text-xs">Relevance: {(((section.relevance_score ?? 0) * 100).toFixed(0))}%</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Insights Bulb */}
-              {analysisData.insights_bulb && analysisData.insights_bulb.length > 0 && (
-                <div className="bg-slate-800/50 rounded-lg p-3">
-                  <h4 className="text-xs font-medium text-amber-400 mb-2 flex items-center gap-1">
-                    <Lightbulb className="w-3 h-3" />
-                    AI Insights
-                  </h4>
-                  <div className="space-y-2">
+                {analysisData.insights_bulb && analysisData.insights_bulb.length > 0 && (
+                  <div className="space-y-phi-2 border-t border-[rgba(25,24,22,0.08)] pt-phi-2">
                     {analysisData.insights_bulb.slice(0, 2).map((insight, index) => (
-                      <div key={index} className="text-xs">
-                        <div className="text-amber-300 font-medium">{insight.title || 'Insight'}</div>
-                        <div className="text-slate-300">{insight.content || ''}</div>
+                      <div key={index}>
+                        <p className="font-medium text-ink-primary">{insight.title || 'Note'}</p>
+                        <p className="mt-phi-1 text-ink-secondary">{insight.content || ''}</p>
                       </div>
                     ))}
                   </div>
-                </div>
-              )}
-            </div>
-
-            <div className="flex justify-between items-center pt-3 border-t border-slate-700">
-              <span className="text-xs text-slate-400">
-                Found {analysisData.metadata?.total_cross_document || 0} related sections
-              </span>
-              <button
-                onClick={() => setShowAnalysis(false)}
-                className="text-xs text-purple-400 hover:text-purple-300 transition-colors"
-              >
-                Back
-              </button>
-            </div>
+                )}
+              </>
+            )}
           </div>
-        ) : null}
-        
-        {/* Arrow pointing to selection */}
-        <div className="absolute top-full left-1/2 transform -translate-x-1/2">
-          <div className="w-3 h-3 bg-slate-900 border-b border-r border-slate-600 transform rotate-45"></div>
+
+          <div className="mt-phi-3 flex items-center justify-between border-t border-[rgba(25,24,22,0.08)] pt-phi-2 text-phi-xs">
+            <span className="font-mono text-phi-2xs tabular-nums text-ink-muted">
+              Page {currentPage}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setShowGPTResponse(false);
+                setShowGeminiResponse(false);
+                setShowAnalysis(false);
+              }}
+              className="font-medium text-accent-ink hover:underline"
+            >
+              Back
+            </button>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

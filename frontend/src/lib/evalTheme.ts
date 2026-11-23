@@ -1,10 +1,10 @@
-// Categorical slots 1-3 (dark steps), validated on the slate-900 surface with the
-// dataviz palette checker: worst adjacent CVD ΔE 9.4, normal-vision ΔE 26.5,
-// all >= 3:1 contrast. Colour follows the variant, never its rank.
+// Editorial light-surface categorical palette:
+// One accent (vermilion) leads for the primary production hybrid variant;
+// neutral slate and deep pine distinguish baseline and reranked variants.
 export const VARIANT_COLORS: Record<string, string> = {
-  dense: '#3987e5',
-  hybrid: '#d95926',
-  hybrid_rerank: '#199e70',
+  dense: '#78746c',
+  hybrid: '#c23b22',
+  hybrid_rerank: '#1d6f5f',
 };
 
 export const VARIANT_LABELS: Record<string, string> = {

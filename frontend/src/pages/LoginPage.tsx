@@ -1,10 +1,11 @@
 import { FormEvent, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, Loader2, Mail, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, Loader2, Mail } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
 import { toAuthErrorMessage } from '../lib/authErrors';
 import { FORGOT_PASSWORD_PATH } from '../lib/authRoutes';
 import PasswordInput from '../components/PasswordInput';
+import BrandMark from '../components/BrandMark';
 
 type LoginLocationState = {
   from?: {
@@ -22,7 +23,6 @@ const LoginPage = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  // Get the page user was trying to access before being redirected to login
   const locationState = location.state as LoginLocationState | null;
   const from = locationState?.from?.pathname || '/library';
   const successMessage = locationState?.message;
@@ -40,7 +40,6 @@ const LoginPage = () => {
     try {
       setIsSubmitting(true);
       await signIn({ email, password });
-      // Redirect to the page they were trying to access, or library by default
       navigate(from, { replace: true });
     } catch (err) {
       setFormError(toAuthErrorMessage(err));
@@ -50,53 +49,66 @@ const LoginPage = () => {
   };
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center px-6 py-16">
-      <div className="absolute inset-0 -z-10 opacity-60">
-        <div className="mx-auto h-full w-full max-w-4xl rounded-full bg-gradient-to-r from-brand-500/20 via-cyan-500/20 to-fuchsia-500/20 blur-3xl" />
-      </div>
+    <div className="flex min-h-screen flex-col bg-paper-100">
+      <header className="mx-auto flex h-phi-header w-full max-w-phi-container items-center justify-between px-phi-5 lg:px-phi-6">
+        <Link
+          to="/"
+          className="rounded-phi-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        >
+          <BrandMark />
+        </Link>
+        <Link
+          to="/"
+          className="inline-flex items-center gap-phi-2 text-phi-sm text-ink-secondary transition-colors duration-phi-fast hover:text-ink-primary"
+        >
+          <ArrowLeft className="h-4 w-4" strokeWidth={1.5} />
+          Overview
+        </Link>
+      </header>
 
-      <div className="w-full max-w-4xl rounded-3xl border border-white/10 bg-slate-950/80 p-8 shadow-glow backdrop-blur">
-        <div className="flex flex-col gap-6 md:flex-row md:items-stretch md:gap-12">
-          <div className="flex flex-1 flex-col justify-between gap-6 rounded-2xl border border-white/5 bg-white/5 p-6">
-            <button
-              type="button"
-              onClick={() => navigate('/')}
-              className="flex items-center gap-2 text-sm text-slate-300 transition hover:text-white"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Back
-            </button>
-            <div className="flex flex-col gap-4">
-              <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs uppercase tracking-[0.3em] text-slate-300">
-                <ShieldCheck className="h-3.5 w-3.5" />
-                Secure Workspace Access
-              </span>
-              <h1 className="text-3xl sm:text-4xl">Welcome back to the Document Intelligence Studio.</h1>
-              <p className="text-sm leading-relaxed text-slate-300">
-                Pick up where you left off. Your personalised libraries, AI highlights, and collaborative insights are waiting for you.
+      <main className="mx-auto flex w-full max-w-phi-container flex-1 items-center justify-center px-phi-5 py-phi-6 lg:px-phi-6">
+        <div className="grid w-full max-w-[56.86rem] overflow-hidden rounded-phi-lg border border-[rgba(25,24,22,0.1)] bg-paper-50 shadow-card md:grid-cols-phi-rev">
+          <aside className="flex flex-col justify-between border-b border-[rgba(25,24,22,0.08)] bg-paper-200/55 p-phi-5 sm:p-phi-6 md:border-b-0 md:border-r">
+            <div className="space-y-phi-4">
+              <p className="font-mono text-phi-2xs text-ink-muted">Workspace access</p>
+              <h1 className="font-serif text-phi-xl font-normal leading-phi-tight tracking-[-0.02em] text-ink-primary">
+                Sign in to your reading library
+              </h1>
+              <p className="text-phi-sm leading-phi text-ink-secondary">
+                Open your indexed PDFs, cross-document passage links, and page chat history from where you left off.
               </p>
             </div>
-            <div className="space-y-3 text-xs text-slate-400">
-              <p>• RAG-powered conversations grounded in your private data</p>
-              <p>• Enterprise-grade encryption with automatic session rotation</p>
-              <p>• Seamless handoff to Reader with preloaded personas and jobs</p>
-            </div>
-          </div>
 
-          <form className="flex flex-1 flex-col gap-6" onSubmit={handleSubmit}>
+            <div className="mt-phi-6 space-y-phi-3 border-t border-[rgba(25,24,22,0.08)] pt-phi-5 text-phi-sm text-ink-secondary">
+              <div className="folio-mark pl-phi-4">
+                <p className="font-medium text-ink-primary">Page-grounded retrieval</p>
+                <p className="mt-phi-1 text-phi-xs text-ink-muted">
+                  Every answer links back to the exact PDF and page
+                </p>
+              </div>
+              <div className="pl-phi-4">
+                <p className="font-medium text-ink-primary">Role-aware context</p>
+                <p className="mt-phi-1 text-phi-xs text-ink-muted">
+                  Saved reading persona and research goal stay synced
+                </p>
+              </div>
+            </div>
+          </aside>
+
+          <form className="flex flex-col justify-center gap-phi-5 p-phi-5 sm:p-phi-6" onSubmit={handleSubmit}>
             <div>
-              <label className="text-sm font-medium text-white" htmlFor="email">
+              <label className="text-phi-sm font-medium text-ink-primary" htmlFor="email">
                 Email address
               </label>
-              <div className="mt-2 flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-slate-200 focus-within:border-brand-400 focus-within:bg-slate-900">
-                <Mail className="h-4 w-4 text-slate-400" />
+              <div className="mt-phi-2 flex h-phi-ctrl items-center gap-phi-3 rounded-phi-md border border-[rgba(25,24,22,0.14)] bg-app-surface px-phi-3 text-ink-primary transition-colors duration-phi-fast focus-within:border-ink-primary focus-within:ring-2 focus-within:ring-accent/15">
+                <Mail className="h-4 w-4 shrink-0 text-ink-muted" strokeWidth={1.5} />
                 <input
                   id="email"
                   type="email"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
-                  className="w-full bg-transparent text-sm text-white placeholder:text-slate-500 focus:outline-none"
-                  placeholder="you@company.com"
+                  className="w-full bg-transparent text-phi-sm text-ink-primary placeholder:text-ink-faint focus:outline-none"
+                  placeholder="name@company.com"
                   autoComplete="email"
                   required
                 />
@@ -105,47 +117,46 @@ const LoginPage = () => {
 
             <div>
               <div className="flex items-center justify-between">
-                <label className="text-sm font-medium text-white" htmlFor="password">
+                <label className="text-phi-sm font-medium text-ink-primary" htmlFor="password">
                   Password
                 </label>
                 <Link
                   to={FORGOT_PASSWORD_PATH}
                   state={{ email }}
-                  className="text-xs text-cyan-300 transition hover:text-cyan-200"
+                  className="text-phi-xs text-ink-secondary transition-colors duration-phi-fast hover:text-accent-ink"
                 >
-                  Forgot password?
+                  Forgot password
                 </Link>
               </div>
               <PasswordInput
                 id="password"
                 value={password}
                 onValueChange={setPassword}
-                placeholder="••••••••"
+                placeholder="Enter password"
                 autoComplete="current-password"
                 required
               />
             </div>
 
             {successMessage && (
-              <div className="rounded-2xl border border-cyan-400/40 bg-cyan-500/10 px-4 py-3 text-sm text-cyan-300">
+              <div className="rounded-phi-md border border-semantic-positive/25 bg-semantic-positiveBg px-phi-4 py-phi-3 text-phi-sm text-semantic-positive">
                 {successMessage}
               </div>
             )}
 
             {(formError || error) && (
-              <div className="rounded-2xl border border-aurora/40 bg-aurora/10 px-4 py-3 text-sm text-aurora">
+              <div
+                role="alert"
+                className="rounded-phi-md border border-semantic-negative/25 bg-semantic-negativeBg px-phi-4 py-phi-3 text-phi-sm text-semantic-negative"
+              >
                 {formError || error?.message}
               </div>
             )}
 
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="flex items-center justify-center gap-2 rounded-full bg-brand-500 px-6 py-3 text-sm font-semibold text-white shadow-glow transition hover:bg-brand-400 disabled:cursor-not-allowed disabled:opacity-60"
-            >
+            <button type="submit" disabled={isSubmitting} className="btn-primary h-phi-ctrl w-full">
               {isSubmitting ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.5} />
                   Signing in
                 </>
               ) : (
@@ -153,15 +164,18 @@ const LoginPage = () => {
               )}
             </button>
 
-            <p className="text-sm text-slate-300">
-              New to the studio?{' '}
-              <Link to="/signup" className="font-medium text-cyan-300 transition hover:text-cyan-200">
+            <p className="text-phi-sm text-ink-secondary">
+              No account yet?{' '}
+              <Link
+                to="/signup"
+                className="font-medium text-accent-ink transition-colors duration-phi-fast hover:underline"
+              >
                 Create an account
               </Link>
             </p>
           </form>
         </div>
-      </div>
+      </main>
     </div>
   );
 };

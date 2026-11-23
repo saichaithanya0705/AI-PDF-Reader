@@ -1,4 +1,5 @@
 import { Component, ErrorInfo, ReactNode } from 'react';
+import { AlertTriangle } from 'lucide-react';
 
 interface Props {
   children: ReactNode;
@@ -12,11 +13,10 @@ interface State {
 
 class ErrorBoundary extends Component<Props, State> {
   public state: State = {
-    hasError: false
+    hasError: false,
   };
 
   public static getDerivedStateFromError(error: Error): State {
-    // Update state so the next render will show the fallback UI
     return { hasError: true, error };
   }
 
@@ -24,56 +24,52 @@ class ErrorBoundary extends Component<Props, State> {
     console.error('ErrorBoundary caught an error:', error, errorInfo);
     this.setState({
       error,
-      errorInfo
+      errorInfo,
     });
   }
 
   public render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6">
-          <div className="max-w-md w-full bg-slate-900 rounded-lg border border-slate-700 p-8 text-center">
-            <div className="w-16 h-16 bg-red-500/20 rounded-lg mx-auto mb-4 flex items-center justify-center">
-              <svg className="w-8 h-8 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16c-.77.833.192 2.5 1.732 2.5z" />
-              </svg>
+        <div className="flex min-h-screen items-center justify-center bg-paper-100 p-phi-5">
+          <div className="w-full max-w-phi-modal-sm rounded-phi-lg border border-[rgba(25,24,22,0.1)] bg-paper-50 p-phi-5 shadow-card">
+            <div className="mb-phi-4 inline-flex h-phi-6 w-phi-6 items-center justify-center rounded-phi-md bg-semantic-negativeBg text-semantic-negative">
+              <AlertTriangle className="h-5 w-5" strokeWidth={1.5} />
             </div>
-            
-            <h1 className="text-xl font-bold text-white mb-2">Something went wrong</h1>
-            <p className="text-slate-400 mb-6">
-              The application encountered an unexpected error. Please try refreshing the page.
+
+            <h1 className="font-serif text-phi-lg font-normal text-ink-primary">
+              Something went wrong
+            </h1>
+            <p className="mt-phi-2 text-phi-sm leading-phi text-ink-secondary">
+              The application encountered an unexpected error. Refresh the page or try again.
             </p>
-            
+
             {this.state.error && (
-              <div className="bg-slate-800 rounded-lg p-4 mb-6 text-left">
-                <h3 className="text-sm font-medium text-red-400 mb-2">Error Details:</h3>
-                <p className="text-xs text-slate-300 font-mono break-all">
+              <div className="mt-phi-5 rounded-phi-md border border-[rgba(25,24,22,0.09)] bg-paper-200/70 p-phi-4 text-left">
+                <p className="text-phi-xs font-medium text-semantic-negative">Error details</p>
+                <p className="mt-phi-1 break-all font-mono text-phi-xs text-ink-secondary">
                   {this.state.error.message}
                 </p>
               </div>
             )}
-            
-            <div className="space-x-3">
+
+            <div className="mt-phi-5 flex items-center gap-phi-3">
               <button
+                type="button"
                 onClick={() => window.location.reload()}
-                className="px-4 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 transition-colors"
+                className="btn-primary h-phi-ctrl flex-1"
               >
-                Refresh Page
+                Refresh page
               </button>
               <button
+                type="button"
                 onClick={() => {
                   this.setState({ hasError: false, error: undefined, errorInfo: undefined });
                 }}
-                className="px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors"
+                className="btn-secondary h-phi-ctrl"
               >
-                Try Again
+                Try again
               </button>
-            </div>
-            
-            <div className="mt-6 pt-6 border-t border-slate-700">
-              <p className="text-xs text-slate-500">
-                If this problem persists, please check the browser console for more details.
-              </p>
             </div>
           </div>
         </div>

@@ -18,7 +18,7 @@ function App() {
       <AuthProvider>
         <PDFProvider>
           <Router>
-            <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950 to-slate-950">
+            <div className="min-h-screen bg-paper-100 text-ink-primary">
               <Routes>
                 {/* Public routes */}
                 <Route path="/" element={<LandingPage />} />
@@ -26,15 +26,15 @@ function App() {
                 <Route path="/signup" element={<SignupPage />} />
                 <Route path="/forgot-password" element={<ForgotPasswordPage />} />
                 <Route path="/reset-password" element={<ResetPasswordPage />} />
-                
+
                 {/* Protected routes - require authentication */}
-                <Route 
-                  path="/library" 
+                <Route
+                  path="/library"
                   element={
                     <ProtectedRoute>
                       <HomePage />
                     </ProtectedRoute>
-                  } 
+                  }
                 />
                 <Route
                   path="/evals"
@@ -44,13 +44,13 @@ function App() {
                     </ProtectedRoute>
                   }
                 />
-                <Route 
-                  path="/reader/:pdfId" 
+                <Route
+                  path="/reader/:pdfId"
                   element={
                     <ProtectedRoute>
                       <ReaderPage />
                     </ProtectedRoute>
-                  } 
+                  }
                 />
               </Routes>
             </div>

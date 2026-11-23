@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { PDFDocument } from '../context/PDFContext';
 import SimplePDFViewer from './SimplePDFViewer';
-import { RefreshCw } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 
 interface SmartPDFViewerProps {
   document: PDFDocument;
@@ -18,38 +18,25 @@ const SmartPDFViewer: React.FC<SmartPDFViewerProps> = ({
   onPageChange,
   onTextSelection,
   onAskLLM,
-  initialPage
+  initialPage,
 }) => {
   const [viewerMode, setViewerMode] = useState<'ready' | 'loading'>('loading');
 
-  // Use SimplePDFViewer (react-pdf)
   useEffect(() => {
-    console.log('📚 Initializing React-PDF viewer');
     setViewerMode('ready');
   }, []);
 
-  // Reset viewer when document changes
-  useEffect(() => {
-    console.log('📄 Document changed:', document.name);
-  }, [document.id, document.name]);
-
   if (viewerMode === 'loading') {
     return (
-      <div className="flex flex-col h-full bg-slate-900 text-white">
-        <div className="flex items-center justify-center flex-1">
-          <div className="text-center">
-            <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-400" />
-            <div className="text-lg font-medium mb-2">Loading PDF Viewer</div>
-            <div className="text-sm text-slate-400">Initializing PDF display...</div>
-          </div>
-        </div>
+      <div className="flex h-full flex-col items-center justify-center bg-app-canvas text-ink-secondary">
+        <Loader2 className="h-5 w-5 animate-spin text-ink-muted" strokeWidth={1.5} />
+        <p className="mt-phi-3 text-phi-sm font-medium text-ink-primary">Preparing PDF viewer</p>
       </div>
     );
   }
 
   return (
     <div className="h-full">
-      {/* React-PDF Viewer */}
       <SimplePDFViewer
         document={document}
         onPageChange={onPageChange}

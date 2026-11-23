@@ -7,29 +7,32 @@ type PasswordInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'type' | '
   onValueChange: (value: string) => void;
 };
 
-/** Password field with a show/hide toggle, styled to match the auth pages. */
+/** Password field with a show/hide toggle, styled on the golden-ratio token scale. */
 const PasswordInput = ({ value, onValueChange, className, ...inputProps }: PasswordInputProps) => {
   const [visible, setVisible] = useState(false);
 
   return (
-    <div className="mt-2 flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-slate-200 focus-within:border-brand-400 focus-within:bg-slate-900">
-      <Lock className="h-4 w-4 shrink-0 text-slate-400" />
+    <div className="mt-phi-2 flex h-phi-ctrl items-center gap-phi-3 rounded-phi-md border border-[rgba(25,24,22,0.14)] bg-app-surface px-phi-3 text-ink-primary transition-colors duration-phi-fast focus-within:border-ink-primary focus-within:ring-2 focus-within:ring-accent/15">
+      <Lock className="h-4 w-4 shrink-0 text-ink-muted" strokeWidth={1.5} />
       <input
         {...inputProps}
         type={visible ? 'text' : 'password'}
         value={value}
         onChange={(event) => onValueChange(event.target.value)}
-        className={className ?? 'w-full bg-transparent text-sm text-white placeholder:text-slate-500 focus:outline-none'}
+        className={
+          className ??
+          'w-full bg-transparent text-phi-sm text-ink-primary placeholder:text-ink-faint focus:outline-none'
+        }
       />
       <button
         type="button"
         onClick={() => setVisible((current) => !current)}
-        className="shrink-0 rounded-md p-1 text-slate-400 transition hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
+        className="shrink-0 rounded-phi-xs p-phi-1 text-ink-muted transition-colors duration-phi-fast hover:bg-paper-200 hover:text-ink-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         aria-label={visible ? 'Hide password' : 'Show password'}
         aria-pressed={visible}
         aria-controls={inputProps.id}
       >
-        {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+        {visible ? <EyeOff className="h-4 w-4" strokeWidth={1.5} /> : <Eye className="h-4 w-4" strokeWidth={1.5} />}
       </button>
     </div>
   );

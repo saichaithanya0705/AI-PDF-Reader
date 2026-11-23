@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { X, Play, Pause, Volume2, Download, Loader2 } from 'lucide-react';
+import { X, Play, Pause, Volume2, Download, Loader2, RotateCcw, Headphones } from 'lucide-react';
 import { fetchAuthenticatedBlobUrl, generatePodcast as generatePodcastApi } from '../lib/api';
 
 interface PodcastModalProps {
@@ -17,7 +17,7 @@ const PodcastModal: React.FC<PodcastModalProps> = ({
   documentId,
   currentPage,
   persona,
-  job
+  job,
 }) => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -36,12 +36,14 @@ const PodcastModal: React.FC<PodcastModalProps> = ({
 
     try {
       const data = await generatePodcastApi(undefined, documentId, currentPage, persona, job);
-      const audioPath = data && typeof data === 'object'
-        ? (data as { audioUrl?: unknown; audio_url?: unknown }).audioUrl ?? (data as { audio_url?: unknown }).audio_url
-        : undefined;
+      const audioPath =
+        data && typeof data === 'object'
+          ? (data as { audioUrl?: unknown; audio_url?: unknown }).audioUrl ??
+            (data as { audio_url?: unknown }).audio_url
+          : undefined;
 
       if (typeof audioPath !== 'string' || !audioPath.trim()) {
-        throw new Error('Podcast generation did not return an audio URL');
+        throw new Error('Audio overview did not return a playable URL');
       }
 
       if (audioObjectUrlRef.current) {
@@ -53,7 +55,7 @@ const PodcastModal: React.FC<PodcastModalProps> = ({
       audioObjectUrlRef.current = objectUrl;
       setAudioUrl(objectUrl);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate podcast');
+      setError(err instanceof Error ? err.message : 'Failed to generate audio overview');
     } finally {
       setIsGenerating(false);
     }
@@ -67,7 +69,7 @@ const PodcastModal: React.FC<PodcastModalProps> = ({
     } else {
       audioRef.current.play();
     }
-    setIsPlaying(!isPlaying);
+    setIsPlaying((prev) => !prev);
   }, [isPlaying]);
 
   const handleTimeUpdate = () => {
@@ -108,7 +110,7 @@ const PodcastModal: React.FC<PodcastModalProps> = ({
     if (audioUrl) {
       const link = document.createElement('a');
       link.href = audioUrl;
-      link.download = `podcast_page_${currentPage}.wav`;
+      link.download = `audio_overview_page_${currentPage}.wav`;
       link.target = '_blank';
       document.body.appendChild(link);
       link.click();
@@ -122,7 +124,6 @@ const PodcastModal: React.FC<PodcastModalProps> = ({
     }
   }, [audioUrl, generatePodcast, isGenerating, isVisible]);
 
-  // Keyboard shortcuts
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
       if (!isVisible || !audioUrl) return;
@@ -168,239 +169,178 @@ const PodcastModal: React.FC<PodcastModalProps> = ({
     }
   }, [audioUrl, volume]);
 
-  useEffect(() => () => {
-    if (audioObjectUrlRef.current) {
-      URL.revokeObjectURL(audioObjectUrlRef.current);
-      audioObjectUrlRef.current = null;
-    }
-  }, []);
+  useEffect(
+    () => () => {
+      if (audioObjectUrlRef.current) {
+        URL.revokeObjectURL(audioObjectUrlRef.current);
+        audioObjectUrlRef.current = null;
+      }
+    },
+    []
+  );
 
   if (!isVisible) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-slate-900 rounded-xl border border-slate-700 max-w-md w-full">
-        <div className="p-6">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-r from-purple-400 to-pink-600 rounded-lg flex items-center justify-center">
-                <Volume2 className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h2 className="text-xl font-bold text-white">Podcast Mode</h2>
-                <p className="text-slate-400 text-sm">Page {currentPage} Overview</p>
-              </div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-primary/35 p-phi-4 backdrop-blur-[2px]">
+      <div className="w-full max-w-phi-modal-sm overflow-hidden rounded-phi-lg border border-[rgba(25,24,22,0.12)] bg-app-surface shadow-float">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-[rgba(25,24,22,0.08)] px-phi-5 py-phi-4">
+          <div className="flex items-center gap-phi-3">
+            <Headphones className="h-4 w-4 text-accent" strokeWidth={1.5} />
+            <div>
+              <h2 className="font-serif text-phi-lg font-normal text-ink-primary">Audio overview</h2>
+              <p className="font-mono text-phi-2xs tabular-nums text-ink-muted">
+                Page {currentPage} briefing
+              </p>
             </div>
-            <button
-              onClick={onClose}
-              className="p-2 text-slate-400 hover:text-white transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
           </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-phi-sm p-phi-2 text-ink-muted transition-colors duration-phi-fast hover:bg-paper-200 hover:text-ink-primary"
+            aria-label="Close audio overview"
+          >
+            <X className="h-4 w-4" strokeWidth={1.5} />
+          </button>
+        </div>
 
-          {/* Content */}
-          <div className="space-y-6">
-            {/* Persona/Job Info */}
-            {(persona || job) && (
-              <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
-                <p className="text-sm text-slate-400 mb-2">Tailored for:</p>
-                {persona && (
-                  <p className="text-sm text-cyan-400">👤 {persona}</p>
-                )}
-                {job && (
-                  <p className="text-sm text-purple-400">🎯 {job}</p>
-                )}
-              </div>
-            )}
+        <div className="space-y-phi-5 p-phi-5">
+          {(persona || job) && (
+            <div className="folio-mark rounded-phi-md border border-[rgba(25,24,22,0.08)] bg-paper-50 py-phi-3 pl-phi-4 pr-phi-3 text-phi-xs">
+              <p className="text-ink-muted">Tailored context</p>
+              {persona && <p className="mt-phi-1 font-medium text-ink-primary">{persona}</p>}
+              {job && <p className="mt-phi-1 text-ink-secondary">{job}</p>}
+            </div>
+          )}
 
-            {/* Audio Player */}
-            {isGenerating ? (
-              <div className="text-center py-8">
-                <Loader2 className="w-12 h-12 text-purple-400 animate-spin mx-auto mb-4" />
-                <p className="text-white font-medium">Generating your podcast...</p>
-                <p className="text-slate-400 text-sm mt-1">This may take a few moments</p>
-              </div>
-            ) : error ? (
-              <div className="text-center py-8">
-                <div className="w-12 h-12 bg-red-400/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <X className="w-6 h-6 text-red-400" />
-                </div>
-                <p className="text-red-400 font-medium mb-2">Generation Failed</p>
-                <p className="text-slate-400 text-sm mb-4">{error}</p>
-                <button
-                  onClick={generatePodcast}
-                  className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg transition-colors"
-                >
-                  Try Again
-                </button>
-              </div>
-            ) : audioUrl ? (
-              <div className="space-y-6">
-                {/* Audio Element */}
-                <audio ref={audioRef} src={audioUrl} preload="metadata" />
+          {isGenerating ? (
+            <div className="py-phi-6 text-center">
+              <Loader2 className="mx-auto h-5 w-5 animate-spin text-accent" strokeWidth={1.5} />
+              <p className="mt-phi-3 text-phi-sm font-medium text-ink-primary">
+                Generating audio overview
+              </p>
+              <p className="mt-phi-1 text-phi-xs text-ink-muted">
+                Synthesizing narration for page {currentPage}
+              </p>
+            </div>
+          ) : error ? (
+            <div className="rounded-phi-md border border-semantic-negative/25 bg-semantic-negativeBg p-phi-5 text-center">
+              <p className="text-phi-sm font-medium text-semantic-negative">Generation failed</p>
+              <p className="mt-phi-1 text-phi-xs text-ink-secondary">{error}</p>
+              <button
+                type="button"
+                onClick={generatePodcast}
+                className="btn-secondary mt-phi-4 h-phi-ctrl-sm text-phi-xs"
+              >
+                Try again
+              </button>
+            </div>
+          ) : audioUrl ? (
+            <div className="space-y-phi-5">
+              <audio ref={audioRef} src={audioUrl} preload="metadata" />
 
-                {/* Audio Player Header */}
-                <div className="text-center">
-                  <h3 className="text-lg font-semibold text-white mb-2">🎧 Your Podcast is Ready!</h3>
-                  <p className="text-sm text-slate-400">Listen directly or download for later</p>
-                </div>
+              {/* Main Player Card */}
+              <div className="rounded-phi-md border border-[rgba(25,24,22,0.09)] bg-paper-50 p-phi-5">
+                <div className="flex items-center gap-phi-4">
+                  <button
+                    type="button"
+                    onClick={togglePlayPause}
+                    className="flex h-phi-6 w-phi-6 shrink-0 items-center justify-center rounded-full bg-ink-primary text-paper-50 transition-colors duration-phi-fast hover:bg-[#2c2a26] active:scale-[0.98]"
+                    aria-label={isPlaying ? 'Pause' : 'Play'}
+                  >
+                    {isPlaying ? (
+                      <Pause className="h-4 w-4" strokeWidth={1.5} />
+                    ) : (
+                      <Play className="ml-0.5 h-4 w-4" strokeWidth={1.5} />
+                    )}
+                  </button>
 
-                {/* Main Audio Player */}
-                <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
-                  {/* Play/Pause Button */}
-                  <div className="flex items-center justify-center mb-6">
-                    <button
-                      onClick={togglePlayPause}
-                      className="w-20 h-20 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 rounded-full flex items-center justify-center transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105"
-                    >
-                      {isPlaying ? (
-                        <Pause className="w-10 h-10 text-white" />
-                      ) : (
-                        <Play className="w-10 h-10 text-white ml-1" />
-                      )}
-                    </button>
-                  </div>
-
-                  {/* Progress Bar */}
-                  <div className="space-y-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between text-phi-xs">
+                      <span className="font-medium text-ink-primary">
+                        {isPlaying ? 'Playing' : 'Ready to play'}
+                      </span>
+                      <span className="font-mono text-phi-2xs tabular-nums text-ink-muted">
+                        {formatTime(currentTime)} / {formatTime(duration)}
+                      </span>
+                    </div>
                     <input
                       type="range"
                       min="0"
                       max={duration || 0}
                       value={currentTime}
                       onChange={handleSeek}
-                      className="w-full h-3 bg-slate-700 rounded-lg appearance-none cursor-pointer slider"
+                      aria-label="Audio playback position"
+                      className="editorial-slider mt-phi-3 w-full"
                     />
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-slate-400">{formatTime(currentTime)}</span>
-                      <div className="flex items-center gap-2">
-                        <Volume2 className="w-4 h-4 text-purple-400" />
-                        <span className="text-slate-300 font-medium">
-                          {isPlaying ? 'Playing...' : 'Paused'}
-                        </span>
-                      </div>
-                      <span className="text-slate-400">{formatTime(duration)}</span>
-                    </div>
-
-                    {/* Volume Control */}
-                    <div className="flex items-center gap-3 mt-3 pt-3 border-t border-slate-700">
-                      <Volume2 className="w-4 h-4 text-slate-400" />
-                      <input
-                        type="range"
-                        min="0"
-                        max="1"
-                        step="0.1"
-                        value={volume}
-                        onChange={handleVolumeChange}
-                        className="flex-1 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer slider"
-                      />
-                      <span className="text-xs text-slate-400 w-8">{Math.round(volume * 100)}%</span>
-                    </div>
                   </div>
                 </div>
 
-                {/* Action Buttons */}
-                <div className="flex gap-3">
-                  <button
-                    onClick={downloadAudio}
-                    className="flex-1 flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white px-4 py-3 rounded-lg transition-all duration-200 border border-slate-600 hover:border-slate-500"
-                  >
-                    <Download className="w-4 h-4" />
-                    Download Audio
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (audioRef.current) {
-                        audioRef.current.currentTime = 0;
-                        setCurrentTime(0);
-                        if (isPlaying) {
-                          audioRef.current.play();
-                        }
-                      }
-                    }}
-                    className="px-4 py-3 bg-purple-600/20 hover:bg-purple-600/30 text-purple-400 hover:text-purple-300 rounded-lg transition-all duration-200 border border-purple-600/30"
-                    title="Restart from beginning"
-                  >
-                    ⏮️
-                  </button>
-                </div>
-
-                {/* Audio Info & Keyboard Shortcuts */}
-                <div className="space-y-3">
-                  <div className="text-center text-xs text-slate-500 bg-slate-800/30 rounded-lg p-3">
-                    <div className="flex items-center justify-center gap-4 text-xs">
-                      <div className="flex items-center gap-1">
-                        <span className="w-2 h-2 bg-green-400 rounded-full"></span>
-                        <span>High-quality AI audio</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <span className="w-2 h-2 bg-blue-400 rounded-full"></span>
-                        <span>Listen in browser</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <span className="w-2 h-2 bg-purple-400 rounded-full"></span>
-                        <span>Download available</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Keyboard Shortcuts */}
-                  <div className="text-center text-xs text-slate-500 bg-slate-800/20 rounded-lg p-2">
-                    <div className="flex items-center justify-center gap-4">
-                      <span>⌨️ <kbd className="bg-slate-700 px-1 rounded">Space</kbd> Play/Pause</span>
-                      <span><kbd className="bg-slate-700 px-1 rounded">←</kbd> -10s</span>
-                      <span><kbd className="bg-slate-700 px-1 rounded">→</kbd> +10s</span>
-                    </div>
-                  </div>
+                {/* Volume */}
+                <div className="mt-phi-4 flex items-center gap-phi-3 border-t border-[rgba(25,24,22,0.08)] pt-phi-3">
+                  <Volume2 className="h-4 w-4 shrink-0 text-ink-muted" strokeWidth={1.5} />
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.1"
+                    value={volume}
+                    onChange={handleVolumeChange}
+                    aria-label="Volume"
+                    className="editorial-slider flex-1"
+                  />
+                  <span className="w-phi-6 text-right font-mono text-phi-2xs tabular-nums text-ink-muted">
+                    {Math.round(volume * 100)}%
+                  </span>
                 </div>
               </div>
-            ) : null}
-          </div>
+
+              {/* Controls */}
+              <div className="flex items-center gap-phi-3">
+                <button
+                  type="button"
+                  onClick={downloadAudio}
+                  className="btn-secondary h-phi-ctrl flex-1"
+                >
+                  <Download className="h-4 w-4 text-ink-muted" strokeWidth={1.5} />
+                  Download WAV
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (audioRef.current) {
+                      audioRef.current.currentTime = 0;
+                      setCurrentTime(0);
+                      if (isPlaying) {
+                        audioRef.current.play();
+                      }
+                    }
+                  }}
+                  className="btn-secondary h-phi-ctrl w-phi-ctrl p-0"
+                  title="Restart"
+                  aria-label="Restart audio"
+                >
+                  <RotateCcw className="h-4 w-4 text-ink-muted" strokeWidth={1.5} />
+                </button>
+              </div>
+
+              {/* Shortcuts */}
+              <div className="flex flex-wrap items-center justify-center gap-phi-4 border-t border-[rgba(25,24,22,0.08)] pt-phi-3 text-phi-xs text-ink-muted">
+                <span className="inline-flex items-center gap-phi-2">
+                  <kbd className="keycap">Space</kbd> Play/pause
+                </span>
+                <span className="inline-flex items-center gap-phi-2">
+                  <kbd className="keycap">←</kbd> -10s
+                </span>
+                <span className="inline-flex items-center gap-phi-2">
+                  <kbd className="keycap">→</kbd> +10s
+                </span>
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
-
-      <style>{`
-        .slider::-webkit-slider-thumb {
-          appearance: none;
-          height: 20px;
-          width: 20px;
-          border-radius: 50%;
-          background: linear-gradient(45deg, #a855f7, #ec4899);
-          cursor: pointer;
-          box-shadow: 0 2px 8px rgba(168, 85, 247, 0.4);
-          transition: all 0.2s ease;
-        }
-
-        .slider::-webkit-slider-thumb:hover {
-          transform: scale(1.1);
-          box-shadow: 0 4px 12px rgba(168, 85, 247, 0.6);
-        }
-
-        .slider::-moz-range-thumb {
-          height: 20px;
-          width: 20px;
-          border-radius: 50%;
-          background: linear-gradient(45deg, #a855f7, #ec4899);
-          cursor: pointer;
-          border: none;
-          box-shadow: 0 2px 8px rgba(168, 85, 247, 0.4);
-        }
-
-        .slider::-webkit-slider-track {
-          background: #374151;
-          border-radius: 6px;
-          height: 12px;
-        }
-
-        .slider::-moz-range-track {
-          background: #374151;
-          border-radius: 6px;
-          height: 12px;
-          border: none;
-        }
-      `}</style>
     </div>
   );
 };

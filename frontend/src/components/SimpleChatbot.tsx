@@ -1,5 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageSquare, Send, X, Loader2, Bot, User, Minimize2, History, FileText, ExternalLink, Copy, Check } from 'lucide-react';
+import {
+  MessageSquare,
+  Send,
+  X,
+  Loader2,
+  Minimize2,
+  History,
+  FileText,
+  ExternalLink,
+  Copy,
+  Check,
+} from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import ChatHistory from './ChatHistory';
@@ -36,8 +47,8 @@ interface SimpleChatbotProps {
 const buildWelcomeMessage = (documentContext?: string): Message => ({
   role: 'assistant',
   content: documentContext
-    ? 'Hi! I can help you understand this document. Ask me anything about it!'
-    : 'Hi! I\'m your AI assistant. How can I help you today?',
+    ? 'Ask a question about this page or highlight any excerpt in the PDF to inspect it here.'
+    : 'Ask a question across your document library. Answers include links to the relevant pages.',
   timestamp: new Date(),
 });
 
@@ -50,7 +61,7 @@ const SimpleChatbot: React.FC<SimpleChatbotProps> = ({
   isMinimized = false,
   onToggleMinimize,
   initialMessage,
-  variant = 'floating'
+  variant = 'floating',
 }) => {
   const navigate = useNavigate();
   const [messages, setMessages] = useState<Message[]>(() => [buildWelcomeMessage(documentContext)]);
@@ -79,7 +90,6 @@ const SimpleChatbot: React.FC<SimpleChatbotProps> = ({
     }
   }, [isMinimized]);
 
-  // Handle initial message - populate input when provided
   useEffect(() => {
     if (initialMessage && !isMinimized) {
       setInputMessage(initialMessage);
@@ -178,10 +188,10 @@ const SimpleChatbot: React.FC<SimpleChatbotProps> = ({
     const userMessage: Message = {
       role: 'user',
       content: inputMessage,
-      timestamp: new Date()
+      timestamp: new Date(),
     };
 
-    setMessages(prev => [...prev, userMessage]);
+    setMessages((prev) => [...prev, userMessage]);
     setInputMessage('');
     setIsLoading(true);
 
@@ -198,15 +208,14 @@ const SimpleChatbot: React.FC<SimpleChatbotProps> = ({
         })),
       });
 
-      // Update session ID if it was created
       if (typeof data.session_id === 'string' && data.session_id !== sessionId) {
         setSessionId(data.session_id);
       }
 
-      // Extract related documents from the new dedicated field, sources, or search_results
-      const context = typeof data.context === 'object' && data.context !== null
-        ? data.context as Record<string, unknown>
-        : {};
+      const context =
+        typeof data.context === 'object' && data.context !== null
+          ? (data.context as Record<string, unknown>)
+          : {};
       const relatedDocs = normalizeRelatedDocuments(
         data.related_documents || data.sources || context.search_results || context.related_documents
       );
@@ -215,20 +224,18 @@ const SimpleChatbot: React.FC<SimpleChatbotProps> = ({
         role: 'assistant',
         content: data.response,
         timestamp: new Date(),
-        relatedDocuments: relatedDocs
+        relatedDocuments: relatedDocs,
       };
 
-      setMessages(prev => [...prev, assistantMessage]);
+      setMessages((prev) => [...prev, assistantMessage]);
     } catch (error) {
       console.error('Chat error:', error);
-
       const errorMessage: Message = {
         role: 'assistant',
-        content: 'Sorry, I\'m having trouble connecting right now. Please try again.',
-        timestamp: new Date()
+        content: 'Unable to reach the assistant right now. Try sending your question again.',
+        timestamp: new Date(),
       };
-
-      setMessages(prev => [...prev, errorMessage]);
+      setMessages((prev) => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
     }
@@ -248,7 +255,9 @@ const SimpleChatbot: React.FC<SimpleChatbotProps> = ({
         role: message.role,
         content: message.content,
         timestamp: new Date(message.created_at),
-        relatedDocuments: normalizeRelatedDocuments(message.metadata?.sources || message.metadata?.search_results),
+        relatedDocuments: normalizeRelatedDocuments(
+          message.metadata?.sources || message.metadata?.search_results
+        ),
       }));
 
       setMessages(loadedMessages.length > 0 ? loadedMessages : [buildWelcomeMessage(documentContext)]);
@@ -279,180 +288,175 @@ const SimpleChatbot: React.FC<SimpleChatbotProps> = ({
     }
 
     return (
-      <div className="fixed bottom-6 right-6 z-50">
+      <div className="fixed bottom-phi-5 right-phi-5 z-40">
         <button
+          type="button"
           onClick={onToggleMinimize}
-          className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-full p-4 shadow-2xl transition-all duration-300 hover:scale-110 group relative"
+          className="inline-flex h-phi-ctrl items-center gap-phi-2 rounded-phi-md border border-[rgba(25,24,22,0.14)] bg-ink-primary px-phi-4 text-phi-sm font-medium text-paper-50 shadow-float transition-colors duration-phi-fast hover:bg-[#2c2a26] active:scale-[0.98]"
         >
-          <MessageSquare className="w-6 h-6" />
+          <MessageSquare className="h-4 w-4" strokeWidth={1.5} />
+          <span>Document chat</span>
           {messages.length > 1 && (
-            <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center animate-pulse">
+            <span className="ml-phi-1 font-mono text-phi-xs tabular-nums text-paper-300">
               {messages.length - 1}
             </span>
           )}
-          <span className="absolute bottom-full right-0 mb-2 bg-slate-800 text-white text-sm px-3 py-1 rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">
-            Chat with AI
-          </span>
         </button>
       </div>
     );
   }
 
-  const containerClass = variant === 'docked'
-    ? 'h-full w-full bg-slate-900 border-l border-slate-700 flex flex-col overflow-hidden'
-    : 'fixed bottom-6 right-6 w-96 h-[600px] bg-slate-900 rounded-2xl shadow-2xl border border-slate-700 flex flex-col z-50 overflow-hidden';
+  // Floating chat panel uses an exact 1 : 1.618 golden rectangle (w-phi-chat × h-phi-chat-h)
+  const containerClass =
+    variant === 'docked'
+      ? 'flex h-full w-full flex-col overflow-hidden bg-app-surface'
+      : 'fixed bottom-phi-5 right-phi-5 z-50 flex h-phi-chat-h max-h-[82vh] w-phi-chat max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-phi-lg border border-[rgba(25,24,22,0.14)] bg-app-surface shadow-float';
 
   return (
     <div className={containerClass}>
-      {/* Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="bg-white/20 rounded-full p-2">
-            <Bot className="w-5 h-5 text-white" />
+      {/* Chat Header */}
+      <div className="flex h-phi-bar shrink-0 items-center justify-between border-b border-[rgba(25,24,22,0.08)] bg-paper-50 px-phi-4">
+        <div className="flex min-w-0 items-center gap-phi-3">
+          <MessageSquare className="h-4 w-4 shrink-0 text-ink-muted" strokeWidth={1.5} />
+          <div className="min-w-0">
+            <h3 className="truncate text-phi-sm font-medium text-ink-primary">
+              {documentId ? 'Document chat' : 'Library chat'}
+            </h3>
           </div>
-          <div>
-            <h3 className="text-white font-semibold">AI Assistant</h3>
-            <p className="text-white/80 text-xs">
-              {isLoading ? 'Typing...' : 'Online'}
-            </p>
-          </div>
+          {currentPage && (
+            <span className="font-mono text-phi-2xs tabular-nums text-accent-ink">
+              p. {currentPage}
+            </span>
+          )}
         </div>
-        <div className="flex items-center gap-2">
+
+        <div className="flex items-center gap-phi-1">
           <button
+            type="button"
             onClick={() => setShowHistory(true)}
-            className="text-white/80 hover:text-white p-1 hover:bg-white/10 rounded transition-colors"
-            title="Chat History"
+            className="inline-flex h-phi-ctrl-sm w-phi-ctrl-sm items-center justify-center rounded-phi-sm text-ink-muted transition-colors duration-phi-fast hover:bg-paper-200 hover:text-ink-primary"
+            title="Chat history"
+            aria-label="Chat history"
           >
-            <History className="w-4 h-4" />
+            <History className="h-4 w-4" strokeWidth={1.5} />
           </button>
           {onToggleMinimize && (
             <button
+              type="button"
               onClick={onToggleMinimize}
-              className="text-white/80 hover:text-white p-1 hover:bg-white/10 rounded transition-colors"
-              title="Minimize"
+              className="inline-flex h-phi-ctrl-sm w-phi-ctrl-sm items-center justify-center rounded-phi-sm text-ink-muted transition-colors duration-phi-fast hover:bg-paper-200 hover:text-ink-primary"
+              title="Hide chat"
+              aria-label="Hide chat"
             >
-              <Minimize2 className="w-4 h-4" />
+              <Minimize2 className="h-4 w-4" strokeWidth={1.5} />
             </button>
           )}
           {onClose && (
             <button
+              type="button"
               onClick={onClose}
-              className="text-white/80 hover:text-white p-1 hover:bg-white/10 rounded transition-colors"
-              title="Close"
+              className="inline-flex h-phi-ctrl-sm w-phi-ctrl-sm items-center justify-center rounded-phi-sm text-ink-muted transition-colors duration-phi-fast hover:bg-paper-200 hover:text-ink-primary"
+              title="Close chat"
+              aria-label="Close chat"
             >
-              <X className="w-4 h-4" />
+              <X className="h-4 w-4" strokeWidth={1.5} />
             </button>
           )}
         </div>
       </div>
 
       {/* Messages */}
-      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-900">
+      <div
+        ref={messagesContainerRef}
+        className="flex-1 space-y-phi-4 overflow-y-auto bg-app-surface p-phi-4 scrollbar-thin"
+      >
         {messages.map((message, index) => (
           <div
             key={index}
-            className={`flex gap-3 ${message.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
+            className={`flex flex-col ${message.role === 'user' ? 'items-end' : 'items-start'}`}
           >
-            <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${message.role === 'user'
-              ? 'bg-blue-600'
-              : 'bg-gradient-to-br from-purple-600 to-blue-600'
-              }`}>
+            <div
+              className={`max-w-[90%] rounded-phi-md px-phi-4 py-phi-3 text-phi-sm ${
+                message.role === 'user'
+                  ? 'bg-ink-primary text-paper-50'
+                  : 'border border-[rgba(25,24,22,0.09)] bg-paper-50 text-ink-primary'
+              }`}
+            >
               {message.role === 'user' ? (
-                <User className="w-4 h-4 text-white" />
+                <p className="whitespace-pre-wrap break-words leading-phi">{message.content}</p>
               ) : (
-                <Bot className="w-4 h-4 text-white" />
-              )}
-            </div>
-            <div className={`flex-1 max-w-[85%] ${message.role === 'user' ? 'text-right' : 'text-left'
-              }`}>
-              <div className={`inline-block rounded-2xl px-4 py-2 ${message.role === 'user'
-                ? 'bg-blue-600 text-white rounded-br-none'
-                : 'bg-slate-800 text-slate-200 rounded-bl-none border border-slate-700'
-                }`}>
-                {message.role === 'user' ? (
-                  <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>
-                ) : (
-                  <div className="text-sm prose prose-invert prose-sm max-w-none
-                    prose-headings:text-slate-100 prose-headings:font-semibold prose-headings:mt-3 prose-headings:mb-2
-                    prose-h1:text-base prose-h2:text-sm prose-h3:text-sm
-                    prose-p:text-slate-200 prose-p:my-1.5 prose-p:leading-relaxed
-                    prose-strong:text-cyan-300 prose-strong:font-semibold
-                    prose-ul:my-2 prose-ul:pl-4 prose-ol:my-2 prose-ol:pl-4
-                    prose-li:text-slate-200 prose-li:my-0.5 prose-li:marker:text-cyan-400
-                    prose-a:text-cyan-400 prose-a:no-underline hover:prose-a:underline
-                    prose-code:text-pink-300 prose-code:bg-slate-900/50 prose-code:px-1 prose-code:rounded
-                    prose-hr:border-slate-600 prose-hr:my-3">
-                    <ReactMarkdown>{message.content}</ReactMarkdown>
-                  </div>
-                )}
-              </div>
-
-              <p className="text-xs text-slate-500 mt-1">
-                {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </p>
-
-              {/* Related Documents Section - Only for assistant messages with related docs */}
-              {message.role === 'assistant' && message.relatedDocuments && message.relatedDocuments.length > 0 && (
-                <div className="mt-3 p-2 bg-slate-800/50 rounded-lg border border-slate-700/50">
-                  <p className="text-xs text-slate-400 mb-2 flex items-center gap-1">
-                    <FileText className="w-3 h-3" />
-                    Related in your library:
-                  </p>
-                  <div className="space-y-1.5">
-                    {message.relatedDocuments.slice(0, 3).map((doc, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => handleNavigateToDocument(doc.document_id, doc.page_number || 1)}
-                        className="w-full text-left p-2 bg-slate-700/40 hover:bg-slate-700/70 rounded-lg transition-all group"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs text-cyan-400 font-medium truncate max-w-[200px]">
-                            {doc.document_name || 'Document'}
-                          </span>
-                          <span className="text-[10px] text-slate-500 flex items-center gap-1">
-                            <span className="bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded">
-                              {Math.round((doc.similarity || 0) * 100)}% match
-                            </span>
-                            <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-slate-400 mt-1 line-clamp-2">
-                          {doc.text || 'Click to view this section'}
-                        </p>
-                        {doc.page_number && (
-                          <span className="text-[10px] text-slate-500">Page {doc.page_number}</span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
+                <div
+                  className="prose prose-sm max-w-none
+                    prose-headings:mt-3 prose-headings:mb-1.5 prose-headings:font-medium prose-headings:text-ink-primary
+                    prose-p:my-1.5 prose-p:leading-phi prose-p:text-ink-primary
+                    prose-strong:font-medium prose-strong:text-ink-primary
+                    prose-ul:my-1.5 prose-ul:pl-4 prose-ol:my-1.5 prose-ol:pl-4
+                    prose-li:my-0.5 prose-li:text-ink-secondary
+                    prose-a:text-accent-ink prose-a:no-underline hover:prose-a:underline
+                    prose-code:rounded prose-code:bg-paper-200 prose-code:px-1 prose-code:font-mono prose-code:text-phi-xs prose-code:text-ink-primary
+                    prose-hr:my-3 prose-hr:border-[rgba(25,24,22,0.09)]"
+                >
+                  <ReactMarkdown>{message.content}</ReactMarkdown>
                 </div>
               )}
             </div>
+
+            <span className="mt-phi-1 font-mono text-phi-2xs tabular-nums text-ink-faint">
+              {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </span>
+
+            {message.role === 'assistant' &&
+              message.relatedDocuments &&
+              message.relatedDocuments.length > 0 && (
+                <div className="mt-phi-2 w-full max-w-[92%] space-y-phi-2 rounded-phi-md border border-[rgba(25,24,22,0.09)] bg-paper-50 p-phi-3">
+                  <p className="flex items-center gap-phi-2 px-phi-1 text-phi-2xs font-medium text-ink-muted">
+                    <FileText className="h-3 w-3" strokeWidth={1.5} />
+                    Referenced passages
+                  </p>
+                  {message.relatedDocuments.slice(0, 3).map((doc, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => handleNavigateToDocument(doc.document_id, doc.page_number || 1)}
+                      className="folio-mark group w-full rounded-phi-sm border border-[rgba(25,24,22,0.08)] bg-app-surface py-phi-2 pl-phi-3 pr-phi-3 text-left transition-colors duration-phi-fast hover:border-[rgba(25,24,22,0.2)]"
+                    >
+                      <div className="flex items-center justify-between gap-phi-2">
+                        <span className="truncate text-phi-xs font-medium text-ink-primary group-hover:text-accent-ink">
+                          {doc.document_name || 'Document'}
+                        </span>
+                        <span className="flex shrink-0 items-center gap-phi-1 font-mono text-phi-2xs tabular-nums text-ink-muted">
+                          {doc.page_number ? `p. ${doc.page_number}` : ''}
+                          <ExternalLink
+                            className="h-3 w-3 opacity-0 transition-opacity duration-phi-fast group-hover:opacity-100"
+                            strokeWidth={1.5}
+                          />
+                        </span>
+                      </div>
+                      <p className="mt-phi-1 line-clamp-2 text-phi-2xs leading-phi text-ink-secondary">
+                        {doc.text || 'Open referenced page'}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              )}
           </div>
         ))}
 
         {isLoading && (
-          <div className="flex gap-3">
-            <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-gradient-to-br from-purple-600 to-blue-600">
-              <Bot className="w-4 h-4 text-white" />
-            </div>
-            <div className="bg-slate-800 rounded-2xl rounded-bl-none px-4 py-3 border border-slate-700">
-              <div className="flex gap-1">
-                <span className="w-2 h-2 bg-slate-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                <span className="w-2 h-2 bg-slate-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                <span className="w-2 h-2 bg-slate-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
-              </div>
-            </div>
+          <div className="flex items-center gap-phi-2 text-phi-xs text-ink-muted">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.5} />
+            <span>Drafting grounded answer</span>
           </div>
         )}
 
         <div ref={messagesEndRef} />
       </div>
 
+      {/* Chat Excerpt Selection Popover */}
       {selectedChatText && selectionMenuPosition && (
         <div
           data-chat-selection-ignore="true"
-          className="fixed z-[70] flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800 p-2 shadow-2xl"
+          className="fixed z-[70] flex items-center gap-phi-1 rounded-phi-md border border-[rgba(25,24,22,0.16)] bg-ink-primary p-phi-1 text-paper-50 shadow-float"
           onMouseDown={(event) => event.preventDefault()}
           style={{
             left: `${selectionMenuPosition.x}px`,
@@ -461,67 +465,67 @@ const SimpleChatbot: React.FC<SimpleChatbotProps> = ({
           }}
         >
           <button
+            type="button"
             onClick={askAboutSelectedChatText}
-            className="flex items-center gap-2 rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
-            title="Ask AI about this chat excerpt"
+            className="flex items-center gap-phi-2 rounded-phi-sm bg-accent px-phi-3 py-phi-1 text-phi-xs font-medium text-white transition-colors duration-phi-fast hover:bg-accent-hover"
           >
-            <MessageSquare className="h-4 w-4" />
-            Ask AI
+            <MessageSquare className="h-3.5 w-3.5" strokeWidth={1.5} />
+            Ask follow-up
           </button>
           <button
+            type="button"
             onClick={copySelectedChatText}
-            className="flex items-center gap-2 rounded-md bg-slate-700 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-600"
-            title="Copy selected chat text"
+            className="flex items-center gap-phi-2 rounded-phi-sm px-phi-3 py-phi-1 text-phi-xs font-medium text-paper-100 transition-colors duration-phi-fast hover:bg-white/10"
           >
             {copiedSelection ? (
               <>
-                <Check className="h-4 w-4 text-green-400" />
-                <span>Copied</span>
+                <Check className="h-3.5 w-3.5 text-[#4cc38a]" strokeWidth={1.5} />
+                Copied
               </>
             ) : (
               <>
-                <Copy className="h-4 w-4" />
-                <span>Copy</span>
+                <Copy className="h-3.5 w-3.5" strokeWidth={1.5} />
+                Copy
               </>
             )}
           </button>
         </div>
       )}
 
-      {/* Input */}
-      <div className="p-4 bg-slate-800 border-t border-slate-700">
-        <div className="flex gap-2">
+      {/* Composer */}
+      <div className="shrink-0 border-t border-[rgba(25,24,22,0.08)] bg-paper-50 p-phi-3">
+        <div className="flex items-end gap-phi-2">
           <textarea
             ref={inputRef}
             value={inputMessage}
             onChange={(e) => setInputMessage(e.target.value)}
             onKeyDown={handleKeyPress}
-            placeholder="Type your message..."
+            placeholder={documentId ? 'Ask about this document' : 'Ask across your library'}
             rows={2}
-            className="max-h-28 min-h-[3rem] flex-1 resize-none rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="max-h-28 min-h-[2.618rem] flex-1 resize-none rounded-phi-md border border-[rgba(25,24,22,0.14)] bg-app-surface px-phi-3 py-phi-2 text-phi-sm text-ink-primary placeholder:text-ink-faint focus:border-ink-primary focus:outline-none focus:ring-2 focus:ring-accent/15"
             disabled={isLoading}
           />
           <button
+            type="button"
             onClick={sendMessage}
             disabled={!inputMessage.trim() || isLoading}
-            className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl px-4 py-3 transition-all duration-200 hover:scale-105 disabled:hover:scale-100"
+            className="btn-primary h-phi-ctrl w-phi-ctrl shrink-0 p-0"
+            aria-label="Send message"
           >
             {isLoading ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.5} />
             ) : (
-              <Send className="w-5 h-5" />
+              <Send className="h-4 w-4" strokeWidth={1.5} />
             )}
           </button>
         </div>
         {documentContext && (
-          <p className="text-xs text-slate-500 mt-2 flex items-center gap-1">
-            <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-            Chatting about current document
+          <p className="mt-phi-2 truncate font-mono text-phi-2xs text-ink-muted">
+            {documentContext}
           </p>
         )}
       </div>
 
-      {/* Chat History Modal */}
       {showHistory && (
         <ChatHistory
           activeSessionId={sessionId}

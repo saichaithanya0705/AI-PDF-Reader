@@ -7,39 +7,25 @@ interface ProtectedRouteProps {
   children: ReactNode;
 }
 
-/**
- * ProtectedRoute Component
- * 
- * Wraps routes that require authentication.
- * Redirects to login if user is not authenticated.
- * Shows loading spinner while checking authentication status.
- */
 const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
   const { user, loading } = useAuth();
   const location = useLocation();
 
-  // Show loading spinner while checking auth status
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="relative">
-            <div className="absolute inset-0 animate-ping rounded-full bg-brand-500/20" />
-            <Loader2 className="h-12 w-12 animate-spin text-brand-500" />
-          </div>
-          <p className="text-sm text-slate-400">Verifying authentication...</p>
+      <div className="flex min-h-screen items-center justify-center bg-app-bg">
+        <div className="flex items-center gap-phi-3 rounded-phi-md border border-[rgba(25,24,22,0.09)] bg-app-surface px-phi-5 py-phi-3 shadow-subtle">
+          <Loader2 className="h-4 w-4 animate-spin text-ink-muted" strokeWidth={1.5} />
+          <p className="text-phi-sm text-ink-secondary">Checking session</p>
         </div>
       </div>
     );
   }
 
-  // Redirect to login if not authenticated
-  // Save the attempted location so we can redirect back after login
   if (!user) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // User is authenticated, render the protected content
   return <>{children}</>;
 };
 

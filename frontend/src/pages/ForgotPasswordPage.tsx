@@ -1,8 +1,9 @@
 import { FormEvent, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ArrowLeft, KeyRound, Loader2, Mail, MailCheck } from 'lucide-react';
+import { ArrowLeft, Loader2, Mail, MailCheck } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
 import { toAuthErrorMessage } from '../lib/authErrors';
+import BrandMark from '../components/BrandMark';
 
 const ForgotPasswordPage = () => {
   const location = useLocation();
@@ -34,89 +35,98 @@ const ForgotPasswordPage = () => {
   };
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center px-6 py-16">
-      <div className="w-full max-w-md rounded-3xl border border-white/10 bg-slate-950/80 p-8 shadow-glow backdrop-blur">
-        <Link to="/login" className="flex items-center gap-2 text-sm text-slate-300 transition hover:text-white">
-          <ArrowLeft className="h-4 w-4" />
+    <div className="flex min-h-screen flex-col bg-paper-100">
+      <header className="mx-auto flex h-phi-header w-full max-w-phi-container items-center justify-between px-phi-5 lg:px-phi-6">
+        <Link
+          to="/"
+          className="rounded-phi-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        >
+          <BrandMark />
+        </Link>
+        <Link
+          to="/login"
+          className="inline-flex items-center gap-phi-2 text-phi-sm text-ink-secondary transition-colors duration-phi-fast hover:text-ink-primary"
+        >
+          <ArrowLeft className="h-4 w-4" strokeWidth={1.5} />
           Back to sign in
         </Link>
+      </header>
 
-        <div className="mt-6 flex items-center gap-3">
-          <span className="rounded-xl bg-cyan-400/10 p-2 text-cyan-300">
-            <KeyRound className="h-5 w-5" />
-          </span>
-          <h1 className="text-2xl text-white">Reset your password</h1>
-        </div>
+      <main className="mx-auto flex w-full max-w-phi-modal-sm flex-1 items-center justify-center px-phi-5 py-phi-6">
+        <div className="w-full rounded-phi-lg border border-[rgba(25,24,22,0.1)] bg-paper-50 p-phi-5 shadow-card sm:p-phi-6">
+          <p className="font-mono text-phi-2xs text-ink-muted">Account recovery</p>
+          <h1 className="mt-phi-2 font-serif text-phi-xl font-normal leading-phi-tight tracking-[-0.02em] text-ink-primary">
+            Reset password
+          </h1>
 
-        {sentTo ? (
-          <div className="mt-6 space-y-4">
-            <div className="flex gap-3 rounded-2xl border border-cyan-400/40 bg-cyan-500/10 px-4 py-3 text-sm text-cyan-200">
-              <MailCheck className="mt-0.5 h-4 w-4 shrink-0" />
-              <p>
-                If an account exists for <span className="font-medium text-white">{sentTo}</span>, a reset
-                link is on its way. Open it on this device to choose a new password.
+          {sentTo ? (
+            <div className="mt-phi-5 space-y-phi-4">
+              <div className="flex gap-phi-3 rounded-phi-md border border-semantic-positive/25 bg-semantic-positiveBg px-phi-4 py-phi-3 text-phi-sm text-semantic-positive">
+                <MailCheck className="mt-phi-1 h-4 w-4 shrink-0" strokeWidth={1.5} />
+                <p>
+                  If an account exists for{' '}
+                  <span className="font-medium text-ink-primary">{sentTo}</span>, a reset link is on its way. Open it on this device to choose a new password.
+                </p>
+              </div>
+              <p className="text-phi-xs leading-phi text-ink-muted">
+                Nothing after a few minutes? Check your spam folder. Reset emails are rate-limited, so wait before requesting another.
               </p>
+              <button
+                type="button"
+                onClick={() => setSentTo(null)}
+                className="text-phi-sm font-medium text-accent-ink transition-colors duration-phi-fast hover:underline"
+              >
+                Use a different email
+              </button>
             </div>
-            <p className="text-xs leading-relaxed text-slate-400">
-              Nothing after a few minutes? Check your spam folder. Reset emails are rate-limited, so wait
-              before requesting another.
-            </p>
-            <button
-              type="button"
-              onClick={() => setSentTo(null)}
-              className="text-sm font-medium text-cyan-300 transition hover:text-cyan-200"
-            >
-              Use a different email
-            </button>
-          </div>
-        ) : (
-          <form className="mt-6 flex flex-col gap-5" onSubmit={handleSubmit} noValidate>
-            <p className="text-sm text-slate-300">
-              Enter your account email and we'll send you a link to set a new password.
-            </p>
-            <div>
-              <label className="text-sm font-medium text-white" htmlFor="reset-email">
-                Email address
-              </label>
-              <div className="mt-2 flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-slate-200 focus-within:border-brand-400 focus-within:bg-slate-900">
-                <Mail className="h-4 w-4 text-slate-400" />
-                <input
-                  id="reset-email"
-                  type="email"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  className="w-full bg-transparent text-sm text-white placeholder:text-slate-500 focus:outline-none"
-                  placeholder="you@company.com"
-                  autoComplete="email"
-                  autoFocus
-                  required
-                />
+          ) : (
+            <form className="mt-phi-5 flex flex-col gap-phi-5" onSubmit={handleSubmit} noValidate>
+              <p className="text-phi-sm leading-phi text-ink-secondary">
+                Enter your account email and we will send a link to choose a new password.
+              </p>
+              <div>
+                <label className="text-phi-sm font-medium text-ink-primary" htmlFor="reset-email">
+                  Email address
+                </label>
+                <div className="mt-phi-2 flex h-phi-ctrl items-center gap-phi-3 rounded-phi-md border border-[rgba(25,24,22,0.14)] bg-app-surface px-phi-3 text-ink-primary transition-colors duration-phi-fast focus-within:border-ink-primary focus-within:ring-2 focus-within:ring-accent/15">
+                  <Mail className="h-4 w-4 shrink-0 text-ink-muted" strokeWidth={1.5} />
+                  <input
+                    id="reset-email"
+                    type="email"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    className="w-full bg-transparent text-phi-sm text-ink-primary placeholder:text-ink-faint focus:outline-none"
+                    placeholder="name@company.com"
+                    autoComplete="email"
+                    autoFocus
+                    required
+                  />
+                </div>
               </div>
-            </div>
 
-            {formError && (
-              <div role="alert" className="rounded-2xl border border-aurora/40 bg-aurora/10 px-4 py-3 text-sm text-aurora">
-                {formError}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="flex items-center justify-center gap-2 rounded-full bg-brand-500 px-6 py-3 text-sm font-semibold text-white shadow-glow transition hover:bg-brand-400 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Sending link
-                </>
-              ) : (
-                'Send reset link'
+              {formError && (
+                <div
+                  role="alert"
+                  className="rounded-phi-md border border-semantic-negative/25 bg-semantic-negativeBg px-phi-4 py-phi-3 text-phi-sm text-semantic-negative"
+                >
+                  {formError}
+                </div>
               )}
-            </button>
-          </form>
-        )}
-      </div>
+
+              <button type="submit" disabled={isSubmitting} className="btn-primary h-phi-ctrl w-full">
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.5} />
+                    Sending link
+                  </>
+                ) : (
+                  'Send reset link'
+                )}
+              </button>
+            </form>
+          )}
+        </div>
+      </main>
     </div>
   );
 };
