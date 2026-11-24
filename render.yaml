@@ -47,7 +47,7 @@ services:
       - key: NVIDIA_API_KEY
         sync: false
       - key: NVIDIA_EMBEDDING_MODEL
-        value: nvidia/nemotron-3-embed-1b
+        value: nvidia/nemotron-3.5-embed-1b
       - key: NVIDIA_EMBEDDING_DIMENSION
         value: "2048"
       - key: NVIDIA_EMBEDDING_BASE_URL
@@ -55,9 +55,9 @@ services:
       - key: NVIDIA_EMBEDDING_TIMEOUT_SECONDS
         value: "30"
       - key: NVIDIA_RERANK_MODEL
-        value: nvidia/llama-nemotron-rerank-vl-1b-v2
+        value: nvidia/nemotron-3.5-rerank-8b
       - key: NVIDIA_RERANK_ENDPOINT
-        value: https://ai.api.nvidia.com/v1/retrieval/nvidia/llama-nemotron-rerank-vl-1b-v2/reranking
+        value: https://ai.api.nvidia.com/v1/retrieval/nvidia/nemotron-3.5-rerank-8b/reranking
       - key: NVIDIA_RERANK_TIMEOUT_SECONDS
         value: "30"
       - key: TTS_PROVIDER

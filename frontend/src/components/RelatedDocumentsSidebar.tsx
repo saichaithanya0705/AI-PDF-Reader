@@ -1,21 +1,30 @@
 import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usePDF } from '../context/usePDF';
-import { ExternalLink, FileText } from 'lucide-react';
+import { ExternalLink, FileText, X } from 'lucide-react';
 
 interface RelatedDocumentsSidebarProps {
   currentDocumentId?: string;
+  mobileOpen?: boolean;
+  onCloseMobile?: () => void;
 }
 
-const RelatedDocumentsSidebar: React.FC<RelatedDocumentsSidebarProps> = ({ currentDocumentId }) => {
+const RelatedDocumentsSidebar: React.FC<RelatedDocumentsSidebarProps> = ({
+  currentDocumentId,
+  mobileOpen = false,
+  onCloseMobile,
+}) => {
   const { documents, crossDocumentSections, fetchAllDocuments } = usePDF();
   const navigate = useNavigate();
 
   useEffect(() => {
-    fetchAllDocuments();
-  }, [fetchAllDocuments]);
+    if (documents.length === 0) {
+      fetchAllDocuments();
+    }
+  }, [documents.length, fetchAllDocuments]);
 
   const handleNavigate = (docId: string, page: number = 1) => {
+    onCloseMobile?.();
     navigate(`/reader/${docId}?page=${page}`);
   };
 
@@ -23,14 +32,26 @@ const RelatedDocumentsSidebar: React.FC<RelatedDocumentsSidebarProps> = ({ curre
     return null;
   }
 
-  return (
-    <aside className="hidden h-full w-phi-sidebar shrink-0 flex-col overflow-hidden border-r border-[rgba(25,24,22,0.09)] bg-paper-50 lg:flex">
+  const sidebarContent = (
+    <>
       <div className="border-b border-[rgba(25,24,22,0.08)] px-phi-4 py-phi-3">
         <div className="flex items-center justify-between gap-phi-2">
           <h3 className="text-phi-xs font-medium text-ink-primary">Workspace PDFs</h3>
-          <span className="font-mono text-phi-2xs tabular-nums text-ink-muted">
-            {documents.length}
-          </span>
+          <div className="flex items-center gap-phi-2">
+            <span className="font-mono text-phi-2xs tabular-nums text-ink-muted">
+              {documents.length}
+            </span>
+            {onCloseMobile && (
+              <button
+                type="button"
+                onClick={onCloseMobile}
+                className="inline-flex h-phi-ctrl-sm w-phi-ctrl-sm items-center justify-center rounded-phi-sm text-ink-muted hover:bg-paper-200 hover:text-ink-primary xl:hidden"
+                aria-label="Close workspace files"
+              >
+                <X className="h-4 w-4" strokeWidth={1.5} />
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -122,7 +143,28 @@ const RelatedDocumentsSidebar: React.FC<RelatedDocumentsSidebarProps> = ({ curre
           </div>
         )}
       </div>
-    </aside>
+    </>
+  );
+
+  return (
+    <>
+      <aside className="hidden h-full w-phi-sidebar shrink-0 flex-col overflow-hidden border-r border-[rgba(25,24,22,0.09)] bg-paper-50 xl:flex">
+        {sidebarContent}
+      </aside>
+      {mobileOpen && (
+        <div className="fixed inset-0 z-40 flex xl:hidden" role="dialog" aria-modal="true" aria-label="Workspace PDFs">
+          <button
+            type="button"
+            aria-label="Close workspace sidebar backdrop"
+            className="flex-1 bg-ink-primary/35 backdrop-blur-[1px]"
+            onClick={onCloseMobile}
+          />
+          <aside className="order-first flex h-full w-phi-sidebar max-w-[85vw] flex-col overflow-hidden border-r border-[rgba(25,24,22,0.12)] bg-paper-50 shadow-float">
+            {sidebarContent}
+          </aside>
+        </div>
+      )}
+    </>
   );
 };
 

@@ -262,6 +262,7 @@ export interface SendChatMessageResponse {
   sources?: unknown;
   context?: unknown;
   session_id?: string;
+  success?: boolean;
 }
 
 export interface DeleteChatSessionResponse {
@@ -377,6 +378,7 @@ const parseSendChatMessageResponse = (value: unknown): SendChatMessageResponse =
     sources: value.sources,
     context: value.context,
     session_id: value.session_id,
+    success: typeof value.success === 'boolean' ? value.success : undefined,
   };
 }
 
@@ -659,7 +661,7 @@ export async function publicApiRequest<T = unknown>(
 }
 
 export async function healthCheck() {
-  return publicApiRequest('/health');
+  return publicApiRequest('/api/health');
 }
 
 export async function getConfig() {

@@ -14,7 +14,7 @@ const getApiUrl = (): string => {
 
   // Vercel and Render use different origins, so production must provide the
   // Render service URL explicitly instead of guessing a port on this host.
-  return 'http://localhost:8000';
+  return 'http://localhost:8080';
 };
 
 const getWsUrl = (): string => {
@@ -35,7 +35,7 @@ const getWsUrl = (): string => {
   }
 
   // Fallback
-  return 'ws://localhost:8000';
+  return 'ws://localhost:8080';
 };
 
 export const API_URL = getApiUrl();

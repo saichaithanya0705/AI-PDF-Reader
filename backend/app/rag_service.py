@@ -89,7 +89,7 @@ def format_retrieval_result(result: SearchResult, snippet_chars: int = 200) -> D
         "page_number": getattr(result, "page_number", None) or 1,
         "section_title": metadata.get("section_title") or metadata.get("heading") or "Relevant section",
         "text": snippet,
-        "file_path": metadata.get("file_path", ""),
+        "file_path": "",
     }
     formatted.update(retrieval_score_fields(result))
     return formatted
@@ -672,10 +672,15 @@ class RAGService:
             # Build context from search results
             context_parts = []
             for i, result in enumerate(final_results, 1):
-                doc_name = (result.metadata or {}).get('document_name', 'Unknown')
-                context_parts.append(
-                    f"[Page {result.page_number}]\n{result.chunk_text}"
-                )
+                doc_name = (result.metadata or {}).get('document_name', 'Unknown Document')
+                if document_id:
+                    context_parts.append(
+                        f"[Page {result.page_number}]\n{result.chunk_text}"
+                    )
+                else:
+                    context_parts.append(
+                        f"[{doc_name} - Page {result.page_number}]\n{result.chunk_text}"
+                    )
 
             context = "\n\n".join(context_parts)
 
@@ -742,6 +747,7 @@ FORMATTING:
             sources = [
                 {
                     'page': result.page_number,
+                    'page_number': result.page_number,
                     'text': result.chunk_text[:200] + '...' if len(result.chunk_text) > 200 else result.chunk_text,
                     'document_id': result.document_id,
                     'document_name': (result.metadata or {}).get('document_name', 'Unknown'),

@@ -22,6 +22,16 @@ type AuthContextValue = {
 
 export const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+const clearCachedWorkspaceState = () => {
+  try {
+    localStorage.removeItem('pdf-documents');
+    localStorage.removeItem('documents');
+    localStorage.removeItem('currentClientId');
+  } catch {
+    // Ignore storage access errors in restricted environments.
+  }
+};
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -66,6 +76,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setIsPasswordRecovery(true);
       } else if (event === 'SIGNED_OUT') {
         setIsPasswordRecovery(false);
+        clearCachedWorkspaceState();
       }
       setSession(newSession ?? null);
       setUser(newSession?.user ?? null);
@@ -127,6 +138,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const signOut: AuthContextValue['signOut'] = async () => {
+    clearCachedWorkspaceState();
     if (isDevAuthBypassEnabled()) {
       setUser(getDevelopmentUser());
       setSession(null);

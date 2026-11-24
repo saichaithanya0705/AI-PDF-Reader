@@ -1,4 +1,12 @@
+import logging
 import os
+
+import requests
+
+logger = logging.getLogger(__name__)
+
+DEFAULT_NVIDIA_CHAT_BASE_URL = "https://integrate.api.nvidia.com/v1"
+DEFAULT_NVIDIA_CHAT_MODEL = "nvidia/nemotron-3.5-bolt-e4b"
 
 # Try to import langchain components, fallback if not available
 try:
@@ -71,21 +79,83 @@ Usage:
     response = get_llm_response(messages)
 """
 
+def _is_nvidia_fallback_enabled() -> bool:
+    api_key = (os.getenv("NVIDIA_API_KEY") or "").strip()
+    disabled = os.getenv("DISABLE_NVIDIA_LLM_FALLBACK", "").strip().lower() in ("1", "true", "yes")
+    return bool(api_key) and not disabled
+
+
+def _normalize_chat_messages(messages):
+    if isinstance(messages, str):
+        return [{"role": "user", "content": messages}]
+    normalized = []
+    for msg in messages or []:
+        if isinstance(msg, dict):
+            role = str(msg.get("role") or "user")
+            content = str(msg.get("content") or "")
+        else:
+            role = str(getattr(msg, "role", "user") or "user")
+            content = str(getattr(msg, "content", msg) or "")
+        normalized.append({"role": role, "content": content})
+    return normalized
+
+
+def _call_nvidia_chat(messages, max_tokens: int = 1600, temperature: float = 0.4) -> str:
+    api_key = (os.getenv("NVIDIA_API_KEY") or "").strip()
+    if not api_key:
+        raise ValueError("NVIDIA_API_KEY environment variable must be set for NVIDIA chat")
+
+    base_url = (os.getenv("NVIDIA_CHAT_BASE_URL") or DEFAULT_NVIDIA_CHAT_BASE_URL).strip().rstrip("/")
+    model_name = (os.getenv("NVIDIA_CHAT_MODEL") or DEFAULT_NVIDIA_CHAT_MODEL).strip()
+    normalized = _normalize_chat_messages(messages)
+
+    response = requests.post(
+        f"{base_url}/chat/completions",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": model_name,
+            "messages": normalized,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+        },
+        timeout=45,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    choices = payload.get("choices") or []
+    if not choices:
+        raise RuntimeError("NVIDIA chat endpoint returned no choices")
+    content = (choices[0].get("message") or {}).get("content")
+    if not isinstance(content, str) or not content.strip():
+        raise RuntimeError("NVIDIA chat endpoint returned empty content")
+    return content.strip()
+
+
 def get_llm_response(messages):
     provider = os.getenv("LLM_PROVIDER", "gemini").lower()
 
-    # Use messages in current format directly
+    if provider == "nvidia":
+        return _call_nvidia_chat(messages)
 
     if provider == "gemini":
         # Use direct google-generativeai library instead of langchain
         try:
             import google.generativeai as genai
             from google.api_core import exceptions as google_exceptions
-        except ImportError:
-            raise RuntimeError("google-generativeai not available. Please install it: pip install google-generativeai")
+        except ImportError as exc:
+            if _is_nvidia_fallback_enabled():
+                logger.warning("google-generativeai missing; falling back to NVIDIA NIM chat")
+                return _call_nvidia_chat(messages)
+            raise RuntimeError("google-generativeai not available. Please install it: pip install google-generativeai") from exc
 
         api_key = os.getenv("GOOGLE_API_KEY")
         if not api_key:
+            if _is_nvidia_fallback_enabled():
+                logger.warning("GOOGLE_API_KEY not set; falling back to NVIDIA NIM chat")
+                return _call_nvidia_chat(messages)
             raise ValueError("GOOGLE_API_KEY environment variable must be set for Gemini")
 
         # Configure the API
@@ -118,7 +188,7 @@ def get_llm_response(messages):
             chat_history.append({"role": "user", "parts": [user_message_part]})
 
         # Initialize model with system instruction if present
-        model_name = os.getenv("GEMINI_MODEL", 'gemini-2.0-flash')
+        model_name = os.getenv("GEMINI_MODEL", 'gemini-2.5-flash')
         try:
             if system_instruction:
                 model = genai.GenerativeModel(model_name, system_instruction=system_instruction)
@@ -134,28 +204,31 @@ def get_llm_response(messages):
                  chat_history.insert(1, {"role": "model", "parts": ["Understood."]})
 
         try:
-            # Start chat with history (excluding the very last message which is the new prompt)
-            # Actually, start_chat logic is stateful. 
-            # Better approach for stateless API usage: generate_content with full list?
-            # genai.GenerativeModel.generate_content accepts list of Content objects.
-            
-            # Use generate_content with the full history as specificied in docs for 'multi-turn' stateless
             response = model.generate_content(chat_history)
             return response.text
             
-        except google_exceptions.ResourceExhausted:
+        except google_exceptions.ResourceExhausted as e:
             print("⚠️ Gemini API quota exceeded (ResourceExhausted)")
-            return "I apologize, but the AI service is currently at capacity (Quota Exceeded). Please try again later."
+            if _is_nvidia_fallback_enabled():
+                logger.warning("Gemini quota exceeded; falling back to NVIDIA NIM chat")
+                return _call_nvidia_chat(messages)
+            raise RuntimeError("AI service is currently at capacity (Quota Exceeded).") from e
         except google_exceptions.InvalidArgument as e:
             print(f"❌ Gemini API InvalidArgument: {e}")
-            return f"I encountered an issue with the request format. (Error: InvalidArgument)"
+            if _is_nvidia_fallback_enabled():
+                logger.warning("Gemini request rejected; falling back to NVIDIA NIM chat")
+                return _call_nvidia_chat(messages)
+            raise RuntimeError(f"Gemini request rejected: {e}") from e
         except Exception as e:
+            if _is_nvidia_fallback_enabled():
+                logger.warning("Gemini error (%s); falling back to NVIDIA NIM chat", type(e).__name__)
+                return _call_nvidia_chat(messages)
             error_str = str(e).lower()
             if "quota" in error_str or "429" in error_str or "resourceexhausted" in error_str:
-                print("⚠️ Gemini API quota exceeded - using fallback response")
-                return "I apologize, but the AI service is currently at capacity. Please try again later."
+                print("⚠️ Gemini API quota exceeded")
+                raise RuntimeError("AI service is currently at capacity (Quota Exceeded).") from e
             print(f"❌ Gemini API error: {e}")
-            raise RuntimeError(f"Gemini call failed: {e}")
+            raise RuntimeError(f"Gemini call failed: {e}") from e
 
     elif provider == "azure":
         if not LANGCHAIN_OPENAI_AVAILABLE:

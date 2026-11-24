@@ -91,13 +91,10 @@ class AzureTTSProvider(TTSProvider):
                 text = text[:5000] + "..."
                 print(f"🔊 Truncated text to 5000 characters")
 
-            # Create synthesizer following exact ChatGPT example format
-            # ✅ Ensure this is not None and use_default_speaker=True as in example
-            audio_config = speechsdk.audio.AudioOutputConfig(use_default_speaker=True)
-
+            # Synthesize in-memory without touching server audio output devices (headless-safe)
             synthesizer = speechsdk.SpeechSynthesizer(
                 speech_config=self.speech_config,
-                audio_config=audio_config  # Following ChatGPT example exactly
+                audio_config=None,
             )
 
             # Generate speech using async method
@@ -115,10 +112,14 @@ class AzureTTSProvider(TTSProvider):
                 print(f"✅ Azure TTS success: {len(result.audio_data)} bytes")
                 return result.audio_data
             elif result.reason == speechsdk.ResultReason.Canceled:
-                cancellation_details = speechsdk.CancellationDetails(result)
-                error_msg = f"TTS canceled: {cancellation_details.reason}"
-                if cancellation_details.error_details:
-                    error_msg += f" - {cancellation_details.error_details}"
+                cancellation_details = getattr(result, "cancellation_details", None)
+                if cancellation_details is None and hasattr(speechsdk, "CancellationDetails"):
+                    cancellation_details = speechsdk.CancellationDetails(result)
+                reason = getattr(cancellation_details, "reason", "Canceled")
+                error_details = getattr(cancellation_details, "error_details", None)
+                error_msg = f"TTS canceled: {reason}"
+                if error_details:
+                    error_msg += f" - {error_details}"
                 print(f"❌ Azure TTS canceled: {error_msg}")
                 raise Exception(error_msg)
             else:

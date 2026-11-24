@@ -163,6 +163,111 @@ class LLMProvider(ABC):
 
 
 
+DEFAULT_NVIDIA_CHAT_BASE_URL = "https://integrate.api.nvidia.com/v1"
+DEFAULT_NVIDIA_CHAT_MODEL = "nvidia/nemotron-3.5-bolt-e4b"
+
+
+def _coerce_chat_messages(messages: List[Any]) -> List[Dict[str, str]]:
+    coerced: List[Dict[str, str]] = []
+    for msg in messages:
+        if isinstance(msg, dict):
+            role = str(msg.get("role") or "user")
+            content = str(msg.get("content") or "")
+        else:
+            role_attr = getattr(msg, "type", None) or getattr(msg, "role", None) or "user"
+            role = "assistant" if role_attr == "ai" else ("user" if role_attr == "human" else str(role_attr))
+            content = str(getattr(msg, "content", msg) or "")
+        coerced.append({"role": role, "content": content})
+    return coerced
+
+
+class NvidiaLLMProvider(LLMProvider):
+    """Hosted NVIDIA NIM OpenAI-compatible chat provider."""
+
+    def __init__(self):
+        self.api_key = (os.getenv("NVIDIA_API_KEY") or "").strip()
+        if not self.api_key:
+            raise ValueError("NVIDIA_API_KEY not provided")
+        self.base_url = (os.getenv("NVIDIA_CHAT_BASE_URL") or DEFAULT_NVIDIA_CHAT_BASE_URL).strip().rstrip("/")
+        self.model_name = (os.getenv("NVIDIA_CHAT_MODEL") or DEFAULT_NVIDIA_CHAT_MODEL).strip()
+
+    def _post_chat_sync(
+        self,
+        messages: List[Dict[str, str]],
+        max_tokens: int = 1200,
+        temperature: float = 0.3,
+    ) -> LLMResponse:
+        response = requests.post(
+            f"{self.base_url}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": self.model_name,
+                "messages": messages,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+            },
+            timeout=45,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        choices = payload.get("choices") or []
+        if not choices:
+            raise RuntimeError("NVIDIA NIM chat API returned no choices")
+        content = (choices[0].get("message") or {}).get("content")
+        if not isinstance(content, str) or not content.strip():
+            raise RuntimeError("NVIDIA NIM chat API returned empty content")
+        return LLMResponse(
+            content=content.strip(),
+            usage=_usage_to_dict(payload.get("usage")),
+            model=self.model_name,
+        )
+
+    async def generate_text(self, prompt: str, max_tokens: int = 1000) -> LLMResponse:
+        return await asyncio.to_thread(
+            self._post_chat_sync,
+            [{"role": "user", "content": prompt}],
+            max_tokens,
+        )
+
+    async def generate_chat_response(self, messages: List[Dict[str, str]]) -> str:
+        response = await asyncio.to_thread(
+            self._post_chat_sync,
+            _coerce_chat_messages(messages),
+            1400,
+        )
+        return response.content
+
+    async def generate_insights(self, content: str, persona: str, job: str) -> List[Dict[str, Any]]:
+        prompt = f"""
+You are an AI assistant helping a {persona} with: {job}
+
+Analyze this content and provide 4 insights in a valid JSON array:
+
+Content: {content[:10000]}
+
+Return ONLY valid JSON array:
+[{{"type": "key-insight", "title": "...", "content": "...", "relevance": 0.9}}]
+"""
+        response = await self.generate_text(prompt, max_tokens=1200)
+        insights = _parse_json_list(response.content)
+        if not insights:
+            raise RuntimeError("NVIDIA NIM returned invalid JSON insights")
+        return insights
+
+    async def generate_snippets(
+        self, selected_text: str, related_sections: List[Dict], persona: str, job: str
+    ) -> List[Dict[str, Any]]:
+        return await _generate_snippets_with_model(self, selected_text, related_sections, persona, job)
+
+    async def find_cross_document_connections(
+        self, selected_text: str, all_sections: List[Dict], persona: str, job: str
+    ) -> List[Dict[str, Any]]:
+        return await _find_connections_with_model(self, selected_text, all_sections, persona, job)
+
+
 class GeminiProvider(LLMProvider):
     def __init__(self):
         # Initialize primary model (Gemini) via LangChain with explicit API key
@@ -188,15 +293,37 @@ class GeminiProvider(LLMProvider):
 
         # Initialize fallback provider (Anthropic) via LangChain
         self.fallback_model = None
-        if os.getenv('ANTHROPIC_API_KEY') and init_chat_model is not None:
+        anthropic_base = (os.getenv("ANTHROPIC_BASE_URL") or "").strip().lower()
+        is_localhost_base = any(
+            host in anthropic_base for host in ("localhost", "127.0.0.1", "0.0.0.0")
+        )
+        allow_fallback = (
+            os.getenv("ENABLE_ANTHROPIC_FALLBACK", "").strip().lower() in ("1", "true", "yes")
+            or not is_localhost_base
+        )
+        if os.getenv("ANTHROPIC_API_KEY") and allow_fallback and init_chat_model is not None:
             try:
-                fallback_name = os.getenv('ANTHROPIC_MODEL', 'claude-3-haiku-20240307')
+                fallback_name = os.getenv("ANTHROPIC_MODEL", "claude-3-haiku-20240307")
                 self.fallback_model = init_chat_model(fallback_name, model_provider="anthropic")
                 print(f"✅ Fallback provider (Anthropic) initialized: {fallback_name}")
             except Exception as e:
                 print(f"⚠️ Failed to initialize fallback provider: {e}")
-        elif os.getenv('ANTHROPIC_API_KEY'):
+        elif os.getenv("ANTHROPIC_API_KEY") and not allow_fallback:
+            print("⚠️ Skipping Anthropic fallback because ANTHROPIC_BASE_URL points to localhost")
+        elif os.getenv("ANTHROPIC_API_KEY"):
             print("⚠️ LangChain is not installed, Anthropic fallback will not be available")
+
+        # Initialize secondary fallback provider (NVIDIA NIM) when NVIDIA_API_KEY is available
+        self.nvidia_fallback: Optional[NvidiaLLMProvider] = None
+        disable_nvidia_fallback = (
+            os.getenv("DISABLE_NVIDIA_LLM_FALLBACK", "").strip().lower() in ("1", "true", "yes")
+        )
+        if (os.getenv("NVIDIA_API_KEY") or "").strip() and not disable_nvidia_fallback:
+            try:
+                self.nvidia_fallback = NvidiaLLMProvider()
+                print(f"✅ Secondary fallback provider (NVIDIA NIM) initialized: {self.nvidia_fallback.model_name}")
+            except Exception as e:
+                print(f"⚠️ Failed to initialize NVIDIA NIM fallback provider: {e}")
 
         # Keep raw imports for PDF-specific multimodal features if needed
         # (Legacy support for generate_insights_from_pdf)
@@ -211,28 +338,38 @@ class GeminiProvider(LLMProvider):
             self.raw_genai = None
 
     async def generate_text(self, prompt: str, max_tokens: int = 1000) -> LLMResponse:
+        last_error: Optional[Exception] = None
         try:
-            # Try primary model
             if self.model:
                 response = await self.model.ainvoke(prompt)
                 return LLMResponse(
                     content=str(response.content),
                     model=self.model_name
                 )
-            else:
-                raise Exception("Gemini model not initialized")
+            last_error = RuntimeError("Gemini model not initialized")
         except Exception as e:
-            # Try fallback
-            if self.fallback_model:
-                print(f"❌ Gemini error: {e}. 🔄 Trying fallback to Anthropic...")
+            last_error = e
+
+        if self.fallback_model:
+            try:
+                print(f"❌ Gemini error: {last_error}. 🔄 Trying fallback to Anthropic...")
                 response = await self.fallback_model.ainvoke(prompt)
                 return LLMResponse(
                     content=str(response.content),
                     model=os.getenv('ANTHROPIC_MODEL', 'claude-3-haiku')
                 )
-            
-            print(f"❌ LLM API error: {e}")
-            raise Exception(f"All LLM providers failed: {str(e)}")
+            except Exception as fallback_error:
+                last_error = fallback_error
+
+        if self.nvidia_fallback:
+            try:
+                print("🔄 Trying secondary fallback to NVIDIA NIM...")
+                return await self.nvidia_fallback.generate_text(prompt, max_tokens=max_tokens)
+            except Exception as nvidia_error:
+                last_error = nvidia_error
+
+        print(f"❌ LLM API error: {last_error}")
+        raise RuntimeError(f"All LLM providers failed: {last_error}")
 
     async def generate_chat_response(self, messages: List[Dict[str, str]]) -> str:
         """Generate response handling either list of dicts or LangChain messages"""
@@ -260,26 +397,36 @@ class GeminiProvider(LLMProvider):
                     langchain_messages.append(msg)
 
             # Try primary model
-            if self.model:
-                response = await self.model.ainvoke(langchain_messages)
-                return str(response.content)
-            else:
-                raise Exception("Gemini model not initialized")
-                
-        except Exception as e:
-            # Try fallback
+            last_error: Optional[Exception] = None
+            try:
+                if self.model:
+                    response = await self.model.ainvoke(langchain_messages)
+                    return str(response.content)
+                last_error = RuntimeError("Gemini model not initialized")
+            except Exception as e:
+                last_error = e
+
             if self.fallback_model:
-                print(f"❌ Gemini chat error: {e}. 🔄 Trying fallback to Anthropic...")
-                # Fallback needs string or messages. Anthropic via LangChain supports messages.
+                print(f"❌ Gemini chat error: {last_error}. 🔄 Trying fallback to Anthropic...")
                 try:
                     response = await self.fallback_model.ainvoke(langchain_messages)
                     return str(response.content)
                 except Exception as fallback_error:
                     print(f"❌ Fallback failed: {fallback_error}")
-                    raise fallback_error
-            
-            print(f"❌ LLM API error: {e}")
-            raise Exception(f"All LLM providers failed: {str(e)}")
+                    last_error = fallback_error
+
+            if self.nvidia_fallback:
+                try:
+                    print("🔄 Trying secondary chat fallback to NVIDIA NIM...")
+                    return await self.nvidia_fallback.generate_chat_response(_coerce_chat_messages(messages))
+                except Exception as nvidia_error:
+                    last_error = nvidia_error
+
+            print(f"❌ LLM API error: {last_error}")
+            raise RuntimeError(f"All LLM providers failed: {last_error}")
+
+        except Exception as outer_error:
+            raise outer_error
 
     async def generate_insights_from_pdf(self, pdf_path: str, page: int, persona: str, job: str) -> List[Dict[str, Any]]:
         """Generate insights by sending the actual PDF file to Gemini (multimodal)"""
@@ -820,6 +967,8 @@ def get_llm_provider() -> LLMProvider:
         return AzureOpenAIProvider()
     elif provider_type == 'openai':
         return OpenAIProvider()
+    elif provider_type == 'nvidia':
+        return NvidiaLLMProvider()
     elif provider_type == 'ollama':
         return OllamaProvider()
     else:

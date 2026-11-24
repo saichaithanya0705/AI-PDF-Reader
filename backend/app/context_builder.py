@@ -83,7 +83,7 @@ async def build_library_context(db, user_id: str) -> Dict[str, Any]:
         # Recent uploads (top 5)
         sorted_docs = sorted(
             documents,
-            key=lambda d: d.upload_date or datetime.min,
+            key=lambda d: (d.upload_date.replace(tzinfo=None) if d.upload_date and d.upload_date.tzinfo is not None else (d.upload_date or datetime.min)),
             reverse=True
         )
         recent_uploads = [
@@ -101,7 +101,7 @@ async def build_library_context(db, user_id: str) -> Dict[str, Any]:
             doc_summaries.append({
                 'name': doc.original_name or doc.filename or 'Unknown',
                 'id': doc.id,
-                'pages': 'unknown', # page_count not in Document model
+                'pages': (doc.metadata or {}).get('page_count') or 'unknown',
                 'upload_date': doc.upload_date.isoformat() if doc.upload_date else None
             })
         
@@ -274,7 +274,7 @@ async def build_pdf_context(
             "current_document": {
                 "id": document_id,
                 "name": doc_name,
-                "upload_date": doc.upload_date,
+                "upload_date": doc.upload_date.isoformat() if doc.upload_date else None,
                 "file_size": doc.file_size,
                 "persona": doc.persona,
                 "job_role": doc.job_role
@@ -418,6 +418,16 @@ def _format_search_result(result) -> Dict[str, Any]:
     return format_retrieval_result(result, snippet_chars=200)
 
 
+def _format_library_passages_block(search_results: Optional[List[Dict[str, Any]]]) -> str:
+    if not search_results:
+        return ""
+    passages = [
+        f"[{entry.get('document_name') or 'Unknown Document'}, Page {entry.get('page_number') or entry.get('page') or 1}] {entry.get('text') or ''}"
+        for entry in search_results
+    ]
+    return "\n\nRelevant Library Passages:\n" + "\n".join(passages)
+
+
 def build_enriched_messages(
     user_message: str,
     context: Dict[str, Any],
@@ -449,9 +459,10 @@ def build_enriched_messages(
     # Add current user message with context
     if context.get('type') == 'library':
         stats = context.get('statistics', {})
+        passages_block = _format_library_passages_block(context.get('search_results'))
         context_info = (
             f"[Library Context - {stats.get('total_documents', 0)} documents, "
-            f"{stats.get('total_size_mb', 0)}MB total]\n\n{user_message}"
+            f"{stats.get('total_size_mb', 0)}MB total]{passages_block}\n\n{user_message}"
         )
     elif context.get('type') == 'pdf_viewer':
         doc_name = context.get('current_document', {}).get('name', 'Unknown')

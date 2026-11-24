@@ -65,6 +65,10 @@ export default {
         phi: '1.618fr 1fr',
         'phi-rev': '1fr 1.618fr',
       },
+      gridTemplateRows: {
+        phi: '1.618fr 1fr',
+        'phi-rev': '1fr 1.618fr',
+      },
       transitionDuration: {
         'phi-fast': '162ms',
         phi: '262ms',

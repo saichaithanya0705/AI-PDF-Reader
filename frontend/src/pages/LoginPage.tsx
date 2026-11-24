@@ -10,6 +10,8 @@ import BrandMark from '../components/BrandMark';
 type LoginLocationState = {
   from?: {
     pathname?: string;
+    search?: string;
+    hash?: string;
   };
   message?: string;
 };
@@ -24,7 +26,9 @@ const LoginPage = () => {
   const [formError, setFormError] = useState<string | null>(null);
 
   const locationState = location.state as LoginLocationState | null;
-  const from = locationState?.from?.pathname || '/library';
+  const from = locationState?.from?.pathname
+    ? `${locationState.from.pathname}${locationState.from.search || ''}${locationState.from.hash || ''}`
+    : '/library';
   const successMessage = locationState?.message;
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {

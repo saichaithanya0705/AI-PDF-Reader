@@ -25,6 +25,7 @@ try:
     from fastapi.middleware.cors import CORSMiddleware
     import os
     import json
+    import tempfile
     import warnings
     import fitz  # PyMuPDF for PDF merging
     import hashlib
@@ -46,7 +47,7 @@ try:
     # Load from project root
     env_path = Path(__file__).parent.parent.parent / '.env'
     if env_path.exists():
-        load_dotenv(env_path, override=True)
+        load_dotenv(env_path, override=False)
         print(f"✅ Loaded environment variables from {env_path}")
     else:
         print(f"⚠️ No .env file found at {env_path}")
@@ -240,14 +241,6 @@ def _cors_origins() -> list:
     return origins or ["http://localhost:5173"]
 
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=_cors_origins(),
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 from starlette.middleware.base import BaseHTTPMiddleware
 from .middleware.rate_limiter import default_limiter
 
@@ -255,13 +248,29 @@ from .middleware.rate_limiter import default_limiter
 class RateLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
         path = request.url.path
-        if path.startswith("/api/") or path.startswith("/upload"):
+        if request.method != "OPTIONS" and path != "/api/health" and (
+            path.startswith("/api/") or path.startswith("/upload")
+        ):
             client = request.client.host if request.client else "unknown"
-            default_limiter.check_rate_limit(client, path)
+            try:
+                default_limiter.check_rate_limit(client, path)
+            except HTTPException as exc:
+                return JSONResponse(
+                    status_code=exc.status_code,
+                    content={"detail": exc.detail},
+                    headers=exc.headers,
+                )
         return await call_next(request)
 
 
 app.add_middleware(RateLimitMiddleware)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins(),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Mount static files BEFORE API routes to prevent route conflicts
 # Try multiple possible paths for frontend
@@ -450,7 +459,7 @@ async def upload_context_files(
         try:
             content = await file.read()
             original_name = _canonical_pdf_filename(file.filename)
-            _validate_pdf_bytes(content, original_name)
+            page_count = _validate_pdf_bytes(content, original_name)
             file_hash = hashlib.sha256(content).hexdigest()
 
             existing = db.find_duplicate_by_hash(file_hash, client_id=user_id)
@@ -485,6 +494,7 @@ async def upload_context_files(
                 persona=persona,
                 job_role=job,
                 file_hash=file_hash,
+                metadata={"page_count": page_count},
             )
             document_ids.append(doc.id)
 
@@ -547,7 +557,7 @@ async def upload_active_file(
     user_id = resolve_user_id(current_user, client_id)
     file_content = await file.read()
     original_name = _canonical_pdf_filename(file.filename)
-    _validate_pdf_bytes(file_content, original_name)
+    page_count = _validate_pdf_bytes(file_content, original_name)
     file_hash = hashlib.sha256(file_content).hexdigest()
 
     existing = db.find_duplicate_by_hash(file_hash, client_id=user_id)
@@ -585,6 +595,7 @@ async def upload_active_file(
             persona=persona,
             job_role=job,
             file_hash=file_hash,
+            metadata={"page_count": page_count},
         )
     except Exception as e:
         print(f"❌ Failed to create document record: {e}")
@@ -613,7 +624,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
         while True:
             await websocket.receive_text() # Keep connection alive
     except WebSocketDisconnect:
-        manager.disconnect(client_id)
+        manager.disconnect(client_id, websocket)
         print(f"Client #{client_id} disconnected")
 
 # --- Frontend Serving ---
@@ -638,6 +649,12 @@ async def get_frontend():
 async def healthcheck():
     """Lightweight liveness check used by Render and container runtimes."""
     return {"status": "ok"}
+
+
+@app.get("/health", include_in_schema=False)
+async def public_health():
+    """Public health alias matching frontend health check helper."""
+    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
 
 @app.get("/config")
@@ -682,7 +699,7 @@ def _recommendation_from_retrieval_result(result: Any, doc_name_cache: Dict[str,
         "documentId": document_id,
         "documentName": doc_name_cache.get(document_id, formatted.get("document_name", "Unknown Document")),
         "bbox": None,
-        "file_path": formatted.get("file_path", ""),
+        "file_path": "",
     }
 
 
@@ -860,12 +877,7 @@ async def get_insights(
         try:
             import fitz  # PyMuPDF
 
-            # Handle both absolute and relative paths
-            pdf_path = Path(document.file_path)
-            if not pdf_path.is_absolute():
-                # If relative, make it relative to the backend directory
-                backend_dir = Path(__file__).parent.parent
-                pdf_path = backend_dir / pdf_path
+            pdf_path = _document_pdf_path(document)
 
             print(f"🔍 Looking for PDF at: {pdf_path}")
             print(f"🔍 Absolute path: {pdf_path.absolute()}")
@@ -1011,16 +1023,17 @@ async def generate_podcast(
                 # Try to extract content from the PDF after tenant and storage checks.
                 pdf_path = _document_pdf_path(document)
                 _validate_pdf_file(pdf_path)
-                import PyPDF2
-                with open(pdf_path, 'rb') as file:
-                    pdf_reader = PyPDF2.PdfReader(file)
-                    if page <= len(pdf_reader.pages):
-                        page_content = pdf_reader.pages[page - 1].extract_text()
+                pdf_doc = fitz.open(str(pdf_path))
+                try:
+                    if page <= len(pdf_doc):
+                        page_content = pdf_doc[page - 1].get_text()
                         content = page_content[:2000]  # Limit for reasonable audio length
                         title = f"{document.original_name} - Page {page}"
                         print(f"📄 Using PDF content ({len(content)} chars)")
                     else:
                         raise HTTPException(status_code=422, detail="Requested page is outside the PDF page range")
+                finally:
+                    pdf_doc.close()
             except HTTPException:
                 raise
             except Exception as e:
@@ -1039,8 +1052,10 @@ async def generate_podcast(
         try:
             audio_data = await tts_service.generate_podcast(content, title)
 
-            # Save with a document-bound filename so playback can be authorized later.
-            filename = f"podcast_{document_id}_{page}_{hash(content) % 10000}.wav"
+            # Save with a document-bound filename matching the actual audio format.
+            audio_ext = "wav" if audio_data.startswith(b"RIFF") else "mp3"
+            content_digest = abs(hash(content)) % 10000
+            filename = f"podcast_{document_id}_{page}_{content_digest}.{audio_ext}"
             audio_dir = DATA_DIR / "temp_audio"
             audio_dir.mkdir(parents=True, exist_ok=True)
             audio_file = _safe_child_path(audio_dir, filename)
@@ -1294,11 +1309,8 @@ async def ask_gemini_selection(request: dict, current_user: dict = Depends(get_c
         try:
             import fitz  # PyMuPDF
 
-            # Handle both absolute and relative paths
-            pdf_path = Path(document.file_path)
-            if not pdf_path.is_absolute():
-                backend_dir = Path(__file__).parent.parent
-                pdf_path = backend_dir / pdf_path
+            # Resolve both local and remote storage locations through document storage
+            pdf_path = _document_pdf_path(document)
 
             if pdf_path.exists():
                 pdf_doc = fitz.open(pdf_path)
@@ -1374,8 +1386,15 @@ async def get_section_highlights(
         if not recommendations:
             return {"highlights": [], "annotations": []}
 
-        # Get highlight coordinates
-        highlights = highlighter.get_section_highlights(document_id, page, recommendations)
+        # Resolve document PDF path and get highlight coordinates
+        document = db.get_document_by_id(document_id, client_id=current_user["sub"])
+        resolved_pdf_path = str(_document_pdf_path(document)) if document else None
+        highlights = highlighter.get_section_highlights(
+            document_id,
+            page,
+            recommendations,
+            pdf_path=resolved_pdf_path,
+        )
 
         # Create overlay data for frontend
         overlay_data = highlighter.create_highlight_overlay_data(highlights)
@@ -1457,20 +1476,22 @@ async def split_document(request: Request, current_user: dict = Depends(get_curr
             # Create new document for this split
             split_doc = fitz.open()
             split_doc.insert_pdf(source_doc, from_page=start_page, to_page=end_page)
+            split_page_count = end_page - start_page + 1
 
-            # Save split document
+            # Save split document to a temporary directory before persisting to storage
             output_document_id = str(uuid.uuid4())
             output_filename = f"{output_document_id}_{output_display_name}"
-            output_path = _safe_docs_path(output_filename)
-            split_doc.save(str(output_path))
-            split_doc.close()
-            _validate_pdf_file(output_path)
-
-            # Calculate file hash and size
             output_location = None
             try:
-                file_size = output_path.stat().st_size
-                output_content = output_path.read_bytes()
+                with tempfile.TemporaryDirectory() as tmp_dir:
+                    temp_output_path = Path(tmp_dir) / output_filename
+                    split_doc.save(str(temp_output_path))
+                    split_doc.close()
+                    if temp_output_path.stat().st_size > MAX_PDF_TRANSFORM_BYTES:
+                        raise HTTPException(status_code=413, detail="Split PDF exceeds size limit")
+                    output_content = temp_output_path.read_bytes()
+                _validate_pdf_bytes(output_content, output_display_name)
+                file_size = len(output_content)
                 file_hash = hashlib.sha256(output_content).hexdigest()
                 output_location = get_document_storage().store_pdf(
                     user_id=user_id,
@@ -1487,7 +1508,8 @@ async def split_document(request: Request, current_user: dict = Depends(get_curr
                     client_id=user_id,
                     persona=document.persona or "System",
                     job_role=document.job_role or "PDF Split",
-                    file_hash=file_hash
+                    file_hash=file_hash,
+                    metadata={"page_count": split_page_count},
                 )
 
                 created_documents.append({
@@ -1495,18 +1517,19 @@ async def split_document(request: Request, current_user: dict = Depends(get_curr
                     "name": output_display_name,
                     "filename": output_filename,
                     "size": file_size,
-                    "pages": end_page - start_page + 1,
+                    "pages": split_page_count,
                     "page_range": f"{start_page+1}-{end_page+1}"
                 })
 
+            except HTTPException:
+                _delete_document_location_quietly(output_location)
+                raise
             except Exception as persistence_error:
                 _delete_document_location_quietly(output_location)
                 raise HTTPException(
                     status_code=500,
                     detail=f"Failed to persist split document: {str(persistence_error)}",
                 )
-            finally:
-                output_path.unlink(missing_ok=True)
 
         source_doc.close()
 
@@ -1588,18 +1611,20 @@ async def merge_documents(request: Request, current_user: dict = Depends(get_cur
             total_pages += page_count
             print(f"    Added {page_count} pages (total: {total_pages})")
 
-        # Save merged PDF
+        # Save merged PDF to a temporary directory before persisting to storage
         output_document_id = str(uuid.uuid4())
         output_filename = f"{output_document_id}_{output_display_name}"
-        output_path = _safe_docs_path(output_filename)
-        merged_doc.save(str(output_path))
-        merged_doc.close()
-        _validate_pdf_file(output_path)
-
         output_location = None
         try:
-            file_size = output_path.stat().st_size
-            output_content = output_path.read_bytes()
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                temp_output_path = Path(tmp_dir) / output_filename
+                merged_doc.save(str(temp_output_path))
+                merged_doc.close()
+                if temp_output_path.stat().st_size > MAX_PDF_TRANSFORM_BYTES:
+                    raise HTTPException(status_code=413, detail="Merged PDF exceeds size limit")
+                output_content = temp_output_path.read_bytes()
+            _validate_pdf_bytes(output_content, output_display_name)
+            file_size = len(output_content)
             file_hash = hashlib.sha256(output_content).hexdigest()
             output_location = get_document_storage().store_pdf(
                 user_id=user_id,
@@ -1616,17 +1641,19 @@ async def merge_documents(request: Request, current_user: dict = Depends(get_cur
                 client_id=user_id,
                 persona="System",
                 job_role="PDF Merge",
-                file_hash=file_hash
+                file_hash=file_hash,
+                metadata={"page_count": total_pages},
             )
             new_doc_id = new_document.id
+        except HTTPException:
+            _delete_document_location_quietly(output_location)
+            raise
         except Exception as persistence_error:
             _delete_document_location_quietly(output_location)
             raise HTTPException(
                 status_code=500,
                 detail=f"Failed to persist merged document: {str(persistence_error)}",
             )
-        finally:
-            output_path.unlink(missing_ok=True)
 
         print(f"✅ Successfully merged {len(documents)} documents into: {output_name}.pdf")
         print(f"📊 Total pages: {total_pages}, File size: {file_size} bytes")
@@ -1773,6 +1800,20 @@ async def chat_endpoint(
             
             response_text = rag_result['response']
             sources = rag_result.get('sources', [])
+            if rag_result.get('error'):
+                return JSONResponse(
+                    status_code=502,
+                    content={
+                        "response": response_text,
+                        "sources": [],
+                        "context": context,
+                        "has_context": False,
+                        "success": False,
+                        "session_id": session_id,
+                        "timestamp": datetime.now().isoformat(),
+                        "related_documents": [],
+                    },
+                )
 
             # Fetch cross-document suggestions for the "Related in Library" feature
             cross_doc_suggestions = []
@@ -1797,12 +1838,18 @@ async def chat_endpoint(
 
                 for result in cross_results:
                     formatted = format_retrieval_result(result, snippet_chars=150)
+                    cross_score = formatted.get('retrieval_score')
+                    if cross_score is None:
+                        cross_score = formatted.get('vector_similarity', formatted.get('similarity', 0.0))
+                    if (cross_score or 0.0) < CROSS_DOCUMENT_MIN_SCORE:
+                        continue
                     cross_doc_suggestions.append({
                         'document_id': formatted.get('document_id'),
                         'document_name': doc_name_cache.get(
                             formatted.get('document_id'),
                             formatted.get('document_name', 'Document'),
                         ),
+                        'page': formatted.get('page_number') or 1,
                         'page_number': formatted.get('page_number') or 1,
                         'text': formatted.get('text', ''),
                         'similarity': formatted.get('similarity', 0.0),
@@ -1878,10 +1925,20 @@ async def chat_endpoint(
                 metadata={'search_results': search_results, 'context_type': 'library'}
             )
             
+            library_sources = [
+                {
+                    **item,
+                    "page": item.get("page_number") or item.get("page") or 1,
+                    "page_number": item.get("page_number") or item.get("page") or 1,
+                }
+                for item in (search_results or [])
+            ]
             return {
                 "response": response_text,
+                "sources": library_sources,
+                "related_documents": library_sources,
                 "context": context,
-                "has_context": True,
+                "has_context": bool(library_sources),
                 "success": True,
                 "session_id": session_id,
                 "timestamp": datetime.now().isoformat()
@@ -1891,11 +1948,14 @@ async def chat_endpoint(
         raise
     except Exception:
         logger.exception("Chat endpoint error")
-        return {
-            "response": "I apologize, but I encountered an error processing your request.",
-            "success": False,
-            "timestamp": datetime.now().isoformat()
-        }
+        return JSONResponse(
+            status_code=502,
+            content={
+                "response": "I apologize, but I encountered an error processing your request.",
+                "success": False,
+                "timestamp": datetime.now().isoformat(),
+            },
+        )
 
 
 # RAG endpoints
@@ -1924,7 +1984,7 @@ async def process_document_for_rag(document_id: str, current_user: dict = Depend
                 "chunks_existing": existing_chunks,
             }
 
-        file_path = Path(document.file_path)
+        file_path = _document_pdf_path(document)
         if not file_path.exists():
             raise HTTPException(status_code=404, detail="Document file not found")
 

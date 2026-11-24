@@ -8,11 +8,14 @@ const VALUE_TEXT = '#57534e';
 
 const useWidth = <T extends HTMLElement>() => {
   const ref = useRef<T>(null);
-  const [width, setWidth] = useState(640);
+  const [width, setWidth] = useState(320);
   useEffect(() => {
-    if (!ref.current) return;
-    const observer = new ResizeObserver(([entry]) => setWidth(Math.max(280, entry.contentRect.width)));
-    observer.observe(ref.current);
+    const element = ref.current;
+    if (!element) return;
+    const measure = (nextWidth: number) => setWidth(Math.max(240, Math.floor(nextWidth)));
+    measure(element.getBoundingClientRect().width);
+    const observer = new ResizeObserver(([entry]) => measure(entry.contentRect.width));
+    observer.observe(element);
     return () => observer.disconnect();
   }, []);
   return [ref, width] as const;
@@ -70,8 +73,14 @@ export const GroupedMetricBars = ({ metrics, series, values }: GroupedBarsProps)
   const ticks = [0, 0.25, 0.5, 0.75, 1];
 
   return (
-    <div ref={ref} className="relative w-full" onMouseLeave={() => setTooltip(null)}>
-      <svg width={width} height={height} role="img" aria-label="Retrieval metric comparison by variant">
+    <div ref={ref} className="relative w-full min-w-0 overflow-hidden" onMouseLeave={() => setTooltip(null)}>
+      <svg
+        width={width}
+        height={height}
+        className="block w-full max-w-full"
+        role="img"
+        aria-label="Retrieval metric comparison by variant"
+      >
         {ticks.map((tick) => (
           <g key={tick}>
             <line x1={x(tick)} x2={x(tick)} y1={top} y2={height - 24} stroke={GRID} />
@@ -175,8 +184,14 @@ export const LatencyBars = ({ series, latency }: LatencyBarsProps) => {
   const ticks = Array.from({ length: Math.floor(axisMax / step) + 1 }, (_, i) => i * step);
 
   return (
-    <div ref={ref} className="relative w-full" onMouseLeave={() => setTooltip(null)}>
-      <svg width={width} height={height} role="img" aria-label="Retrieval latency by variant">
+    <div ref={ref} className="relative w-full min-w-0 overflow-hidden" onMouseLeave={() => setTooltip(null)}>
+      <svg
+        width={width}
+        height={height}
+        className="block w-full max-w-full"
+        role="img"
+        aria-label="Retrieval latency by variant"
+      >
         {ticks.map((tick) => (
           <g key={tick}>
             <line x1={x(tick)} x2={x(tick)} y1={top} y2={height - 24} stroke={GRID} />

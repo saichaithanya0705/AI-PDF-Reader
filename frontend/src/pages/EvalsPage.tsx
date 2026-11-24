@@ -91,7 +91,7 @@ const Section = ({
   actions?: React.ReactNode;
   children: React.ReactNode;
 }) => (
-  <section className="rounded-phi-lg border border-[rgba(25,24,22,0.09)] bg-app-surface p-phi-5 shadow-subtle">
+  <section className="min-w-0 rounded-phi-lg border border-[rgba(25,24,22,0.09)] bg-app-surface p-phi-5 shadow-subtle">
     <div className="mb-phi-5 flex flex-wrap items-start justify-between gap-phi-3">
       <div>
         <h2 className="text-phi-base font-medium text-ink-primary">{title}</h2>
@@ -707,11 +707,11 @@ const EvalsPage = () => {
             </a>
           }
         >
-          <div className="overflow-x-auto rounded-phi-md border border-[rgba(25,24,22,0.09)] bg-[#141415] p-phi-3">
+          <div className="overflow-hidden rounded-phi-md border border-[rgba(25,24,22,0.09)] bg-[#141415] p-phi-3">
             <img
               src="/architecture.svg"
               alt="Architecture diagram of Document Intelligence Studio: React frontend, FastAPI backend, RAG pipeline, Supabase, NVIDIA and LLM services, annotated with eval metrics"
-              className="min-w-[900px]"
+              className="block h-auto w-full"
             />
           </div>
           <p className="mt-phi-3 flex items-center gap-phi-2 text-phi-xs text-ink-muted">

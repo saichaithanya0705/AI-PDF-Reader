@@ -8,13 +8,13 @@ from dataclasses import dataclass
 # This is the active NVIDIA Build embedding model. Keep the dimension paired
 # with the model so get_vector_store() selects a fresh FAISS namespace on any
 # future migration instead of opening an incompatible index.
-DEFAULT_EMBEDDING_MODEL = "nvidia/nemotron-3-embed-1b"
+DEFAULT_EMBEDDING_MODEL = "nvidia/nemotron-3.5-embed-1b"
 DEFAULT_EMBEDDING_DIMENSION = 2048
 DEFAULT_EMBEDDING_BASE_URL = "https://integrate.api.nvidia.com/v1"
-DEFAULT_RERANK_MODEL = "nvidia/llama-nemotron-rerank-vl-1b-v2"
+DEFAULT_RERANK_MODEL = "nvidia/nemotron-3.5-rerank-8b"
 DEFAULT_RERANK_ENDPOINT = (
     "https://ai.api.nvidia.com/v1/retrieval/"
-    "nvidia/llama-nemotron-rerank-vl-1b-v2/reranking"
+    "nvidia/nemotron-3.5-rerank-8b/reranking"
 )
 
 
@@ -87,8 +87,11 @@ def load_nvidia_embedding_config() -> NvidiaEmbeddingConfig:
 def load_nvidia_reranker_config() -> NvidiaRerankerConfig:
     model_name = _required_text("NVIDIA_RERANK_MODEL", DEFAULT_RERANK_MODEL)
     endpoint = _https_endpoint("NVIDIA_RERANK_ENDPOINT", DEFAULT_RERANK_ENDPOINT)
-    expected_route = model_name.replace(".", "_")
-    if not endpoint.endswith(f"/{expected_route}/reranking"):
+    accepted_routes = (
+        f"/{model_name}/reranking",
+        f"/{model_name.replace('.', '_')}/reranking",
+    )
+    if not any(endpoint.endswith(route) for route in accepted_routes):
         raise ValueError("NVIDIA_RERANK_ENDPOINT must target NVIDIA_RERANK_MODEL")
     return NvidiaRerankerConfig(
         model_name=model_name,

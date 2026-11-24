@@ -85,3 +85,61 @@ def test_related_search_excludes_current_document_through_rag_service(monkeypatc
     ]
     assert results[0]["document_id"] == "doc-2"
     assert results[0]["lexical_overlap"] == 0.4
+
+
+def test_build_library_context_handles_mixed_timezone_upload_dates():
+    from datetime import datetime, timezone
+
+    docs = [
+        SimpleNamespace(
+            id="doc-aware",
+            original_name="Aware.pdf",
+            filename="aware.pdf",
+            upload_date=datetime(2026, 5, 1, tzinfo=timezone.utc),
+            file_size=1024,
+            status="processed",
+            metadata={"page_count": 4},
+        ),
+        SimpleNamespace(
+            id="doc-none",
+            original_name="None.pdf",
+            filename="none.pdf",
+            upload_date=None,
+            file_size=512,
+            status="uploaded",
+            metadata={},
+        ),
+    ]
+    fake_db = SimpleNamespace(get_all_documents=lambda client_id=None: docs)
+
+    context = asyncio.run(context_builder.build_library_context(fake_db, "user-1"))
+
+    assert context["statistics"]["total_documents"] == 2
+    assert context["document_summaries"][0]["id"] == "doc-aware"
+    assert context["document_summaries"][0]["pages"] == 4
+
+
+def test_build_enriched_messages_includes_library_search_results():
+    context = {
+        "type": "library",
+        "system_instruction": "Library assistant",
+        "statistics": {"total_documents": 2, "total_size_mb": 1.2},
+        "search_results": [
+            {
+                "document_id": "doc-1",
+                "document_name": "Cryogenics.pdf",
+                "page_number": 2,
+                "text": "Liquid helium maintains 4.2 K cooling loops.",
+            }
+        ],
+    }
+
+    messages = context_builder.build_enriched_messages(
+        user_message="What maintains 4.2 K cooling?",
+        context=context,
+        conversation_history=[],
+    )
+
+    last_user_content = messages[-1]["content"]
+    assert "Cryogenics.pdf" in last_user_content
+    assert "Liquid helium maintains 4.2 K cooling loops." in last_user_content

@@ -144,10 +144,11 @@ class DocumentIngestionService:
             return {"success": False, "error": "No documents supplied"}
 
         cleared_document_ids = set()
+        local_documents: List[Document] = []
         try:
             for document in documents:
                 local_path = self._local_document_path(document)
-                document = replace(document, file_path=str(local_path))
+                local_documents.append(replace(document, file_path=str(local_path)))
                 db.update_document(
                     document.id,
                     client_id=user_id,
@@ -158,7 +159,7 @@ class DocumentIngestionService:
                 self._clear_existing_ingestion(document.id, user_id)
 
             chunks = self.chunking_service.chunk_collection(
-                documents=documents,
+                documents=local_documents,
                 persona=persona,
                 job=job,
             )

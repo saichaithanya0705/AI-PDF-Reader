@@ -265,9 +265,9 @@ def build_svg(report: Optional[Dict[str, Any]]) -> str:
     svg.layer(700, 862, 340, 236, "External AI services", EXTERNAL)
     svg.component(720, 898, 300, 184, "NVIDIA · Google · Azure", [
         "NVIDIA embeddings:",
-        f"  {ingest.get('embedding_model', 'nvidia/nemotron-3-embed-1b')}",
+        f"  {ingest.get('embedding_model', 'nvidia/nemotron-3.5-embed-1b')}",
         "NVIDIA reranker:",
-        f"  {((report or {}).get('config') or {}).get('reranker_model', 'nvidia/llama-nemotron-rerank-vl-1b-v2').replace('nvidia/', '')}",
+        f"  {((report or {}).get('config') or {}).get('reranker_model', 'nvidia/nemotron-3.5-rerank-8b').replace('nvidia/', '')}",
         "Google Gemini API (LLM)",
         "Azure Speech (TTS)",
     ], EXTERNAL)

@@ -56,11 +56,15 @@ class SectionHighlighter:
             doc = fitz.open(pdf_path)
             highlight_boxes = []
             
-            # Determine pages to search
-            pages_to_search = [page_num] if page_num is not None else range(len(doc))
-            
+            # Determine 0-based pages to search (page_num from API is 1-based)
+            if page_num is not None:
+                page_idx = page_num - 1
+                pages_to_search = [page_idx] if 0 <= page_idx < len(doc) else []
+            else:
+                pages_to_search = list(range(len(doc)))
+
             for page_idx in pages_to_search:
-                if page_idx >= len(doc):
+                if page_idx < 0 or page_idx >= len(doc):
                     continue
                     
                 page = doc[page_idx]
@@ -181,7 +185,13 @@ class SectionHighlighter:
         
         return (min_x, min_y, max_x, max_y)
     
-    def get_section_highlights(self, document_id: str, page: int, related_sections: List[Dict]) -> List[SectionHighlight]:
+    def get_section_highlights(
+        self,
+        document_id: str,
+        page: int,
+        related_sections: List[Dict],
+        pdf_path: Optional[str] = None,
+    ) -> List[SectionHighlight]:
         """
         Get highlight data for related sections
         
@@ -189,22 +199,23 @@ class SectionHighlighter:
             document_id: ID of the current document
             page: Current page number
             related_sections: List of related sections from recommendations API
+            pdf_path: Resolved local path to the PDF file (optional)
         
         Returns:
             List of SectionHighlight objects
         """
         highlights = []
         
-        # Find the PDF file path for this document
-        pdf_path = self._find_pdf_path(document_id)
-        if not pdf_path:
+        # Resolve the PDF file path for this document
+        resolved_pdf_path = pdf_path or self._find_pdf_path(document_id)
+        if not resolved_pdf_path:
             return highlights
         
         for section in related_sections:
             try:
                 # Get coordinates for this section
                 boxes = self.find_section_coordinates(
-                    pdf_path, 
+                    resolved_pdf_path, 
                     section.get("snippet", ""), 
                     section.get("page")
                 )
@@ -227,8 +238,9 @@ class SectionHighlighter:
     
     def _find_pdf_path(self, document_id: str) -> Optional[str]:
         """Find the file path for a document ID"""
-        # Look in the docs directory for files with this document ID
-        docs_dir = Path("data/docs")
+        from .storage_paths import get_data_dir
+
+        docs_dir = get_data_dir() / "docs"
         if docs_dir.exists():
             for file_path in docs_dir.glob(f"{document_id}_*"):
                 if file_path.suffix.lower() == '.pdf':

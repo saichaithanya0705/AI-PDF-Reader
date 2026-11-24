@@ -14,23 +14,22 @@ import {
 import { useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import ChatHistory from './ChatHistory';
+import { useAuth } from '../context/useAuth';
 import { getChatSession, sendChatMessage } from '../lib/api';
+import { extractChatCitations, type ChatCitation } from '../lib/chatCitations';
 
-interface RelatedDocument {
-  id: string;
-  document_id: string;
-  document_name: string;
-  page_number: number;
-  text: string;
-  similarity: number;
-}
+type RelatedDocument = ChatCitation;
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
   relatedDocuments?: RelatedDocument[];
+  isWelcome?: boolean;
+  isError?: boolean;
 }
+
+const conversationCache = new Map<string, { messages: Message[]; sessionId: string | null }>();
 
 interface SimpleChatbotProps {
   documentId?: string;
@@ -50,6 +49,7 @@ const buildWelcomeMessage = (documentContext?: string): Message => ({
     ? 'Ask a question about this page or highlight any excerpt in the PDF to inspect it here.'
     : 'Ask a question across your document library. Answers include links to the relevant pages.',
   timestamp: new Date(),
+  isWelcome: true,
 });
 
 const SimpleChatbot: React.FC<SimpleChatbotProps> = ({
@@ -64,10 +64,36 @@ const SimpleChatbot: React.FC<SimpleChatbotProps> = ({
   variant = 'floating',
 }) => {
   const navigate = useNavigate();
-  const [messages, setMessages] = useState<Message[]>(() => [buildWelcomeMessage(documentContext)]);
+  const { user } = useAuth();
+  const effectiveContextType = viewType || (documentId ? 'pdf_viewer' : 'library');
+  const conversationKey = `${user?.id || 'anon'}:${effectiveContextType}:${documentId || 'library'}`;
+  const [messages, setMessages] = useState<Message[]>(
+    () => conversationCache.get(conversationKey)?.messages ?? [buildWelcomeMessage(documentContext)]
+  );
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(
+    () => conversationCache.get(conversationKey)?.sessionId ?? null
+  );
+  const loadedKeyRef = useRef(conversationKey);
+
+  useEffect(() => {
+    if (loadedKeyRef.current !== conversationKey) {
+      loadedKeyRef.current = conversationKey;
+      const cached = conversationCache.get(conversationKey);
+      setMessages(cached?.messages ?? [buildWelcomeMessage(documentContext)]);
+      setSessionId(cached?.sessionId ?? null);
+    }
+  }, [conversationKey, documentContext]);
+
+  const updateConversation = (nextMessages: Message[], nextSessionId: string | null) => {
+    conversationCache.set(conversationKey, {
+      messages: nextMessages,
+      sessionId: nextSessionId,
+    });
+    setMessages(nextMessages);
+    setSessionId(nextSessionId);
+  };
   const [showHistory, setShowHistory] = useState(false);
   const [selectedChatText, setSelectedChatText] = useState('');
   const [selectionMenuPosition, setSelectionMenuPosition] = useState<{ x: number; y: number } | null>(null);
@@ -166,58 +192,58 @@ const SimpleChatbot: React.FC<SimpleChatbotProps> = ({
     setTimeout(() => setCopiedSelection(false), 1500);
   };
 
-  const normalizeRelatedDocuments = (value: unknown): RelatedDocument[] => {
-    if (!Array.isArray(value)) return [];
-
-    return value
-      .filter((entry): entry is Record<string, unknown> => typeof entry === 'object' && entry !== null)
-      .map((entry) => ({
-        id: typeof entry.id === 'string' ? entry.id : `${entry.document_id || 'doc'}-${entry.page_number || 1}`,
-        document_id: typeof entry.document_id === 'string' ? entry.document_id : '',
-        document_name: typeof entry.document_name === 'string' ? entry.document_name : 'Document',
-        page_number: typeof entry.page_number === 'number' ? entry.page_number : 1,
-        text: typeof entry.text === 'string' ? entry.text : '',
-        similarity: typeof entry.similarity === 'number' ? entry.similarity : 0,
-      }))
-      .filter((entry) => entry.document_id);
-  };
-
   const sendMessage = async () => {
     if (!inputMessage.trim() || isLoading) return;
 
+    const queryText = inputMessage;
     const userMessage: Message = {
       role: 'user',
-      content: inputMessage,
+      content: queryText,
       timestamp: new Date(),
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    const currentHistory = messages.filter((message) => !message.isWelcome);
+    const messagesWithUser = [...messages, userMessage];
+    updateConversation(messagesWithUser, sessionId);
     setInputMessage('');
     setIsLoading(true);
 
     try {
       const data = await sendChatMessage({
-        message: inputMessage,
+        message: queryText,
         documentId,
         currentPage,
         contextType: viewType || (documentId ? 'pdf_viewer' : 'library'),
         sessionId,
-        conversationHistory: messages.slice(-5).map((message) => ({
+        conversationHistory: currentHistory.slice(-5).map((message) => ({
           role: message.role,
           content: message.content,
         })),
       });
 
-      if (typeof data.session_id === 'string' && data.session_id !== sessionId) {
-        setSessionId(data.session_id);
+      const nextSessionId =
+        typeof data.session_id === 'string' && data.session_id !== sessionId
+          ? data.session_id
+          : sessionId;
+
+      if (data.success === false) {
+        const assistantError: Message = {
+          role: 'assistant',
+          content: data.response || 'Unable to reach the assistant right now. Try sending your question again.',
+          timestamp: new Date(),
+          isError: true,
+        };
+        updateConversation([...messagesWithUser, assistantError], nextSessionId);
+        return;
       }
 
       const context =
         typeof data.context === 'object' && data.context !== null
           ? (data.context as Record<string, unknown>)
           : {};
-      const relatedDocs = normalizeRelatedDocuments(
-        data.related_documents || data.sources || context.search_results || context.related_documents
+      const relatedDocs = extractChatCitations(
+        data as unknown as Record<string, unknown>,
+        context
       );
 
       const assistantMessage: Message = {
@@ -227,15 +253,16 @@ const SimpleChatbot: React.FC<SimpleChatbotProps> = ({
         relatedDocuments: relatedDocs,
       };
 
-      setMessages((prev) => [...prev, assistantMessage]);
+      updateConversation([...messagesWithUser, assistantMessage], nextSessionId);
     } catch (error) {
       console.error('Chat error:', error);
       const errorMessage: Message = {
         role: 'assistant',
         content: 'Unable to reach the assistant right now. Try sending your question again.',
         timestamp: new Date(),
+        isError: true,
       };
-      setMessages((prev) => [...prev, errorMessage]);
+      updateConversation([...messagesWithUser, errorMessage], sessionId);
     } finally {
       setIsLoading(false);
     }
@@ -255,13 +282,16 @@ const SimpleChatbot: React.FC<SimpleChatbotProps> = ({
         role: message.role,
         content: message.content,
         timestamp: new Date(message.created_at),
-        relatedDocuments: normalizeRelatedDocuments(
-          message.metadata?.sources || message.metadata?.search_results
-        ),
+        relatedDocuments: extractChatCitations({
+          sources: message.metadata?.sources,
+          related_documents: message.metadata?.search_results,
+        }),
       }));
 
-      setMessages(loadedMessages.length > 0 ? loadedMessages : [buildWelcomeMessage(documentContext)]);
-      setSessionId(sessionIdToLoad);
+      updateConversation(
+        loadedMessages.length > 0 ? loadedMessages : [buildWelcomeMessage(documentContext)],
+        sessionIdToLoad
+      );
     } catch (error) {
       console.error('Error loading session:', error);
       alert('Failed to load chat session');
@@ -274,8 +304,7 @@ const SimpleChatbot: React.FC<SimpleChatbotProps> = ({
       return;
     }
 
-    setSessionId(null);
-    setMessages([buildWelcomeMessage(documentContext)]);
+    updateConversation([buildWelcomeMessage(documentContext)], null);
   };
 
   const handleNavigateToDocument = (docId: string, page: number) => {
@@ -309,7 +338,7 @@ const SimpleChatbot: React.FC<SimpleChatbotProps> = ({
   // Floating chat panel uses an exact 1 : 1.618 golden rectangle (w-phi-chat × h-phi-chat-h)
   const containerClass =
     variant === 'docked'
-      ? 'flex h-full w-full flex-col overflow-hidden bg-app-surface'
+      ? 'flex h-full min-h-0 w-full flex-col overflow-hidden bg-app-surface'
       : 'fixed bottom-phi-5 right-phi-5 z-50 flex h-phi-chat-h max-h-[82vh] w-phi-chat max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-phi-lg border border-[rgba(25,24,22,0.14)] bg-app-surface shadow-float';
 
   return (
@@ -368,7 +397,7 @@ const SimpleChatbot: React.FC<SimpleChatbotProps> = ({
       {/* Messages */}
       <div
         ref={messagesContainerRef}
-        className="flex-1 space-y-phi-4 overflow-y-auto bg-app-surface p-phi-4 scrollbar-thin"
+        className="min-h-0 flex-1 space-y-phi-4 overflow-y-auto bg-app-surface p-phi-4 scrollbar-thin"
       >
         {messages.map((message, index) => (
           <div
@@ -379,7 +408,9 @@ const SimpleChatbot: React.FC<SimpleChatbotProps> = ({
               className={`max-w-[90%] rounded-phi-md px-phi-4 py-phi-3 text-phi-sm ${
                 message.role === 'user'
                   ? 'bg-ink-primary text-paper-50'
-                  : 'border border-[rgba(25,24,22,0.09)] bg-paper-50 text-ink-primary'
+                  : message.isError
+                    ? 'border border-semantic-negative/25 bg-semantic-negativeBg text-semantic-negative'
+                    : 'border border-[rgba(25,24,22,0.09)] bg-paper-50 text-ink-primary'
               }`}
             >
               {message.role === 'user' ? (

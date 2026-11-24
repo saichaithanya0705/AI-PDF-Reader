@@ -7,13 +7,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from .storage_paths import get_data_dir
+
 
 class ChatHistoryManager:
     """Manages chat conversation history in local SQLite."""
 
     def __init__(self, db_path: Optional[Path] = None):
-        backend_dir = Path(__file__).parent.parent
-        self.db_path = Path(db_path or backend_dir / "data" / "chat_history.db").resolve()
+        self.db_path = Path(db_path or get_data_dir() / "chat_history.db").resolve()
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_sqlite()
         print(f"✅ Chat history using SQLite: {self.db_path}")

@@ -6,6 +6,7 @@ Implements core hackathon features: text selection, cross-document search, snipp
 
 import os
 import json
+import re
 import asyncio
 from typing import Dict, List, Optional, Any
 import logging
@@ -30,6 +31,37 @@ except ImportError as e:
 
 logger = logging.getLogger(__name__)
 
+ALLOWED_INSIGHT_TYPES = {
+    "key-takeaway",
+    "key-insight",
+    "did-you-know",
+    "counterpoint",
+    "connection",
+    "practical-tip",
+    "deep-dive",
+    "study-tip",
+    "historical-context",
+    "future-implications",
+}
+
+_INSIGHT_TYPE_ALIASES = {
+    "summary": "key-takeaway",
+    "takeaway": "key-takeaway",
+    "key-point": "key-takeaway",
+    "key-insight": "key-insight",
+    "did-you-know": "did-you-know",
+    "fact": "did-you-know",
+    "alternative": "counterpoint",
+    "counter-argument": "counterpoint",
+    "cross-reference": "connection",
+    "link": "connection",
+    "tip": "practical-tip",
+    "actionable-advice": "practical-tip",
+    "analysis": "deep-dive",
+    "study": "study-tip",
+}
+
+
 class EnhancedLLMService:
     """Enhanced LLM service using provided hackathon scripts"""
     
@@ -37,8 +69,70 @@ class EnhancedLLMService:
         self.provider = os.getenv("LLM_PROVIDER", "gemini").lower()
         logger.info(f"✅ Enhanced LLM Service initialized with provider: {self.provider}")
 
+    @staticmethod
+    def _strip_json_fences(response: str) -> str:
+        cleaned = (response or "").strip()
+        fenced = re.search(r"```(?:json)?\s*([\s\S]*?)```", cleaned, re.IGNORECASE)
+        if fenced:
+            return fenced.group(1).strip()
+        if cleaned.startswith("```"):
+            lines = cleaned.splitlines()
+            if lines:
+                lines = lines[1:]
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            cleaned = "\n".join(lines).strip()
+        return cleaned
+
+    @staticmethod
+    def _unwrap_insight_payload(payload: Any) -> Optional[List[Any]]:
+        if isinstance(payload, list):
+            return payload
+        if isinstance(payload, dict):
+            for key in ("insights", "items", "data"):
+                nested = payload.get(key)
+                if isinstance(nested, list):
+                    return nested
+        return None
+
+    def _extract_json_array(self, response: str) -> List[Any]:
+        cleaned = self._strip_json_fences(response)
+        if not cleaned:
+            raise RuntimeError("LLM returned an empty insights response")
+
+        try:
+            parsed = json.loads(cleaned)
+            unwrapped = self._unwrap_insight_payload(parsed)
+            if unwrapped is not None:
+                return unwrapped
+        except json.JSONDecodeError:
+            pass
+
+        decoder = json.JSONDecoder()
+        for idx, ch in enumerate(cleaned):
+            if ch not in "[{":
+                continue
+            try:
+                parsed, _ = decoder.raw_decode(cleaned, idx)
+                unwrapped = self._unwrap_insight_payload(parsed)
+                if unwrapped is not None:
+                    return unwrapped
+            except json.JSONDecodeError:
+                continue
+
+        raise RuntimeError("LLM insights payload was not a JSON array")
+
+    @staticmethod
+    def _normalize_insight_type(raw_type: Any) -> str:
+        if not isinstance(raw_type, str) or not raw_type.strip():
+            return "key-takeaway"
+        normalized = re.sub(r"[\s_]+", "-", raw_type.strip().lower())
+        if normalized in ALLOWED_INSIGHT_TYPES:
+            return normalized
+        return _INSIGHT_TYPE_ALIASES.get(normalized, "key-takeaway")
+
     def _parse_json_array(self, response: str) -> List[Any]:
-        payload = json.loads(response)
+        payload = json.loads(self._strip_json_fences(response))
         if not isinstance(payload, list):
             logger.warning("LLM response was not a JSON array")
             return []
@@ -108,25 +202,17 @@ Format as valid JSON.
 
             response = await asyncio.to_thread(get_llm_response, messages)
 
-            # Try to parse as JSON, fallback to structured text
             try:
-                return json.loads(response)
-            except json.JSONDecodeError:
-                return {
-                    "explanation": response[:200] + "..." if len(response) > 200 else response,
-                    "key_points": ["AI analysis provided"],
-                    "connections": ["Related concepts identified"],
-                    "questions": ["What would you like to explore further?"]
-                }
+                parsed = json.loads(self._strip_json_fences(response))
+                if isinstance(parsed, dict):
+                    return parsed
+                raise RuntimeError("Selection insights response was not a JSON object")
+            except json.JSONDecodeError as exc:
+                raise RuntimeError("Failed to parse selection insights response as JSON") from exc
 
         except Exception as e:
             logger.error(f"Error generating text selection insights: {e}")
-            return {
-                "explanation": "Unable to analyze selected text at this time.",
-                "key_points": ["Analysis temporarily unavailable"],
-                "connections": [],
-                "questions": []
-            }
+            raise RuntimeError(f"Error generating text selection insights: {e}") from e
     
     async def find_related_sections(self, selected_text: str, all_sections: List[Dict], persona: str = None, job: str = None, max_results: int = 5) -> List[Dict[str, Any]]:
         """Find related sections across documents - core hackathon feature"""
@@ -154,10 +240,10 @@ Format as valid JSON.
 
                 return sorted(results, key=lambda x: x['relevance_score'], reverse=True)[:max_results]
 
-            # Prepare sections for analysis
+            # Prepare sections for analysis (0-based indices matching output schema)
             sections_text = []
             for i, section in enumerate(all_sections[:20]):  # Limit for performance
-                sections_text.append(f"Section {i+1}: {section.get('title', 'Untitled')} - {section.get('content', '')[:200]}")
+                sections_text.append(f"Section {i}: {section.get('title', 'Untitled')} - {section.get('content', '')[:200]}")
 
             messages = [
                 {"role": "system", "content": f"""You are an AI assistant for Adobe's PDF Intelligence System.
@@ -221,9 +307,10 @@ Focus on semantic relevance, not just keyword matching.
 User Profile: {persona or 'General Reader'}
 Task: {job or 'Document Analysis'}
 
-Generate diverse insights that add value beyond basic understanding."""},
+Generate diverse insights that add value beyond basic understanding.
+Return ONLY a valid JSON array with no markdown fences or extra commentary."""},
                 {"role": "user", "content": f"""
-Main Content: {content[:1000]}
+Main Content: {content[:12000]}
 
 Related Sections:
 {related_content}
@@ -263,58 +350,41 @@ Generate exactly 5-6 different types of insights as JSON array:
 ]
 
 Make insights specific and actionable for the user's persona and task.
+Return ONLY a valid JSON array with no markdown fences or extra commentary.
 """}
             ]
             
             response = await asyncio.to_thread(get_llm_response, messages)
             
-            try:
-                # Debug: Print the raw response
-                print(f"🔍 Raw LLM response for insights: {response[:300]}...")
+            insights = self._extract_json_array(response)
 
-                # Clean the response - remove markdown code blocks
-                cleaned_response = response.strip()
-                if cleaned_response.startswith('```json'):
-                    cleaned_response = cleaned_response[7:]  # Remove ```json
-                if cleaned_response.endswith('```'):
-                    cleaned_response = cleaned_response[:-3]  # Remove ```
-                cleaned_response = cleaned_response.strip()
+            validated: List[Dict[str, Any]] = []
+            for i, raw_insight in enumerate(insights):
+                if not isinstance(raw_insight, dict):
+                    continue
+                content_text = str(raw_insight.get('content') or raw_insight.get('text') or '').strip()
+                title_text = str(raw_insight.get('title') or '').strip()
+                if not title_text or not content_text:
+                    continue
+                item = dict(raw_insight)
+                item['id'] = str(item.get('id') or (i + 1))
+                item['type'] = self._normalize_insight_type(item.get('type'))
+                item['title'] = title_text
+                item['content'] = content_text
+                relevance = item.get('relevance', 0.8)
+                item['relevance'] = relevance
+                item['persona_relevance'] = item.get('persona_relevance', relevance)
+                validated.append(item)
 
-                print(f"🧹 Cleaned response: {cleaned_response[:200]}...")
+            if not validated:
+                raise RuntimeError("LLM returned zero valid insight items")
 
-                insights = json.loads(cleaned_response)
-                # Add IDs and ensure proper format
-                for i, insight in enumerate(insights):
-                    insight['id'] = str(i + 1)
-                    # Set default relevance for backward compatibility, but don't display it
-                    insight['relevance'] = insight.get('relevance', 0.8)
-                    insight['persona_relevance'] = insight.get('relevance', 0.8)
-
-                print(f"✅ Successfully parsed {len(insights)} insights")
-                return insights[:6]  # Allow up to 6 insights
-
-            except json.JSONDecodeError as e:
-                print(f"❌ JSON decode error: {e}")
-                print(f"❌ Failed to parse response: {response}")
-                # Fallback insights
-                return [
-                    {
-                        "id": "1",
-                        "type": "key-takeaway",
-                        "title": "Analysis Complete",
-                        "content": "AI analysis has been performed on the selected content.",
-                        "relevance": 0.8,
-                        "persona_relevance": 0.8
-                    }
-                ]
+            print(f"✅ Successfully parsed {len(validated)} insights")
+            return validated[:6]
                 
         except Exception as e:
             logger.error(f"Error generating insights bulb: {e}")
-            # If error contains quota exceeded, provide fallback
-            if "quota" in str(e).lower() or "429" in str(e):
-                logger.warning("🔄 Quota exceeded, using fallback insights")
-                return self._generate_fallback_insights(content, persona, job)
-            return []
+            raise RuntimeError(f"Insight generation failed: {e}") from e
     
     async def generate_podcast_script(self, content: str, related_sections: List[Dict], insights: List[Dict], persona: str = None, job: str = None) -> Dict[str, Any]:
         """Generate 2-speaker podcast script - bonus feature (+5 points)"""
@@ -359,7 +429,7 @@ Include natural transitions, questions, and insights from the analysis.
             response = await asyncio.to_thread(get_llm_response, messages)
             
             try:
-                return json.loads(response)
+                return json.loads(self._strip_json_fences(response))
             except json.JSONDecodeError:
                 # Fallback script
                 return {

@@ -75,6 +75,7 @@ const UploadZone: React.FC<UploadZoneProps> = ({
   const handleFileInput = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = e.target.files ? Array.from(e.target.files) : [];
+      e.target.value = '';
 
       if (files.length > 0) {
         const validatedFiles = await validateFiles(files);

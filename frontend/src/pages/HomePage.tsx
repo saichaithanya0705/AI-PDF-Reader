@@ -28,20 +28,11 @@ import SimpleChatbot from '../components/SimpleChatbot';
 import BrandMark from '../components/BrandMark';
 import { PDFValidationResult } from '../utils/pdfValidator';
 import { mergeDocuments, splitDocument } from '../lib/api';
+import { buildSplitRanges } from '../lib/splitRanges';
 import { normalizeUploadSocketMessage, type UploadProgressState } from '../lib/uploadProgress';
 
 type FileWithValidation = File & {
   validationResult?: PDFValidationResult;
-};
-
-type StoredDocument = {
-  id?: string;
-  url?: string;
-  size?: number;
-  uploadDate?: string | Date;
-  lastOpened?: string | Date | null;
-  lastUploaded?: string | Date | null;
-  name?: string;
 };
 
 interface MergeResult {
@@ -136,6 +127,10 @@ const HomePage: React.FC = () => {
 
   const [showBulkUpload, setShowBulkUpload] = useState(false);
   const [showPersonaForm, setShowPersonaForm] = useState(false);
+  const [pendingBulkUpload, setPendingBulkUpload] = useState<{
+    files: File[];
+    considerPrevious: boolean;
+  } | null>(null);
   const [currentPersona, setCurrentPersona] = useState<string>('');
   const [currentJob, setCurrentJob] = useState<string>('');
   const [showChatbot, setShowChatbot] = useState(false);
@@ -150,15 +145,7 @@ const HomePage: React.FC = () => {
     const savedJob = localStorage.getItem('lastJob');
     if (savedPersona) setCurrentPersona(savedPersona);
     if (savedJob) setCurrentJob(savedJob);
-
-    try {
-      const stored = localStorage.getItem('documents');
-      if (stored) {
-        JSON.parse(stored);
-      }
-    } catch {
-      localStorage.removeItem('documents');
-    }
+    localStorage.removeItem('documents');
   }, []);
 
   useEffect(() => {
@@ -312,40 +299,55 @@ const HomePage: React.FC = () => {
       }
 
       if (!currentPersona || !currentJob) {
+        setPendingBulkUpload({ files, considerPrevious });
         setShowPersonaForm(true);
         return;
       }
 
-      try {
-        const result = await uploadBulkDocuments(
-          files,
-          clientId,
-          currentPersona,
-          currentJob,
-          considerPrevious
-        );
-        const failedCount = result.files.filter(
-          (file) => file.status === 'failed' || file.status === 'error' || file.error
-        ).length;
-        setShowBulkUpload(false);
-        alert(
-          failedCount > 0
-            ? `Added ${result.documents.length} document(s) to your library. ${failedCount} file(s) failed.`
-            : `Uploaded ${result.documents.length} document(s) to your library.`
-        );
-      } catch (error) {
-        console.error('Bulk upload error:', error);
-        alert('Upload failed. Please try again.');
-      }
+      await runBulkUpload(files, considerPrevious, currentPersona, currentJob);
     }
   };
 
-  const handlePersonaJobSubmit = (persona: string, job: string) => {
+  const runBulkUpload = async (
+    files: File[],
+    considerPrevious: boolean,
+    persona: string,
+    job: string
+  ) => {
+    try {
+      const result = await uploadBulkDocuments(
+        files,
+        clientId,
+        persona,
+        job,
+        considerPrevious
+      );
+      const failedCount = result.files.filter(
+        (file) => file.status === 'failed' || file.status === 'error' || file.error
+      ).length;
+      setShowBulkUpload(false);
+      alert(
+        failedCount > 0
+          ? `Added ${result.documents.length} document(s) to your library. ${failedCount} file(s) failed.`
+          : `Uploaded ${result.documents.length} document(s) to your library.`
+      );
+    } catch (error) {
+      console.error('Bulk upload error:', error);
+      alert('Upload failed. Please try again.');
+    }
+  };
+
+  const handlePersonaJobSubmit = async (persona: string, job: string) => {
     setCurrentPersona(persona);
     setCurrentJob(job);
     setShowPersonaForm(false);
     localStorage.setItem('lastPersona', persona);
     localStorage.setItem('lastJob', job);
+    if (pendingBulkUpload) {
+      const queued = pendingBulkUpload;
+      setPendingBulkUpload(null);
+      await runBulkUpload(queued.files, queued.considerPrevious, persona, job);
+    }
   };
 
   const openDocument = async (documentId: string) => {
@@ -444,24 +446,16 @@ const HomePage: React.FC = () => {
   };
 
   const updateNumSplits = (newNumSplits: number) => {
-    const clamped = Math.min(10, Math.max(2, newNumSplits));
+    const maxSplits = Math.min(10, Math.max(2, splitDocumentPages));
+    const clamped = Math.min(maxSplits, Math.max(2, newNumSplits));
     setNumSplits(clamped);
-
-    const newRanges = [];
-    const pagesPerSplit = Math.max(1, Math.floor(splitDocumentPages / clamped));
-
-    for (let i = 0; i < clamped; i++) {
-      const startPage = i * pagesPerSplit + 1;
-      const endPage = i === clamped - 1 ? splitDocumentPages : (i + 1) * pagesPerSplit;
-
-      newRanges.push({
-        name: splitRanges[i]?.name || '',
-        startPage: splitRanges[i]?.startPage || startPage,
-        endPage: splitRanges[i]?.endPage || endPage,
-      });
-    }
-
-    setSplitRanges(newRanges);
+    setSplitRanges(
+      buildSplitRanges(
+        splitDocumentPages,
+        clamped,
+        splitRanges.map((range) => range.name)
+      )
+    );
   };
 
   const updateSplitRange = (
@@ -545,62 +539,6 @@ const HomePage: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showSortMenu]);
 
-  useEffect(() => {
-    const checkLocalStorage = setTimeout(() => {
-      if (documents.length === 0 && !isLoadingDocuments) {
-        const stored = localStorage.getItem('documents');
-        if (stored) {
-          try {
-            const storedValue = JSON.parse(stored);
-            const storedDocuments: StoredDocument[] = Array.isArray(storedValue) ? storedValue : [];
-            const parsedDocs = storedDocuments
-              .filter(
-                (d): d is StoredDocument & { id: string; url: string } =>
-                  typeof d?.id === 'string' && typeof d?.url === 'string'
-              )
-              .map((d) => {
-                let uploadDate = new Date(d.uploadDate ?? Date.now());
-                if (Number.isNaN(uploadDate.getTime())) uploadDate = new Date();
-
-                let lastOpened: Date | null = null;
-                if (d.lastOpened) {
-                  const parsed = new Date(d.lastOpened);
-                  lastOpened = Number.isNaN(parsed.getTime()) ? null : parsed;
-                }
-
-                let lastUploaded: Date | null = null;
-                if (d.lastUploaded) {
-                  const parsed = new Date(d.lastUploaded);
-                  lastUploaded = Number.isNaN(parsed.getTime()) ? null : parsed;
-                }
-
-                return {
-                  ...d,
-                  name: d.name || 'Untitled document',
-                  size: typeof d.size === 'number' ? d.size : 0,
-                  uploadDate,
-                  lastOpened,
-                  lastUploaded: lastUploaded || uploadDate,
-                };
-              });
-
-            updateDocuments(parsedDocs);
-          } catch {
-            localStorage.removeItem('documents');
-          }
-        }
-      }
-    }, 2000);
-
-    return () => clearTimeout(checkLocalStorage);
-  }, [documents.length, isLoadingDocuments, updateDocuments]);
-
-  useEffect(() => {
-    if (documents.length > 0) {
-      localStorage.setItem('documents', JSON.stringify(documents));
-    }
-  }, [documents]);
-
   const sortedDocuments = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     const filtered = query
@@ -650,30 +588,25 @@ const HomePage: React.FC = () => {
     const document = documents.find((doc) => doc.id === id);
     if (!document) return;
 
+    let pageCount = getStoredPageCount(document.metadata);
     try {
       const loadedDocument = await loadDocument(id);
-      const pageCount = getStoredPageCount(loadedDocument?.metadata || document.metadata);
-
-      setSplitDocumentId(id);
-      setSplitDocumentName(document.name);
-      setSplitDocumentPages(pageCount);
-      setNumSplits(2);
-      setSplitRanges([
-        { name: '', startPage: 1, endPage: Math.max(1, Math.floor(pageCount / 2)) },
-        { name: '', startPage: Math.min(pageCount, Math.floor(pageCount / 2) + 1), endPage: pageCount },
-      ]);
-      setShowSplitDialog(true);
+      pageCount = getStoredPageCount(loadedDocument?.metadata || document.metadata);
     } catch {
-      setSplitDocumentId(id);
-      setSplitDocumentName(document.name);
-      setSplitDocumentPages(10);
-      setNumSplits(2);
-      setSplitRanges([
-        { name: '', startPage: 1, endPage: 5 },
-        { name: '', startPage: 6, endPage: 10 },
-      ]);
-      setShowSplitDialog(true);
+      // Fall back to existing metadata count if network fetch fails
     }
+
+    if (pageCount < 2) {
+      alert(`"${document.name}" only has 1 page and cannot be split.`);
+      return;
+    }
+
+    setSplitDocumentId(id);
+    setSplitDocumentName(document.name);
+    setSplitDocumentPages(pageCount);
+    setNumSplits(2);
+    setSplitRanges(buildSplitRanges(pageCount, 2));
+    setShowSplitDialog(true);
   };
 
   const handleDelete = async (id: string) => {
@@ -1000,7 +933,7 @@ const HomePage: React.FC = () => {
                 aria-label="Refresh library"
               >
                 <RefreshCw
-                  className={`h-4 w-4 text-ink-secondary ${isLoadingDocuments ? 'animate-spin' : ''}`}
+                  className={`h-4 w-4 shrink-0 text-ink-secondary ${isLoadingDocuments ? 'animate-spin' : ''}`}
                   strokeWidth={1.5}
                 />
               </button>
@@ -1174,7 +1107,12 @@ const HomePage: React.FC = () => {
 
       {/* Merge Dialog */}
       {showMergeDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-primary/35 p-phi-4 backdrop-blur-[2px]">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Merge documents"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink-primary/35 p-phi-4 backdrop-blur-[2px]"
+        >
           <div className="w-full max-w-phi-modal-sm rounded-phi-lg border border-[rgba(25,24,22,0.12)] bg-app-surface p-phi-5 shadow-float">
             <h3 className="font-serif text-phi-lg font-normal text-ink-primary">Merge documents</h3>
             <p className="mt-phi-1 text-phi-sm text-ink-secondary">
@@ -1229,7 +1167,12 @@ const HomePage: React.FC = () => {
 
       {/* Split Dialog */}
       {showSplitDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-primary/35 p-phi-4 backdrop-blur-[2px]">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Split document"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink-primary/35 p-phi-4 backdrop-blur-[2px]"
+        >
           <div className="max-h-[90vh] w-full max-w-phi-modal-lg overflow-y-auto rounded-phi-lg border border-[rgba(25,24,22,0.12)] bg-app-surface p-phi-5 shadow-float">
             <h3 className="font-serif text-phi-lg font-normal text-ink-primary">Split document</h3>
             <p className="mt-phi-1 text-phi-sm text-ink-secondary">
@@ -1245,7 +1188,7 @@ const HomePage: React.FC = () => {
                 id="num-splits"
                 type="number"
                 min={2}
-                max={10}
+                max={Math.min(10, Math.max(2, splitDocumentPages))}
                 value={numSplits}
                 onChange={(e) => updateNumSplits(parseInt(e.target.value, 10) || 2)}
                 className="mt-phi-2 block h-phi-ctrl w-phi-8 rounded-phi-md border border-[rgba(25,24,22,0.14)] bg-paper-50 px-phi-3 font-mono text-phi-sm tabular-nums text-ink-primary focus:border-ink-primary focus:outline-none focus:ring-2 focus:ring-accent/15"
@@ -1253,7 +1196,9 @@ const HomePage: React.FC = () => {
             </div>
 
             <div className="mt-phi-5 space-y-phi-3">
-              {splitRanges.map((range, index) => (
+              {splitRanges.map((range, index) => {
+                const rangePages = Math.max(0, range.endPage - range.startPage + 1);
+                return (
                 <div
                   key={index}
                   className="rounded-phi-md border border-[rgba(25,24,22,0.09)] bg-paper-50 p-phi-4"
@@ -1261,8 +1206,8 @@ const HomePage: React.FC = () => {
                   <div className="mb-phi-3 flex items-center justify-between">
                     <span className="text-phi-sm font-medium text-ink-primary">Part {index + 1}</span>
                     <span className="font-mono text-phi-xs tabular-nums text-ink-muted">
-                      pp. {range.startPage}–{range.endPage} ({Math.max(0, range.endPage - range.startPage + 1)}{' '}
-                      pages)
+                      pp. {range.startPage}–{range.endPage} ({rangePages}{' '}
+                      {rangePages === 1 ? 'page' : 'pages'})
                     </span>
                   </div>
                   <div className="grid gap-phi-3 sm:grid-cols-3">
@@ -1304,7 +1249,8 @@ const HomePage: React.FC = () => {
                     </div>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
 
             <div className="mt-phi-6 flex items-center justify-end gap-phi-3">
@@ -1340,7 +1286,10 @@ const HomePage: React.FC = () => {
       <AIPersonaJobForm
         isVisible={showPersonaForm}
         onSubmit={handlePersonaJobSubmit}
-        onCancel={() => setShowPersonaForm(false)}
+        onCancel={() => {
+          setPendingBulkUpload(null);
+          setShowPersonaForm(false);
+        }}
         initialPersona={currentPersona}
         initialJob={currentJob}
       />

@@ -66,3 +66,35 @@ def test_search_chunks_bm25_uses_fts_and_tenant_filters(tmp_path: Path):
     assert results[0]["metadata"]["retrieval_source"] == "bm25"
     assert results[0]["metadata"]["bm25_score"] > 0
     assert results[0]["metadata"]["keyword_score"] == 1.0
+
+
+def test_sqlite_get_document_metadata_and_empty_dict_update(tmp_path: Path):
+    import pytest
+
+    database = DocumentDatabase(str(tmp_path / "documents.db"))
+    doc = database.create_document(
+        filename="meta.pdf",
+        original_name="Meta.pdf",
+        file_size=10,
+        file_path=str(tmp_path / "meta.pdf"),
+        client_id="user-1",
+    )
+    database.store_chunk(
+        document_id=doc.id,
+        chunk_text="Chunk one on page two.",
+        chunk_index=0,
+        page_number=2,
+        client_id="user-1",
+    )
+
+    metadata_rows = database.get_document_metadata(doc.id, client_id="user-1")
+    assert metadata_rows == [
+        {"page": 2, "text": "Chunk one on page two.", "embedding_vector": None}
+    ]
+
+    database.update_document(doc.id, client_id="user-1", metadata={"a": 1})
+    assert database.update_document(doc.id, client_id="user-1", metadata={}) is True
+    assert database.get_document_by_id(doc.id, client_id="user-1").metadata == {}
+
+    with pytest.raises(ValueError, match="Unsupported"):
+        database.update_document(doc.id, client_id="user-1", malicious_col="x")

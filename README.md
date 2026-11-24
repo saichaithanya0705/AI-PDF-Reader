@@ -182,9 +182,9 @@ Important backend values:
 | `LLM_PROVIDER` | One of `gemini`, `azure`, `openai`, or `ollama`. |
 | `GOOGLE_API_KEY` | Gemini API key when `LLM_PROVIDER=gemini`. |
 | `NVIDIA_API_KEY` | Server-only key for NVIDIA hosted embeddings; required for RAG ingestion and search. |
-| `NVIDIA_EMBEDDING_MODEL` | Hosted retrieval model, defaulting to `nvidia/nemotron-3-embed-1b`. |
+| `NVIDIA_EMBEDDING_MODEL` | Hosted retrieval model, defaulting to `nvidia/nemotron-3.5-embed-1b`. |
 | `NVIDIA_EMBEDDING_DIMENSION` | pgvector/FAISS dimension for that hosted model; changing it requires a schema migration and full re-index. |
-| `NVIDIA_RERANK_MODEL` | Hosted advanced-RAG reranker, defaulting to `nvidia/llama-nemotron-rerank-vl-1b-v2`. |
+| `NVIDIA_RERANK_MODEL` | Hosted advanced-RAG reranker, defaulting to `nvidia/nemotron-3.5-rerank-8b`. |
 | `NVIDIA_RERANK_ENDPOINT` | HTTPS endpoint for the NVIDIA reranking model. |
 | `TTS_PROVIDER` | Optional TTS provider, such as `azure` or local fallback. |
 | `AUTH_BYPASS_ENABLED` | Development-only auth bypass; ignored outside development. |

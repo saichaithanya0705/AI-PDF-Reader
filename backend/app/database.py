@@ -421,89 +421,60 @@ class DocumentDatabase:
     def get_document_metadata(
         self, document_id: str, client_id: Optional[str] = None
     ) -> List[Dict[str, Any]]:
-        """Get metadata/sections for a document"""
-        cursor = self.conn.cursor()
-        query = """
-            SELECT sections.page, sections.text, sections.embedding_vector
-            FROM document_sections AS sections
-            JOIN documents ON documents.id = sections.document_id
-            WHERE sections.document_id = ?
-        """
-        params: List[Any] = [document_id]
-        if client_id:
-            query += " AND documents.client_id = ?"
-            params.append(client_id)
-        query += " ORDER BY sections.page, sections.section_index LIMIT 10"
-        cursor.execute(query, params)
+        """Get chunk summaries for related-sections context."""
+        chunks = self.get_chunks_by_document(document_id, client_id=client_id)[:10]
+        return [
+            {
+                "page": chunk.get("page_number", 1),
+                "text": chunk.get("chunk_text", ""),
+                "embedding_vector": None,
+            }
+            for chunk in chunks
+        ]
 
-        rows = cursor.fetchall()
-        metadata = []
-        for row in rows:
-            metadata.append({
-                'page': row[0],
-                'text': row[1],
-                'embedding_vector': row[2]
-            })
-        return metadata
+    _ALLOWED_UPDATE_FIELDS = frozenset({
+        "status",
+        "processing_status",
+        "persona",
+        "job_role",
+        "validation_result",
+        "metadata",
+        "last_uploaded",
+        "last_opened",
+        "last_accessed",
+        "tags",
+        "updated_at",
+    })
 
-    def delete_document(self, document_id: str) -> bool:
-        """Delete a document and all its related data"""
-        try:
-            cursor = self.conn.cursor()
-
-            # Delete from document_sections first (foreign key constraint)
-            cursor.execute("DELETE FROM document_sections WHERE document_id = ?", (document_id,))
-
-            # Delete from documents table
-            cursor.execute("DELETE FROM documents WHERE id = ?", (document_id,))
-
-            # Check if document was actually deleted
-            deleted_count = cursor.rowcount
-
-            self.conn.commit()
-
-            if deleted_count > 0:
-                print(f"✅ Deleted document {document_id} and {cursor.rowcount} related sections")
-                return True
-            else:
-                print(f"⚠️ Document {document_id} not found in database")
-                return False
-
-        except Exception as e:
-            print(f"❌ Error deleting document {document_id}: {e}")
-            self.conn.rollback()
-            return False
-    
     def update_document(
         self,
         document_id: str,
         client_id: Optional[str] = None,
         **updates
     ) -> bool:
-        """Update document fields"""
+        """Update document fields."""
         if not updates:
             return False
-        
-        # Handle JSON fields
-        if 'validation_result' in updates and updates['validation_result']:
-            updates['validation_result'] = json.dumps(updates['validation_result'])
-        if 'metadata' in updates and updates['metadata']:
-            updates['metadata'] = json.dumps(updates['metadata'])
-        if 'tags' in updates and updates['tags']:
-            updates['tags'] = json.dumps(updates['tags'])
-        
-        # Add updated_at timestamp if not explicitly provided
-        updates.setdefault('updated_at', datetime.now())
-        
-        # Build dynamic query
-        set_clause = ", ".join([f"{key} = ?" for key in updates.keys()])
-        values = list(updates.values()) + [document_id]
+
+        unknown = set(updates) - self._ALLOWED_UPDATE_FIELDS
+        if unknown:
+            raise ValueError(f"Unsupported document update fields: {sorted(unknown)}")
+
+        clean_updates: Dict[str, Any] = dict(updates)
+        for json_field in ("validation_result", "metadata", "tags"):
+            if json_field in clean_updates and clean_updates[json_field] is not None:
+                clean_updates[json_field] = json.dumps(clean_updates[json_field])
+
+        clean_updates.setdefault("updated_at", datetime.now())
+
+        set_clause = ", ".join(f"{key} = ?" for key in clean_updates)
+        values = list(clean_updates.values()) + [document_id]
         query = f"UPDATE documents SET {set_clause} WHERE id = ?"
 
         if client_id:
             query += " AND client_id = ?"
             values.append(client_id)
-        
+
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute(query, values)
             conn.commit()
@@ -1044,5 +1015,19 @@ class DocumentDatabase:
             
             return cursor.fetchone()[0]
 
-# Global database instance
-db = DocumentDatabase()
+class _LazyDocumentDatabase:
+    """Defer SQLite initialization so importing database helpers in Supabase mode has no side effects."""
+
+    def __init__(self) -> None:
+        self._instance: Optional[DocumentDatabase] = None
+
+    def _get(self) -> DocumentDatabase:
+        if self._instance is None:
+            self._instance = DocumentDatabase()
+        return self._instance
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._get(), name)
+
+
+db = _LazyDocumentDatabase()

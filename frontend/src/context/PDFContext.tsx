@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { API_URL } from '../config';
+import { useAuth } from './useAuth';
 import {
   askGPT as askGPTApi,
   deleteAllDocuments as deleteAllDocumentsApi,
@@ -99,6 +100,8 @@ interface PDFContextType {
   relatedSections: RelatedSection[];
   crossDocumentSections: RelatedSection[];
   insights: Insight[];
+  isLoadingInsights: boolean;
+  insightsError: string | null;
   isOnline: boolean;
   isLoadingDocuments: boolean;
   uploadDocument: (file: File, clientId: string, persona?: string, job?: string) => Promise<string>;
@@ -106,7 +109,7 @@ interface PDFContextType {
   setCurrentDocument: (doc: PDFDocument | null) => void;
   loadDocument: (documentId: string) => Promise<PDFDocument | null>;
   getRelatedSections: (documentId: string, currentPage: number) => Promise<RelatedSection[]>;
-  getInsights: (documentId: string, currentPage: number) => Promise<Insight[]>;
+  getInsights: (documentId: string, currentPage: number, force?: boolean) => Promise<Insight[]>;
   clearRelatedContent: () => void;
   askGPT: (selectedText: string, context: string) => Promise<string>;
   updateDocuments: (newDocs: PDFDocument[]) => void;
@@ -435,17 +438,41 @@ const parseActiveUploadResult = (data: unknown): ActiveUploadResult => {
 };
 
 export const PDFProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user } = useAuth();
   const [documents, setDocuments] = useState<PDFDocument[]>([]);
   const [currentDocument, setCurrentDocument] = useState<PDFDocument | null>(null);
   const [relatedSections, setRelatedSections] = useState<RelatedSection[]>([]);
   const [crossDocumentSections, setCrossDocumentSections] = useState<RelatedSection[]>([]);
   const [insights, setInsights] = useState<Insight[]>([]);
+  const [isLoadingInsights, setIsLoadingInsights] = useState(false);
+  const [insightsError, setInsightsError] = useState<string | null>(null);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isLoadingDocuments, setIsLoadingDocuments] = useState(false);
   // Page turns fire overlapping requests; only the latest one may update state,
   // otherwise a slow response for page N overwrites the panel for page N+1.
   const relatedRequestRef = useRef(0);
   const insightsRequestRef = useRef(0);
+  const insightsCacheRef = useRef<Map<string, Insight[]>>(new Map());
+  const lastUserIdRef = useRef<string | null | undefined>(undefined);
+
+  useEffect(() => {
+    const nextUserId = user?.id ?? null;
+    if (lastUserIdRef.current !== undefined && lastUserIdRef.current !== nextUserId) {
+      relatedRequestRef.current += 1;
+      insightsRequestRef.current += 1;
+      insightsCacheRef.current.clear();
+      setDocuments([]);
+      setCurrentDocument(null);
+      setRelatedSections([]);
+      setCrossDocumentSections([]);
+      setInsights([]);
+      setIsLoadingInsights(false);
+      setInsightsError(null);
+      localStorage.removeItem('pdf-documents');
+      localStorage.removeItem('documents');
+    }
+    lastUserIdRef.current = nextUserId;
+  }, [user?.id]);
 
   const persistDocuments = useCallback((nextDocuments: PDFDocument[]) => {
     setDocuments(nextDocuments);
@@ -622,24 +649,42 @@ export const PDFProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setRelatedSections([]);
     setCrossDocumentSections([]);
     setInsights([]);
+    setIsLoadingInsights(false);
+    setInsightsError(null);
   }, []);
 
-  const getInsights = useCallback(async (documentId: string, currentPage: number): Promise<Insight[]> => {
+  const getInsights = useCallback(async (documentId: string, currentPage: number, force = false): Promise<Insight[]> => {
     if (!isOnline) {
       return [];
     }
 
+    const persona = localStorage.getItem('lastPersona') || undefined;
+    const job = localStorage.getItem('lastJob') || undefined;
+    const cacheKey = `${documentId}:${currentPage}:${persona ?? ''}:${job ?? ''}`;
+
+    if (!force) {
+      const cached = insightsCacheRef.current.get(cacheKey);
+      if (cached && cached.length > 0) {
+        insightsRequestRef.current += 1;
+        setInsights(cached);
+        setIsLoadingInsights(false);
+        setInsightsError(null);
+        return cached;
+      }
+    }
+
     const requestId = ++insightsRequestRef.current;
+    setInsights([]);
+    setIsLoadingInsights(true);
+    setInsightsError(null);
     try {
-      const data = await getInsightsApi(
-        documentId,
-        currentPage,
-        localStorage.getItem('lastPersona') || undefined,
-        localStorage.getItem('lastJob') || undefined,
-      );
+      const data = await getInsightsApi(documentId, currentPage, persona, job);
       if (requestId !== insightsRequestRef.current) return [];
       const response = isRecord(data) ? data : {};
       const normalizedInsights = normalizeInsights(response.insights);
+      if (normalizedInsights.length > 0) {
+        insightsCacheRef.current.set(cacheKey, normalizedInsights);
+      }
 
       setInsights(normalizedInsights);
       return normalizedInsights;
@@ -647,7 +692,14 @@ export const PDFProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (requestId !== insightsRequestRef.current) return [];
       console.error('Error fetching insights:', error);
       setInsights([]);
+      setInsightsError(
+        error instanceof Error ? error.message : 'Unable to generate insights for this page.'
+      );
       return [];
+    } finally {
+      if (requestId === insightsRequestRef.current) {
+        setIsLoadingInsights(false);
+      }
     }
   }, [isOnline]);
 
@@ -669,6 +721,12 @@ export const PDFProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const deleteDocument = useCallback(async (documentId: string): Promise<void> => {
     await deleteDocumentApi(documentId, false);
 
+    for (const key of insightsCacheRef.current.keys()) {
+      if (key.startsWith(`${documentId}:`)) {
+        insightsCacheRef.current.delete(key);
+      }
+    }
+
     setDocuments((previousDocuments) => {
       const nextDocuments = previousDocuments.filter((document) => document.id !== documentId);
       localStorage.setItem('pdf-documents', JSON.stringify(nextDocuments));
@@ -683,6 +741,7 @@ export const PDFProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const deleteAllDocuments = useCallback(async (permanent = false): Promise<void> => {
     const documentIds = documents.map((document) => document.id);
     await deleteAllDocumentsApi(documentIds, permanent);
+    insightsCacheRef.current.clear();
     persistDocuments([]);
     setCurrentDocument(null);
     localStorage.removeItem('documents');
@@ -729,6 +788,8 @@ export const PDFProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     relatedSections,
     crossDocumentSections,
     insights,
+    isLoadingInsights,
+    insightsError,
     isOnline,
     isLoadingDocuments,
     uploadDocument,
@@ -753,6 +814,8 @@ export const PDFProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     relatedSections,
     crossDocumentSections,
     insights,
+    isLoadingInsights,
+    insightsError,
     isOnline,
     isLoadingDocuments,
     uploadDocument,

@@ -35,6 +35,24 @@
   }
 }
 
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-phi-2 rounded-phi-md bg-ink-primary px-phi-4 py-phi-2 text-phi-sm font-medium text-paper-50 transition-colors duration-phi-fast hover:bg-[#2c2a26] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-paper-100 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-accent {
+    @apply inline-flex items-center justify-center gap-phi-2 rounded-phi-md bg-accent px-phi-4 py-phi-2 text-phi-sm font-medium text-white transition-colors duration-phi-fast hover:bg-accent-hover active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-paper-100 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-phi-2 rounded-phi-md border border-[rgba(25,24,22,0.12)] bg-app-surface px-phi-4 py-phi-2 text-phi-sm font-medium text-ink-primary shadow-subtle transition-colors duration-phi-fast hover:border-[rgba(25,24,22,0.22)] hover:bg-paper-200/60 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-paper-100 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-phi-2 rounded-phi-md px-phi-3 py-phi-2 text-phi-sm font-medium text-ink-secondary transition-colors duration-phi-fast hover:bg-paper-200/80 hover:text-ink-primary active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50;
+  }
+}
+
 @layer utilities {
   .hairline {
     border-color: rgba(25, 24, 22, 0.09);
@@ -57,22 +75,6 @@
     width: 2px;
     border-radius: 1px;
     background-color: #c23b22;
-  }
-
-  .btn-primary {
-    @apply inline-flex items-center justify-center gap-phi-2 rounded-phi-md bg-ink-primary px-phi-4 py-phi-2 text-phi-sm font-medium text-paper-50 transition-colors duration-phi-fast hover:bg-[#2c2a26] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-paper-100 disabled:cursor-not-allowed disabled:opacity-50;
-  }
-
-  .btn-accent {
-    @apply inline-flex items-center justify-center gap-phi-2 rounded-phi-md bg-accent px-phi-4 py-phi-2 text-phi-sm font-medium text-white transition-colors duration-phi-fast hover:bg-accent-hover active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-paper-100 disabled:cursor-not-allowed disabled:opacity-50;
-  }
-
-  .btn-secondary {
-    @apply inline-flex items-center justify-center gap-phi-2 rounded-phi-md border border-[rgba(25,24,22,0.12)] bg-app-surface px-phi-4 py-phi-2 text-phi-sm font-medium text-ink-primary shadow-subtle transition-colors duration-phi-fast hover:border-[rgba(25,24,22,0.22)] hover:bg-paper-200/60 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-paper-100 disabled:cursor-not-allowed disabled:opacity-50;
-  }
-
-  .btn-ghost {
-    @apply inline-flex items-center justify-center gap-phi-2 rounded-phi-md px-phi-3 py-phi-2 text-phi-sm font-medium text-ink-secondary transition-colors duration-phi-fast hover:bg-paper-200/80 hover:text-ink-primary active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   .keycap {

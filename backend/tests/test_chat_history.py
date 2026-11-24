@@ -41,3 +41,11 @@ def test_sqlite_chat_history_persists_sessions_and_messages(tmp_path):
         }
 
     assert {"chat_sessions", "chat_messages"}.issubset(tables)
+
+
+def test_sqlite_chat_history_uses_app_data_dir_by_default(monkeypatch, tmp_path):
+    monkeypatch.setenv("APP_DATA_DIR", str(tmp_path))
+
+    manager = ChatHistoryManager()
+
+    assert manager.db_path == (tmp_path / "chat_history.db").resolve()

@@ -190,7 +190,12 @@ def test_split_document_denies_cross_tenant_and_creates_owned_outputs(secured_ap
         assert split_doc.client_id == USER_ID
         assert "\\" not in split_doc.filename
         assert "/" not in split_doc.filename
-        assert Path(split_doc.file_path).resolve().is_relative_to(docs_dir.resolve())
+        split_path = Path(split_doc.file_path).resolve()
+        assert split_path.is_relative_to(docs_dir.resolve())
+        assert split_path.exists(), "Split PDF file must remain persisted on disk"
+        assert (split_doc.metadata or {}).get("page_count") == split["pages"]
+        served = client.get(f"/api/files/{split_doc.filename}", headers=AUTH_HEADERS)
+        assert served.status_code == 200
 
 
 def test_merge_documents_denies_cross_tenant_and_creates_owned_output(secured_app):
@@ -219,7 +224,12 @@ def test_merge_documents_denies_cross_tenant_and_creates_owned_output(secured_ap
     assert merged_doc is not None
     assert merged_doc.client_id == USER_ID
     assert merged_doc.original_name == "Merged_Final.pdf"
-    assert Path(merged_doc.file_path).resolve().is_relative_to(docs_dir.resolve())
+    merged_path = Path(merged_doc.file_path).resolve()
+    assert merged_path.is_relative_to(docs_dir.resolve())
+    assert merged_path.exists(), "Merged PDF file must remain persisted on disk"
+    assert (merged_doc.metadata or {}).get("page_count") == merged.json()["merged_document"]["pages"]
+    served = client.get(f"/api/files/{merged_doc.filename}", headers=AUTH_HEADERS)
+    assert served.status_code == 200
 
 
 def test_pdf_serving_requires_owned_document_and_omits_wildcard_cors(secured_app):
@@ -426,3 +436,345 @@ def test_spa_catch_all_rejects_unknown_api_paths_and_traversal(secured_app, monk
     for probe in ("/..%2fsecret.env", "/%2e%2e/secret.env", "/..\secret.env"):
         response = client.get(probe)
         assert "leak" not in response.text
+
+
+def test_health_endpoint_returns_json_and_cors_on_429(secured_app, monkeypatch):
+    main, _database, _docs_dir, client = secured_app
+
+    health = client.get("/health")
+    assert health.status_code == 200
+    assert health.json()["status"] == "healthy"
+
+    api_health = client.get("/api/health")
+    assert api_health.status_code == 200
+    assert api_health.json()["status"] == "healthy"
+
+    from backend.app.middleware.rate_limiter import RateLimiter
+
+    tight_limiter = RateLimiter(max_requests=1, window_seconds=60, block_duration_seconds=60)
+    monkeypatch.setattr(main, "default_limiter", tight_limiter)
+
+    first = client.get("/api/documents", headers={**AUTH_HEADERS, "Origin": "http://localhost:5173"})
+    assert first.status_code == 200
+
+    limited = client.get("/api/documents", headers={**AUTH_HEADERS, "Origin": "http://localhost:5173"})
+    assert limited.status_code == 429
+    assert "Retry-After" in limited.headers
+    assert limited.headers.get("access-control-allow-origin") == "http://localhost:5173"
+
+    # OPTIONS preflights and /api/health bypass blocking
+    assert client.get("/api/health").status_code == 200
+    assert client.options(
+        "/api/documents",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "GET",
+        },
+    ).status_code == 200
+
+
+def test_update_metadata_merges_instead_of_overwriting_existing_keys(secured_app):
+    _main, database, docs_dir, client = secured_app
+    doc = create_pdf(database, docs_dir, client_id=USER_ID, filename="meta-merge.pdf")
+    database.update_document(
+        doc.id,
+        client_id=USER_ID,
+        metadata={"page_count": 7, "ingestion": {"mode": "single", "chunks_created": 3}},
+    )
+
+    response = client.post(
+        f"/api/documents/{doc.id}/update-metadata",
+        headers=AUTH_HEADERS,
+        json={"display_name": "Renamed.pdf"},
+    )
+    assert response.status_code == 200
+
+    updated = database.get_document_by_id(doc.id, client_id=USER_ID)
+    assert updated.metadata == {
+        "page_count": 7,
+        "ingestion": {"mode": "single", "chunks_created": 3},
+        "display_name": "Renamed.pdf",
+    }
+
+
+def test_upload_persists_page_count_metadata(secured_app, monkeypatch):
+    main, database, _docs_dir, client = secured_app
+
+    async def noop_process_pdf(*_args, **_kwargs):
+        return None
+
+    async def noop_process_collection(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(main, "process_pdf", noop_process_pdf)
+    monkeypatch.setattr(main, "process_pdf_collection", noop_process_collection)
+
+    single = client.post(
+        "/upload/active_file",
+        headers=AUTH_HEADERS,
+        files={"file": ("single.pdf", b"%PDF-1.4\n% page\n", "application/pdf")},
+    )
+    assert single.status_code == 202
+    single_doc = database.get_document_by_id(single.json()["job_id"], client_id=USER_ID)
+    assert (single_doc.metadata or {}).get("page_count") == 1
+
+    bulk = client.post(
+        "/upload/context_files",
+        headers=AUTH_HEADERS,
+        files=[("files", ("bulk.pdf", b"%PDF-1.4\n% bulk\n", "application/pdf"))],
+    )
+    assert bulk.status_code == 202
+    bulk_doc = database.get_document_by_id(bulk.json()["files"][0]["job_id"], client_id=USER_ID)
+    assert (bulk_doc.metadata or {}).get("page_count") == 1
+
+
+def test_remote_storage_paths_work_for_insights_selection_and_rag_process(secured_app, monkeypatch):
+    main, database, docs_dir, client = secured_app
+    materialized = docs_dir / "cached-remote.pdf"
+    materialized.write_bytes(b"%PDF-1.4\n% cached\n")
+    remote_doc = database.create_document(
+        filename="remote.pdf",
+        original_name="remote.pdf",
+        file_size=materialized.stat().st_size,
+        file_path="supabase://documents/test-user/doc-id/remote.pdf",
+        client_id=USER_ID,
+    )
+
+    class FakeStorage:
+        def ensure_local(self, location):
+            assert location == remote_doc.file_path
+            return materialized
+
+    class FakePage:
+        def get_text(self):
+            return "Remote Supabase PDF text for insights and RAG."
+
+    class FakeFitzDoc:
+        def __len__(self):
+            return 1
+
+        def __getitem__(self, idx):
+            assert idx == 0
+            return FakePage()
+
+        def close(self):
+            return None
+
+    class FakeEnhancedLLM:
+        async def generate_insights_bulb(self, content, related_sections, persona=None, job=None):
+            assert "Remote Supabase PDF text" in content
+            return [{"type": "key-takeaway", "title": "Loaded", "content": "OK"}]
+
+    class FakeRAGService:
+        async def process_document(self, document_id, pdf_path, user_id=None, mode="single", batch_size=32):
+            assert document_id == remote_doc.id
+            assert Path(pdf_path) == materialized
+            return {"success": True, "document_id": document_id, "chunks_stored": 1}
+
+    monkeypatch.setattr(main, "get_document_storage", lambda: FakeStorage())
+    monkeypatch.setattr(main.fitz, "open", lambda *_args, **_kwargs: FakeFitzDoc())
+    monkeypatch.setattr(main, "enhanced_llm_service", FakeEnhancedLLM())
+    import backend.app.rag_service as rag_service
+    monkeypatch.setattr(rag_service, "get_rag_service", lambda: FakeRAGService())
+
+    insights_resp = client.get(f"/api/insights/{remote_doc.id}?page=1", headers=AUTH_HEADERS)
+    assert insights_resp.status_code == 200
+    assert insights_resp.json()["insights"][0]["title"] == "Loaded"
+
+    rag_resp = client.post(f"/api/rag/process/{remote_doc.id}", headers=AUTH_HEADERS)
+    assert rag_resp.status_code == 200
+    assert rag_resp.json()["success"] is True
+
+
+def test_section_highlighter_maps_1_based_pages_and_uses_resolved_pdf_path(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    import backend.app.section_highlighter as sh_mod
+
+    pdf_path = tmp_path / "highlight_target.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4\n% target\n")
+    opened_paths = []
+    indexed_pages = []
+
+    class FakePage:
+        def search_for(self, _text):
+            return [SimpleNamespace(x0=10.0, y0=20.0, x1=110.0, y1=40.0)]
+
+    class FakeDoc:
+        def __len__(self):
+            return 1
+
+        def __getitem__(self, idx):
+            indexed_pages.append(idx)
+            return FakePage()
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(
+        sh_mod.fitz,
+        "open",
+        lambda path: (opened_paths.append(path), FakeDoc())[1],
+    )
+
+    highlighter = sh_mod.SectionHighlighter()
+    highlights = highlighter.get_section_highlights(
+        document_id="doc-1",
+        page=1,
+        related_sections=[
+            {
+                "id": "sec-1",
+                "title": "Metrics",
+                "snippet": "Cryogenic photonics efficiency is 92 percent.",
+                "page": 1,
+                "relevance": 0.9,
+            }
+        ],
+        pdf_path=str(pdf_path),
+    )
+
+    assert opened_paths == [str(pdf_path)]
+    assert indexed_pages == [0]
+    assert len(highlights) == 1
+    assert highlights[0].boxes
+    assert highlights[0].boxes[0].page == 1
+
+
+def test_chat_endpoint_filters_cross_doc_noise_and_returns_502_on_rag_error(secured_app, monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    import backend.app.chat_history as chat_history
+    import backend.app.rag_service as rag_service
+
+    main, database, docs_dir, client = secured_app
+    manager = ChatHistoryManager(tmp_path / "chat_history.db")
+    monkeypatch.setattr(chat_history, "_chat_history_manager", manager)
+
+    owned_doc = create_pdf(database, docs_dir, client_id=USER_ID, filename="owned-chat.pdf")
+
+    class FakeLLM:
+        async def generate_chat_response(self, _messages):
+            return "Grounded library answer"
+
+    class FakeRAGService:
+        def __init__(self, *, error_mode=False):
+            self.error_mode = error_mode
+
+        async def generate_rag_response(self, **_kwargs):
+            if self.error_mode:
+                return {
+                    "response": "Sorry, I encountered an error while searching your documents.",
+                    "sources": [],
+                    "has_context": False,
+                    "error": "rag_generation_failed",
+                }
+            return {
+                "response": "Cryogenics operate at 4.2 K.",
+                "sources": [{"document_id": owned_doc.id, "page": 2, "page_number": 2, "text": "4.2 K", "document_name": "owned-chat.pdf"}],
+                "has_context": True,
+            }
+
+        async def search_documents(self, **_kwargs):
+            return [
+                SimpleNamespace(
+                    chunk_id="good",
+                    document_id="doc-good",
+                    chunk_text="Strong match",
+                    page_number=2,
+                    similarity_score=0.62,
+                    metadata={"document_name": "Good.pdf", "vector_similarity": 0.62, "retrieval_score": 0.62},
+                ),
+                SimpleNamespace(
+                    chunk_id="noise",
+                    document_id="doc-noise",
+                    chunk_text="Olive trees",
+                    page_number=1,
+                    similarity_score=0.10,
+                    metadata={"document_name": "Olive.pdf", "vector_similarity": 0.10, "retrieval_score": 0.10},
+                ),
+            ]
+
+    monkeypatch.setattr(main, "llm_provider", FakeLLM())
+    monkeypatch.setattr(rag_service, "get_rag_service", lambda: FakeRAGService(error_mode=False))
+
+    ok_resp = client.post(
+        "/api/chat",
+        headers=AUTH_HEADERS,
+        json={
+            "message": "Cooling temperature?",
+            "document_id": owned_doc.id,
+            "current_page": 2,
+            "context_type": "pdf_viewer",
+        },
+    )
+    assert ok_resp.status_code == 200
+    related = ok_resp.json()["related_documents"]
+    assert [item["document_id"] for item in related] == ["doc-good"]
+
+    lib_resp = client.post(
+        "/api/chat",
+        headers=AUTH_HEADERS,
+        json={
+            "message": "Library query?",
+            "context_type": "library",
+        },
+    )
+    assert lib_resp.status_code == 200
+    assert lib_resp.json()["sources"]
+
+    monkeypatch.setattr(rag_service, "get_rag_service", lambda: FakeRAGService(error_mode=True))
+    err_resp = client.post(
+        "/api/chat",
+        headers=AUTH_HEADERS,
+        json={
+            "message": "Trigger error",
+            "document_id": owned_doc.id,
+            "current_page": 1,
+            "context_type": "pdf_viewer",
+        },
+    )
+    assert err_resp.status_code == 502
+    assert err_resp.json()["success"] is False
+
+
+def test_websocket_manager_tracks_multiple_sockets_and_prunes_broken_ones():
+    from backend.app.websocket_manager import ConnectionManager
+
+    mgr = ConnectionManager()
+    sent = []
+
+    class AliveWS:
+        async def accept(self):
+            return None
+
+        async def send_json(self, msg):
+            sent.append(msg)
+
+    class DeadWS:
+        async def accept(self):
+            return None
+
+        async def send_json(self, _msg):
+            raise RuntimeError("socket closed")
+
+    alive = AliveWS()
+    dead = DeadWS()
+
+    asyncio.run(mgr.connect(alive, "user-1"))
+    asyncio.run(mgr.connect(dead, "user-1"))
+    asyncio.run(mgr.send_message({"type": "progress"}, "user-1"))
+
+    assert sent == [{"type": "progress"}]
+    mgr.disconnect("user-1", alive)
+    asyncio.run(mgr.send_message({"type": "after"}, "user-1"))
+    assert sent == [{"type": "progress"}]
+
+
+def test_gemini_provider_ignores_localhost_anthropic_fallback(monkeypatch):
+    from backend.app import llm_providers
+
+    monkeypatch.setenv("GOOGLE_API_KEY", "")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-local")
+    monkeypatch.setenv("ANTHROPIC_BASE_URL", "http://localhost:8080")
+    monkeypatch.delenv("ENABLE_ANTHROPIC_FALLBACK", raising=False)
+
+    provider = llm_providers.GeminiProvider()
+    assert provider.fallback_model is None

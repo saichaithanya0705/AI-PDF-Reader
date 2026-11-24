@@ -441,3 +441,53 @@ def test_semantic_cache_revision_bump_prevents_stale_hits():
 
     assert changed_context.library_revision != context.library_revision
     assert cache.get_exact("pricing renewal", changed_context) is None
+
+
+def test_format_retrieval_result_does_not_leak_local_file_path(monkeypatch):
+    rag_module = import_rag_service_with_sqlite(monkeypatch)
+
+    formatted = rag_module.format_retrieval_result(
+        SimpleNamespace(
+            chunk_id="chunk-1",
+            document_id="doc-1",
+            chunk_text="Example passage",
+            page_number=2,
+            similarity_score=0.8,
+            metadata={"document_name": "Pub.pdf", "file_path": "C:/secret/server/path.pdf"},
+        )
+    )
+
+    assert formatted["file_path"] == ""
+
+
+def test_generate_rag_response_library_mode_includes_document_name_and_page_number(monkeypatch):
+    rag_module = import_rag_service_with_sqlite(monkeypatch)
+    service = object.__new__(rag_module.RAGService)
+    captured_prompts = []
+
+    async def fake_search(**_kwargs):
+        return [
+            SimpleNamespace(
+                chunk_id="c-1",
+                document_id="doc-1",
+                chunk_text="Helium operates at 4.2 K.",
+                page_number=3,
+                similarity_score=0.9,
+                metadata={"document_name": "Cryogenics.pdf"},
+            )
+        ]
+
+    class FakeLLM:
+        async def generate_chat_response(self, messages):
+            captured_prompts.append(messages[0]["content"])
+            return "Cryogenics.pdf page 3 explains this."
+
+    service.search_documents = fake_search
+
+    response = asyncio.run(
+        service.generate_rag_response("helium temperature", FakeLLM(), document_id=None, user_id="u-1")
+    )
+
+    assert "Cryogenics.pdf" in captured_prompts[0]
+    assert response["sources"][0]["page_number"] == 3
+    assert response["sources"][0]["page"] == 3

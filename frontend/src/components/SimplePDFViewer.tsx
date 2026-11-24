@@ -47,7 +47,8 @@ const SimplePDFViewer: React.FC<SimplePDFViewerProps> = ({
 }) => {
   const [numPages, setNumPages] = useState<number>(0);
   const [pageNumber, setPageNumber] = useState<number>(initialPage);
-  const [scale, setScale] = useState<number>(1.2);
+  const [scale, setScale] = useState<number>(1.0);
+  const [deskWidth, setDeskWidth] = useState<number>(0);
   const [selectedText, setSelectedText] = useState<string>('');
   const [menuPosition, setMenuPosition] = useState<SelectionMenuPosition | null>(null);
   const [copied, setCopied] = useState(false);
@@ -55,25 +56,43 @@ const SimplePDFViewer: React.FC<SimplePDFViewerProps> = ({
   const [pageVoiceGenerating, setPageVoiceGenerating] = useState(false);
   const [currentPageText, setCurrentPageText] = useState<string>('');
   const [currentAudio, setCurrentAudio] = useState<HTMLAudioElement | null>(null);
+  const [voiceoverError, setVoiceoverError] = useState<string | null>(null);
   const [authenticatedPdfData, setAuthenticatedPdfData] = useState<Uint8Array | null>(null);
   const [pdfLoadError, setPdfLoadError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const deskRef = useRef<HTMLDivElement>(null);
   const audioObjectUrlRef = useRef<string | null>(null);
+  const fittedPageWidth = deskWidth > 0 ? Math.max(220, Math.min(deskWidth, 880)) : undefined;
   const pdfUrl = pdfDocument.url?.startsWith('http') ? pdfDocument.url : `${API_URL}${pdfDocument.url}`;
   const pdfFile = useMemo(
-    () => (authenticatedPdfData ? { data: authenticatedPdfData } : null),
+    () => (authenticatedPdfData ? { data: authenticatedPdfData.slice() } : null),
     [authenticatedPdfData]
   );
 
-  useEffect(() => {
-    return () => {
-      currentAudio?.pause();
-      if (audioObjectUrlRef.current) {
-        URL.revokeObjectURL(audioObjectUrlRef.current);
-        audioObjectUrlRef.current = null;
-      }
-    };
+  useEffect(() => () => {
+    currentAudio?.pause();
   }, [currentAudio]);
+
+  useEffect(() => () => {
+    if (audioObjectUrlRef.current) {
+      URL.revokeObjectURL(audioObjectUrlRef.current);
+      audioObjectUrlRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    const deskElement = deskRef.current;
+    if (!deskElement || typeof ResizeObserver === 'undefined') return;
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      setDeskWidth(Math.max(0, Math.floor(entry.contentRect.width - 32)));
+    });
+
+    observer.observe(deskElement);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -115,6 +134,7 @@ const SimplePDFViewer: React.FC<SimplePDFViewerProps> = ({
 
   const requestVoiceover = useCallback(
     async (text: string) => {
+      setVoiceoverError(null);
       const data = await generateAudio(text, pdfDocument.id, pageNumber);
       const audioPath =
         data && typeof data === 'object'
@@ -234,6 +254,7 @@ const SimplePDFViewer: React.FC<SimplePDFViewerProps> = ({
       await requestVoiceover(selectedText);
     } catch (err) {
       console.error('Failed to generate voice:', err);
+      setVoiceoverError(err instanceof Error ? err.message : 'Unable to generate voiceover right now.');
     } finally {
       setGenerating(false);
     }
@@ -247,6 +268,7 @@ const SimplePDFViewer: React.FC<SimplePDFViewerProps> = ({
       await requestVoiceover(currentPageText);
     } catch (err) {
       console.error('Failed to generate page voiceover:', err);
+      setVoiceoverError(err instanceof Error ? err.message : 'Unable to generate page voiceover right now.');
     } finally {
       setPageVoiceGenerating(false);
     }
@@ -337,8 +359,25 @@ const SimplePDFViewer: React.FC<SimplePDFViewerProps> = ({
         </button>
       </div>
 
+      {/* Voiceover error notice */}
+      {voiceoverError && (
+        <div
+          role="alert"
+          className="flex items-center justify-between gap-phi-3 border-b border-semantic-negative/25 bg-semantic-negativeBg px-phi-4 py-phi-2 text-phi-xs text-semantic-negative"
+        >
+          <span>Voiceover failed: {voiceoverError}</span>
+          <button
+            type="button"
+            onClick={() => setVoiceoverError(null)}
+            className="font-medium underline"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* PDF Reading Desk */}
-      <div className="relative flex flex-1 justify-center overflow-auto p-phi-5 scrollbar-thin">
+      <div ref={deskRef} className="relative flex flex-1 justify-center overflow-auto p-phi-4 scrollbar-thin">
         {pdfLoadError ? (
           <div className="my-auto flex max-w-phi-modal-sm flex-col items-center justify-center gap-phi-2 rounded-phi-lg border border-semantic-negative/25 bg-semantic-negativeBg p-phi-5 text-center">
             <p className="text-phi-sm font-medium text-semantic-negative">Could not load this PDF</p>
@@ -368,6 +407,7 @@ const SimplePDFViewer: React.FC<SimplePDFViewerProps> = ({
           >
             <Page
               pageNumber={pageNumber}
+              width={fittedPageWidth}
               scale={scale}
               renderTextLayer={true}
               renderAnnotationLayer={true}

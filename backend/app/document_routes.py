@@ -1,6 +1,6 @@
 """Document and chat API routes for authenticated users."""
 
-from fastapi import APIRouter, HTTPException, Query, Path, Depends
+from fastapi import APIRouter, Body, HTTPException, Query, Path, Depends
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any, Literal
 from datetime import datetime
@@ -132,6 +132,20 @@ async def get_document(
         
         doc_dict = document.to_dict()
         doc_dict['url'] = f"/api/files/{document.filename}"
+        existing_metadata = dict(document.metadata or {})
+        if not existing_metadata.get("page_count") and document.file_path:
+            try:
+                import fitz
+                local_path = get_document_storage().ensure_local(document.file_path)
+                if local_path.exists():
+                    with fitz.open(str(local_path)) as pdf_doc:
+                        page_count = len(pdf_doc)
+                    if page_count > 0:
+                        merged_metadata = {**existing_metadata, "page_count": page_count}
+                        db.update_document(document_id, client_id=user_id, metadata=merged_metadata)
+                        doc_dict["metadata"] = merged_metadata
+            except Exception as page_err:
+                logger.debug("Skipping lazy page_count lookup for %s: %s", document_id, page_err)
         
         # Update last opened time
         db.update_last_opened(document_id, client_id=user_id)
@@ -223,7 +237,7 @@ async def get_stats(current_user: dict = Depends(get_current_user)):
 @router.post("/documents/{document_id}/update-metadata")
 async def update_document_metadata(
     document_id: str = Path(..., description="Document ID"),
-    metadata: Dict[str, Any] = None,
+    metadata: Dict[str, Any] = Body(...),
     current_user: dict = Depends(get_current_user)
 ):
     """
@@ -237,8 +251,9 @@ async def update_document_metadata(
         if not document:
             raise HTTPException(status_code=404, detail="Document not found")
         
-        # Update metadata
-        success = db.update_document(document_id, client_id=user_id, metadata=metadata)
+        # Merge metadata instead of wiping existing keys (page_count, ingestion, etc.)
+        merged_metadata = {**(document.metadata or {}), **(metadata or {})}
+        success = db.update_document(document_id, client_id=user_id, metadata=merged_metadata)
         
         if not success:
             raise HTTPException(status_code=500, detail="Failed to update document")
